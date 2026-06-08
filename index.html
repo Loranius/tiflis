@@ -1384,7 +1384,8 @@ nav#sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
 .duties-strip-day.selected .ds-mon { color: var(--eden-dark) !important; }
 
 /* ── Журнал подій ──────────────────────────────────────────────── */
-.elog-tabs { display:flex; gap:0; margin-bottom:18px; border-bottom:1px solid var(--gold-border); }
+.elog-tabs { display:flex; gap:0; margin-bottom:18px; border-bottom:1px solid var(--gold-border); overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.elog-tabs::-webkit-scrollbar { display:none; }
 .elog-tab { background:none; border:none; border-bottom:2px solid transparent; padding:9px 16px; font-family:'Montserrat',sans-serif; font-size:11px; font-weight:700; color:var(--text-dim); cursor:pointer; letter-spacing:.06em; text-transform:uppercase; transition:all .15s; margin-bottom:-1px; white-space:nowrap; }
 .elog-tab:hover { color:var(--text); }
 .elog-tab.active { color:var(--gold); border-bottom-color:var(--gold); }
@@ -5554,6 +5555,25 @@ const Schedule = {
 
     html += '</tbody>';
     $('schedule-table').innerHTML = html;
+
+    // Прокрутити до сьогоднішнього дня (лише якщо відображається поточний місяць)
+    const isCurrentMonth = year === n.getFullYear() && month === n.getMonth();
+    if (isCurrentMonth) {
+      requestAnimationFrame(() => {
+        const todayTh = $('schedule-table')?.querySelector('th.today-col');
+        if (todayTh) {
+          const wrapper = todayTh.closest('.table-wrap') || todayTh.closest('[style*="overflow"]') || todayTh.closest('.schedule-wrap') || document.querySelector('.table-wrap');
+          if (wrapper) {
+            const thLeft = todayTh.offsetLeft;
+            const thWidth = todayTh.offsetWidth;
+            const wrapWidth = wrapper.clientWidth;
+            wrapper.scrollLeft = thLeft - wrapWidth / 2 + thWidth / 2;
+          } else {
+            todayTh.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+          }
+        }
+      });
+    }
 
     Schedule.renderSummary(role, year, month, days);
   },
