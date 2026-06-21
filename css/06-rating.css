@@ -1,0 +1,65 @@
+/* ╔══════════════════════════════════════════╗
+   ║  CSS [6/9]  РЕЙТИНГ                      ║
+   ╚══════════════════════════════════════════╝ */
+.rating-tabs { display: flex; gap: 0; margin-bottom: 24px; border: 1px solid var(--gold-border); border-radius: 8px; overflow: hidden; }
+.rating-tab {
+  flex: 1; padding: 10px; text-align: center; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; cursor: pointer;
+  background: transparent; border: none; color: var(--text-dim);
+  font-family:'Montserrat',sans-serif; transition: all .18s;
+}
+.rating-tab.active { background: var(--gold-dim); color: var(--gold); }
+
+.rating-staff-card {
+  background: linear-gradient(160deg, rgba(255,255,255,.05) 0%, rgba(255,255,255,.02) 100%);
+  border: 1px solid var(--gold-border);
+  border-radius: 10px; padding: 16px; display: flex; align-items: flex-start; gap: 14px;
+  transition: all .18s; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 2px 12px rgba(0,0,0,.2);
+}
+.rating-staff-card:hover {
+  background: linear-gradient(160deg, rgba(255,255,255,.07) 0%, rgba(255,255,255,.035) 100%);
+  border-color: rgba(212,175,55,.5);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 4px 20px rgba(0,0,0,.3);
+}
+.staff-avatar {
+  width: 48px; height: 48px; border-radius: 50%; background: var(--eden-light);
+  border: 2px solid var(--gold-border); display: flex; align-items: center;
+  justify-content: center; font-size: 18px; font-weight: 700; color: var(--gold);
+  flex-shrink: 0; overflow: hidden;
+}
+.staff-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.rating-bar-wrap { position: relative; height: 6px; background: rgba(255,255,255,.08); border-radius: 4px; margin-top: 8px; }
+.rating-bar-zero { position: absolute; left: 50%; top: -3px; width: 2px; height: 12px; background: var(--gold-border); border-radius: 1px; }
+.rating-bar-fill {
+  position: absolute; top: 0; height: 100%; border-radius: 4px;
+  transition: all .4s; background: var(--gold);
+}
+
+/* ── Slider: компактний ── */
+.slider-wrap { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.slider-wrap input[type=range],
+.rating-slider {
+  flex: 1; -webkit-appearance: none; height: 4px; border-radius: 3px;
+  background: linear-gradient(to right, var(--danger), rgba(255,255,255,.1), var(--success));
+  outline: none; width: 100%;
+}
+.slider-wrap input[type=range]::-webkit-slider-thumb,
+.rating-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--gold); border: 2px solid var(--eden); cursor: pointer;
+  box-shadow: 0 0 8px rgba(212,175,55,.5);
+}
+.slider-value { min-width: 34px; text-align: center; font-weight: 800; font-size: 16px; }
+.slider-limits { font-size: 9px; color: var(--text-muted); font-weight: 700; }
+
+.comment-item {
+  padding: 8px 12px; background: rgba(0,0,0,.2); border-radius: 6px;
+  border-left: 2px solid var(--gold-border); margin-bottom: 6px; font-size: 11px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.comment-item-body { flex: 1; min-width: 0; }
+.comment-item-delta { font-weight: 800; flex-shrink: 0; }
+
+

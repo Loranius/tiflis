@@ -1,0 +1,260 @@
+
+/* ╔══════════════════════════════════════════╗
+   ║  CSS [1/9]  ЗМІННІ Й БАЗОВІ СТИЛІ       ║
+   ╚══════════════════════════════════════════╝ */
+:root {
+  --eden:       #163832;
+  --eden-dark:  #0e2420;
+  --eden-light: #1e4d44;
+  --gold:       #D4AF37;
+  --gold-light: #e8c84a;
+  --gold-dim:   rgba(212,175,55,0.15);
+  --gold-border:rgba(212,175,55,0.3);
+  --text:       #f0ece0;
+  --text-dim:   rgba(240,236,224,0.55);
+  --text-muted: rgba(240,236,224,0.3);
+  --surface:    rgba(255,255,255,0.04);
+  --surface-hover: rgba(255,255,255,0.07);
+  --danger:     #e05a5a;
+  --success:    #5aaf7a;
+  --warning:    #e0a050;
+  --sidebar-w:  260px;
+}
+
+/* ── Тема: Бордо (темно-бордовий + мідь/золото) ──────────────── */
+:root[data-theme="bordeaux"] {
+  --eden:       #3a1620;
+  --eden-dark:  #270e16;
+  --eden-light: #4f1f2c;
+  --gold:       #d9a05b;
+  --gold-light: #ecbd80;
+  --gold-dim:   rgba(217,160,91,0.15);
+  --gold-border:rgba(217,160,91,0.3);
+}
+
+/* ── Тема: Опівніч (темно-синій графіт + срібло) ─────────────── */
+:root[data-theme="midnight"] {
+  --eden:       #16232e;
+  --eden-dark:  #0d151c;
+  --eden-light: #1e3242;
+  --gold:       #9fc7e0;
+  --gold-light: #c2dcee;
+  --gold-dim:   rgba(159,199,224,0.15);
+  --gold-border:rgba(159,199,224,0.3);
+}
+
+/* ── Тема: Онікс (майже чорний + бронза) ─────────────────────── */
+:root[data-theme="onyx"] {
+  --eden:       #1c1c1c;
+  --eden-dark:  #111111;
+  --eden-light: #2a2a2a;
+  --gold:       #c9975a;
+  --gold-light: #e0b87e;
+  --gold-dim:   rgba(201,151,90,0.15);
+  --gold-border:rgba(201,151,90,0.3);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Montserrat', sans-serif;
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 13px;
+  /* Багатошаровий фон: базовий колір + тонкий діагональний патерн + радіальне світіння */
+  background-color: var(--eden-dark);
+  background-image:
+    /* Тонкий діагональний патерн із ліній */
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 40px,
+      rgba(212,175,55,.018) 40px,
+      rgba(212,175,55,.018) 41px
+    ),
+    /* Радіальне м'яке світіння зверху-зліва */
+    radial-gradient(ellipse 80% 60% at 15% 0%, rgba(30,77,68,.55) 0%, transparent 70%),
+    /* Радіальне м'яке світіння знизу-справа */
+    radial-gradient(ellipse 60% 50% at 90% 100%, rgba(22,56,50,.4) 0%, transparent 65%);
+}
+
+/* ── Скролбар ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--gold-border); border-radius: 3px; }
+
+/* ── Утіліти ── */
+.hidden   { display: none !important; }
+.gold     { color: var(--gold); }
+.danger   { color: var(--danger); }
+.success  { color: var(--success); }
+.muted    { color: var(--text-dim); }
+.bold     { font-weight: 700; }
+.upper    { text-transform: uppercase; letter-spacing: .08em; }
+
+/* ── Кнопки ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 6px; border: none;
+  font-family: 'Montserrat', sans-serif; font-size: 11px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  cursor: pointer; transition: all .18s; white-space: nowrap;
+}
+.btn-gold   { background: var(--gold); color: var(--eden-dark); }
+.btn-gold:hover { background: var(--gold-light); }
+.btn-outline { background: transparent; color: var(--gold); border: 1px solid var(--gold-border); }
+.btn-outline:hover { background: var(--gold-dim); }
+.btn-danger { background: rgba(224,90,90,.15); color: var(--danger); border: 1px solid rgba(224,90,90,.3); }
+.btn-danger:hover { background: rgba(224,90,90,.25); }
+.btn-ghost  { background: var(--surface); color: var(--text-dim); border: 1px solid rgba(255,255,255,.08); }
+.btn-ghost:hover { background: var(--surface-hover); color: var(--text); }
+.btn-sm { padding: 5px 10px; font-size: 10px; }
+
+/* ── Форми ── */
+.field {
+  width: 100%; background: rgba(0,0,0,.25); border: 1px solid var(--gold-border);
+  border-radius: 6px; padding: 10px 14px; color: var(--text);
+  font-family: 'Montserrat', sans-serif; font-size: 16px;
+  transition: border-color .18s; outline: none;
+}
+.field:focus { border-color: var(--gold); }
+.field::placeholder { color: var(--text-muted); }
+select.field option { background: var(--eden-dark); }
+label.lbl { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .08em; color: var(--text-dim); margin-bottom: 5px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── Картки ── */
+.card {
+  background:
+    linear-gradient(160deg, rgba(255,255,255,.055) 0%, rgba(255,255,255,.025) 100%);
+  border: 1px solid var(--gold-border);
+  border-radius: 10px; padding: 20px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 4px 24px rgba(0,0,0,.25);
+}
+.card-title {
+  font-family: 'Cormorant Garamond', serif; font-size: 20px;
+  font-weight: 600; color: var(--gold); margin-bottom: 16px;
+  text-shadow: 0 0 20px rgba(212,175,55,.2);
+}
+
+/* ── Бейдж ── */
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+}
+.badge-gold   { background: var(--gold-dim); color: var(--gold); border: 1px solid var(--gold-border); }
+.badge-green  { background: rgba(90,175,122,.15); color: var(--success); }
+.badge-red    { background: rgba(224,90,90,.15); color: var(--danger); }
+.badge-gray   { background: rgba(255,255,255,.08); color: var(--text-dim); }
+
+/* ── Модальне вікно ── */
+.modal-overlay {
+  display: none;
+  position: fixed; inset: 0; background: rgba(0,0,0,.72); backdrop-filter: blur(8px);
+  z-index: 1000; align-items: flex-end; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--eden); border: 1px solid var(--gold-border);
+  border-radius: 28px 28px 0 0; padding: 24px 24px calc(24px + env(safe-area-inset-bottom,0px));
+  width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto;
+  overflow-x: hidden;
+  animation: slideUp .32s cubic-bezier(.34,1.3,.64,1);
+}
+/* Модалка без паддінгу — для карток страв */
+.modal:has(.dish-modal) {
+  padding: 0;
+}
+@keyframes slideUp { from { transform: translateY(60px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.modal-title {
+  font-family: 'Cormorant Garamond', serif; font-size: 22px;
+  color: var(--gold); margin-bottom: 20px; font-weight: 600;
+}
+.modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--gold-border); }
+
+/* Профіль — hero секція */
+.profile-hero {
+  background: linear-gradient(135deg, #1a2820 0%, rgba(139,90,20,.25) 50%, #111a14 100%);
+  padding: 20px 20px 72px; position: relative; overflow: visible;
+  margin: -24px -24px 0; border-radius: 28px 28px 0 0;
+  clip-path: none;
+}
+.profile-hero::before {
+  content:''; position:absolute; right:-40px; top:-40px;
+  width:160px; height:160px; border-radius:50%; border:1px solid rgba(255,255,255,.05);
+  pointer-events:none;
+}
+.profile-hero::after {
+  content:''; position:absolute; right:-20px; top:-20px;
+  width:90px; height:90px; border-radius:50%; border:1px solid rgba(255,255,255,.05);
+  pointer-events:none;
+}
+.profile-hero-name {
+  font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:800;
+  color:#fff; text-align:center; line-height:1.2; margin-top:8px;
+}
+.profile-hero-nick { font-size:12px; color:var(--gold); font-style:italic; text-align:center; margin-top:3px; }
+/* Аватар що "звисає" між hero і body */
+.profile-avatar-hanging {
+  position:absolute; bottom:-56px; left:50%; transform:translateX(-50%);
+  width:112px; height:112px; border-radius:50%;
+  border:4px solid var(--eden); background:var(--eden-light);
+  display:flex; align-items:center; justify-content:center;
+  font-size:36px; font-weight:800; color:var(--gold);
+  box-shadow: 0 8px 32px rgba(0,0,0,.4); overflow:hidden;
+  z-index: 10;
+}
+/* Статистика "Днів у Тифліс" і "Стаж" */
+.profile-stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; }
+.profile-stat-card {
+  border-radius:16px; padding:14px; text-align:center;
+}
+.profile-stat-card.gold { background:rgba(212,175,55,.08); border:1px solid rgba(212,175,55,.2); }
+.profile-stat-card.muted { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); }
+.profile-stat-num { font-size:28px; font-weight:900; line-height:1; color:var(--gold); }
+.profile-stat-muted-num { font-size:14px; font-weight:700; line-height:1.3; }
+.profile-stat-label { font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); margin-top:6px; font-weight:600; }
+/* Інфо-рядки в профілі */
+.profile-info-row {
+  display:flex; align-items:center; gap:12px;
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07);
+  border-radius:16px; padding:12px 14px; margin-bottom:8px;
+}
+.profile-info-icon {
+  width:36px; height:36px; border-radius:12px; border:1px solid rgba(255,255,255,.1);
+  display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0;
+}
+.profile-info-label { font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); font-weight:600; }
+.profile-info-value { font-size:13px; font-weight:600; margin-top:2px; }
+
+@keyframes syncPulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .4; transform: scale(.7); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.btn-spinner {
+  width:12px; height:12px;
+  border:2px solid currentColor; border-top-color:transparent;
+  border-radius:50%; display:inline-block;
+  animation:spin .7s linear infinite;
+}
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+  background: var(--eden); border: 1px solid var(--gold-border);
+  border-left: 3px solid var(--gold); border-radius: 8px;
+  padding: 12px 18px; font-size: 12px; font-weight: 600;
+  transform: translateY(80px); opacity: 0;
+  transition: all .3s; pointer-events: none; max-width: 280px;
+}
+#toast.show { transform: translateY(0); opacity: 1; }
+#toast.error { border-left-color: var(--danger); }
+#toast.success-t { border-left-color: var(--success); }
+
+
