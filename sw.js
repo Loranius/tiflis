@@ -2,7 +2,7 @@
 // Мінімальний SW: потрібен для встановлення PWA (Add to Home Screen)
 // + базове кешування статичних ресурсів для офлайн-старту.
 
-const CACHE_NAME = 'tiflis-portal-v2';
+const CACHE_NAME = 'tiflis-portal-v3';
 const CORE_ASSETS = [
   './index.html',
   './manifest.json',
