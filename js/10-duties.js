@@ -200,7 +200,7 @@ const Duties = {
       sa.innerHTML = isAdmin(currentUser)
         ? `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
            <button class="btn btn-gold btn-sm" onclick="Duties.sendTg('handover','${storageKey}')">📨 Надіслати</button>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('handover','${storageKey}')">📷 Фото</button>
+           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('handover','${storageKey}')" title="Завантажити фото чек-листа — Claude розпізнає імена та обов'язки">📷 Завантажити фото</button>
            <button class="btn btn-ghost btn-sm" onclick="Duties.clear('handover','${storageKey}')">Очистити</button>`
         : '';
     } else {
@@ -213,7 +213,7 @@ const Duties = {
       sa.innerHTML = isAdmin(currentUser)
         ? `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
            <button class="btn btn-gold btn-sm" onclick="Duties.sendTg('daily','${storageKey}')">📨 Надіслати</button>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('daily','${storageKey}')">📷 Фото</button>
+           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('daily','${storageKey}')" title="Завантажити фото чек-листа — Claude розпізнає імена та обов'язки">📷 Завантажити фото</button>
            <button class="btn btn-ghost btn-sm" onclick="Duties.clear('daily','${storageKey}')">Очистити</button>`
         : '';
     }
@@ -403,7 +403,6 @@ const Duties = {
       inp.type = 'file';
       inp.id = 'duties-photo-input';
       inp.accept = 'image/*';
-      inp.capture = 'environment';
       inp.style.display = 'none';
       document.body.appendChild(inp);
     }
@@ -419,23 +418,36 @@ const Duties = {
   async _processPhoto(file, type, storageKey) {
     // Показуємо оверлей-лоадер
     Duties._showPhotoOverlay(`
-      <div style="text-align:center;padding:40px 20px">
-        <div style="font-size:40px;margin-bottom:16px">🔍</div>
-        <div style="font-size:15px;font-weight:700;color:var(--gold);margin-bottom:8px">Читаю рукопис...</div>
-        <div style="font-size:12px;color:var(--text-dim)">Claude аналізує фото чек-листа</div>
-        <div style="margin-top:20px;width:40px;height:40px;border:3px solid var(--gold-border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-left:auto;margin-right:auto"></div>
+      <div style="text-align:center;padding:48px 24px">
+        <div style="font-size:44px;margin-bottom:16px">🔍</div>
+        <div style="font-size:16px;font-weight:800;color:var(--gold);margin-bottom:6px;letter-spacing:.02em">Claude читає чек-лист</div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.5">Розпізнаю рукопис і призначення<br>Зазвичай займає 5–10 секунд</div>
+        <div style="margin-top:24px;width:44px;height:44px;border:3px solid var(--gold-border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-left:auto;margin-right:auto"></div>
       </div>
     `);
 
     try {
-      // Конвертуємо файл в base64
-      const base64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result.split(',')[1]);
-        r.onerror = rej;
-        r.readAsDataURL(file);
+      // Стискаємо фото перед відправкою (макс. 1600px, якість 0.85)
+      const { base64, mediaType } = await new Promise((res, rej) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const MAX = 1600;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else       { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          res({ base64: dataUrl.split(',')[1], mediaType: 'image/jpeg' });
+        };
+        img.onerror = rej;
+        img.src = url;
       });
-      const mediaType = file.type || 'image/jpeg';
 
       // Список обов'язків для поточного типу
       const DUTIES_LIST = type === 'daily' ? DAILY_DUTIES : HANDOVER_DUTIES;
