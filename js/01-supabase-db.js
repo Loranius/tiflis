@@ -18,7 +18,6 @@ const sb = {
     const res = await fetch(url, {
       headers: {
         'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
         'Content-Type': 'application/json',
       }
     });
@@ -94,7 +93,6 @@ const sb = {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=representation',
       },
@@ -115,7 +113,6 @@ const sb = {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'resolution=merge-duplicates,return=representation',
       },
@@ -137,7 +134,6 @@ const sb = {
       method: 'PATCH',
       headers: {
         'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=representation',
       },
@@ -159,7 +155,6 @@ const sb = {
       method: 'DELETE',
       headers: {
         'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
         'Content-Type': 'application/json',
       }
     });
@@ -245,7 +240,6 @@ const sb = {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(params)
@@ -261,7 +255,6 @@ const sb = {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY,
-        'Authorization': `Bearer ${SUPA_KEY}`,
         'Content-Type': file.type,
         'x-upsert': 'true',
       },
