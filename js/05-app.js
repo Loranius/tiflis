@@ -1,11 +1,3 @@
-// SHA-256 хешування пароля у браузері (Web Crypto API)
-// Використовується для збереження та перевірки — plain-text у БД/localStorage не зберігається
-async function hashPassword(password) {
-  const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest('SHA-256', enc.encode(password));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
 // ╔═══════════════════════════════════════════════════════════════╗
 // ║  [6/13]  APP + СЕСІЯ (навігація, логін, ініціалізація)        ║
 // ╚═══════════════════════════════════════════════════════════════╝
@@ -22,14 +14,12 @@ const App = {
 
     try {
       const users = await sb.query('users', { filter: { login } });
-      const passHash = await hashPassword(pass);
-      // Підтримка обох форматів: новий (SHA-256 хеш) і legacy (plain-text)
-      const user = users.find(u => u.password === passHash || u.password === pass);
+      const user = users.find(u => u.password === pass);
       if (!user) { errEl.textContent='Невірний логін або пароль'; errEl.classList.remove('hidden'); btnUnlock(btn); return; }
       if (user.fired) { errEl.textContent='Акаунт заблоковано'; errEl.classList.remove('hidden'); btnUnlock(btn); return; }
 
-      // Зберегти сесію (тільки хеш, без plain-text пароля)
-      localStorage.setItem('tiflis_session', JSON.stringify({ login, passHash }));
+      // Зберегти сесію
+      localStorage.setItem('tiflis_session', JSON.stringify({ login, password: pass }));
 
       await App.loadCache();
       currentUser = { ...user, displayName: user.display_name, tg: user.tg_username || user.tg || '' };
@@ -53,17 +43,10 @@ const App = {
     try {
       const saved = localStorage.getItem('tiflis_session');
       if (!saved) return false;
-      const { login, passHash, password: legacyPass } = JSON.parse(saved);
+      const { login, password } = JSON.parse(saved);
       const users = await sb.query('users', { filter: { login } });
-      // Підтримка legacy-сесій де ще зберігся plain-text пароль
-      const user = users.find(u => u.password === (passHash || legacyPass));
+      const user = users.find(u => u.password === password);
       if (!user || user.fired) { localStorage.removeItem('tiflis_session'); return false; }
-      // Якщо сесія legacy — оновити до хешованої
-      if (!passHash && legacyPass) {
-        hashPassword(legacyPass).then(h => {
-          localStorage.setItem('tiflis_session', JSON.stringify({ login, passHash: h }));
-        }).catch(()=>{});
-      }
       await App.loadCache();
       currentUser = { ...user, displayName: user.display_name, tg: user.tg_username || user.tg || '' };
       $('login-screen').remove();
@@ -108,8 +91,7 @@ const App = {
       if (existing.length) { errEl.textContent='Це ім\'я вже зайняте'; errEl.classList.remove('hidden'); btn.textContent='Подати заявку'; btn.disabled=false; return; }
       const existingReq = await sb.query('registration_requests', { filter: { login } });
       if (existingReq.length) { errEl.textContent='Заявка з таким іменем вже існує'; errEl.classList.remove('hidden'); btn.textContent='Подати заявку'; btn.disabled=false; return; }
-      const regHash = await hashPassword(pass);
-      await sb.insert('registration_requests', { login, password: regHash, role, status: 'pending', created_at: new Date().toISOString() });
+      await sb.insert('registration_requests', { login, password: pass, role, status: 'pending', created_at: new Date().toISOString() });
       okEl.textContent = '✅ Заявку подано! Очікуйте підтвердження від адміністратора.';
       okEl.classList.remove('hidden');
       $('reg-login').value=''; $('reg-pass').value=''; $('reg-pass2').value='';
