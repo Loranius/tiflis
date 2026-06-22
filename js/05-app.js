@@ -2,6 +2,23 @@
 // ║  [6/13]  APP + СЕСІЯ (навігація, логін, ініціалізація)        ║
 // ╚═══════════════════════════════════════════════════════════════╝
 let currentUser = null;
+// Генерує випадковий session token
+function _genToken() {
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// Cookie helpers (для Telegram In-App Browser)
+function _setCookie(name, value, days=365) {
+  const exp = new Date(Date.now() + days*864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${exp};path=/;SameSite=Lax`;
+}
+function _getCookie(name) {
+  const m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 const App = {
   async login() {
     const login = $('li').value.trim();
@@ -18,8 +35,18 @@ const App = {
       if (!user) { errEl.textContent='Невірний логін або пароль'; errEl.classList.remove('hidden'); btnUnlock(btn); return; }
       if (user.fired) { errEl.textContent='Акаунт заблоковано'; errEl.classList.remove('hidden'); btnUnlock(btn); return; }
 
-      // Зберегти сесію
-      localStorage.setItem('tiflis_session', JSON.stringify({ login, password: pass }));
+      // Зберегти сесію: localStorage + cookie + Supabase sessions
+      const _sessionData = JSON.stringify({ login, password: pass });
+      try { localStorage.setItem('tiflis_session', _sessionData); } catch(e) {}
+      try { sessionStorage.setItem('tiflis_session', _sessionData); } catch(e) {}
+      // Токен для Telegram (cookie зберігається навіть у In-App Browser)
+      try {
+        const _tok = _genToken();
+        _setCookie('tiflis_tok', _tok);
+        // Зберігаємо токен → login:password в Supabase (TTL = 365 днів)
+        const _expiry = new Date(Date.now() + 365*864e5).toISOString();
+        sb.upsert('sessions', { token: _tok, login, password: pass, expires_at: _expiry }, 'token').catch(()=>{});
+      } catch(e) {}
 
       await App.loadCache();
       currentUser = { ...user, displayName: user.display_name, tg: user.tg_username || user.tg || '' };
@@ -41,7 +68,35 @@ const App = {
 
   async restoreSession() {
     try {
-      const saved = localStorage.getItem('tiflis_session');
+      // Читаємо сесію: localStorage → sessionStorage → URL hash (для Telegram)
+      let saved = null;
+      try { saved = localStorage.getItem('tiflis_session'); } catch(e) {}
+      if (!saved) { try { saved = sessionStorage.getItem('tiflis_session'); } catch(e) {} }
+      if (!saved) {
+        // Пробуємо відновити через cookie → Supabase session token (для Telegram)
+        try {
+          const _tok = _getCookie('tiflis_tok');
+          if (_tok) {
+            const rows = await sb.query('sessions', {
+              filter: { token: _tok },
+              select: 'login,password,expires_at',
+              limit: 1,
+            });
+            if (rows?.[0]) {
+              const row = rows[0];
+              // Перевіряємо TTL
+              if (!row.expires_at || new Date(row.expires_at) > new Date()) {
+                saved = JSON.stringify({ login: row.login, password: row.password });
+                try { localStorage.setItem('tiflis_session', saved); } catch(e) {}
+                try { sessionStorage.setItem('tiflis_session', saved); } catch(e) {}
+              } else {
+                // Токен прострочений — видаляємо
+                _setCookie('tiflis_tok', '', -1);
+              }
+            }
+          }
+        } catch(e) { console.warn('Token restore error:', e); }
+      }
       if (!saved) return false;
       const { login, password } = JSON.parse(saved);
       const users = await sb.query('users', { filter: { login } });
@@ -52,7 +107,8 @@ const App = {
       $('login-screen').remove();
       $('app').classList.remove('hidden');
       App.initUI();
-      const _restoreLastPage = localStorage.getItem('tiflis_last_page') || 'home';
+      const _restoreLastPage = localStorage.getItem('tiflis_last_page')
+        || sessionStorage.getItem('tiflis_last_page') || 'home';
       App.navigate(_restoreLastPage);
       App.startPolling();
       return true;
@@ -104,6 +160,15 @@ const App = {
       App.stopPolling();
       localStorage.removeItem('tiflis_session');
       localStorage.removeItem('tiflis_last_page');
+      try { sessionStorage.removeItem('tiflis_session'); } catch(e) {}
+      // Видаляємо cookie і Supabase session token
+      try {
+        const _tok = _getCookie('tiflis_tok');
+        if (_tok) {
+          sb.delete('sessions', { token: _tok }).catch(()=>{});
+          _setCookie('tiflis_tok', '', -1);
+        }
+      } catch(e) {}
       currentUser = null;
       location.reload();
     }, { okLabel: '🚪 Вийти', okClass: 'btn-danger' });
@@ -423,7 +488,7 @@ const App = {
           const parsed = JSON.parse(s.value || '[]');
           DB.set(SWAPS_KEY, parsed);
           ShiftSwap._updateMySwapsBtn();
-        } catch(e) {}
+        } catch(e) { console.warn('SwapKey parse error:', e); }
       }
     });
     if (menuChanged && $('page-menu')?.classList.contains('active')) {
@@ -769,6 +834,7 @@ const App = {
 
     // Зберігаємо поточну сторінку щоб відновити після reload
     try { localStorage.setItem('tiflis_last_page', page); } catch(e) {}
+    try { sessionStorage.setItem('tiflis_last_page', page); } catch(e) {}
 
     if (page==='home')     { Home.init(); }
     if (page==='schedule') Schedule.init();

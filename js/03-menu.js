@@ -1410,7 +1410,7 @@ const Menu = {
       try {
         await sb.upsert('settings', { key: 'menu_items', value: JSON.stringify(DB.get('menu_items', {})) }, 'key');
         log('💾 Збережено.');
-      } catch(e) {}
+      } catch(e) { console.error('Menu import save failed:', e); toast('Помилка збереження меню', 'error'); }
       logEvent('menu', `Додано ${added} страв з імпорту`); toast(`+${added} страв додано`, 'success-t');
       Menu.renderSection(menuActiveSection);
     }

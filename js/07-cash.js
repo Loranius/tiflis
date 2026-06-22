@@ -586,7 +586,7 @@ const Cash = {
       <label class="lbl">Переглядати касу</label>
       <select id="cash-admin-selector" class="field" onchange="Cash.switchUser(this.value)">
         <option value="${currentUser.id}">— Своя каса (${currentUser.displayName||currentUser.login}) —</option>
-        ${waiters.map(u=>`<option value="${u.id}" ${u.id===Cash.viewUserId?'selected':''}>${u.displayName||u.login}</option>`).join('')}
+        ${waiters.map(u=>`<option value="${esc(u.id)}" ${u.id===Cash.viewUserId?'selected':''}>${esc(u.displayName||u.login)}</option>`).join('')}
       </select>`;
   },
 
