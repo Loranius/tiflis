@@ -197,12 +197,11 @@ const Duties = {
       Duties.render('handover', HANDOVER_DUTIES, storageKey, workingWaiters, selKey);
       Duties.renderTTLBanner('handover', selKey);
       const sa = $('handover-actions');
-      sa.innerHTML = isAdmin(currentUser)
-        ? `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
+      sa.innerHTML = `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
+           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('handover','${storageKey}')" title="Завантажити фото чек-листа — Claude розпізнає імена та обов'язки">📷 Фото</button>
+           ${isAdmin(currentUser) ? `
            <button class="btn btn-gold btn-sm" onclick="Duties.sendTg('handover','${storageKey}')">📨 Надіслати</button>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('handover','${storageKey}')" title="Завантажити фото чек-листа — Claude розпізнає імена та обов'язки">📷 Завантажити фото</button>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.clear('handover','${storageKey}')">Очистити</button>`
-        : '';
+           <button class="btn btn-ghost btn-sm" onclick="Duties.clear('handover','${storageKey}')">Очистити</button>` : ''}`;
     } else {
       $('daily-date-label').textContent = dateStr;
       Duties.render('daily', DAILY_DUTIES, storageKey, workingWaiters, selKey);
@@ -210,12 +209,11 @@ const Duties = {
       Duties.renderZones(zonesKey, workingWaiters, selKey);
       Duties.renderTTLBanner('daily', selKey);
       const sa = $('daily-actions');
-      sa.innerHTML = isAdmin(currentUser)
-        ? `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
+      sa.innerHTML = `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
+           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('daily','${storageKey}')" title="Завантажити фото чек-листа — Claude розпізнає імена та обов'язки">📷 Фото</button>
+           ${isAdmin(currentUser) ? `
            <button class="btn btn-gold btn-sm" onclick="Duties.sendTg('daily','${storageKey}')">📨 Надіслати</button>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('daily','${storageKey}')" title="Завантажити фото чек-листа — Claude розпізнає імена та обов'язки">📷 Завантажити фото</button>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.clear('daily','${storageKey}')">Очистити</button>`
-        : '';
+           <button class="btn btn-ghost btn-sm" onclick="Duties.clear('daily','${storageKey}')">Очистити</button>` : ''}`;
     }
   },
 
@@ -313,6 +311,11 @@ const Duties = {
   },
 
   renderZones(zonesKey, workingWaiters, scheduleDateKey) {
+    // Кнопка фото для зон — показуємо всім
+    const zonesPhotoBtn = document.getElementById('zones-photo-btn');
+    if (zonesPhotoBtn) {
+      zonesPhotoBtn.onclick = () => Duties.readPhoto('daily-zones', zonesKey);
+    }
     const saved = Duties._normalizeSaved(DB.get(zonesKey, {}));
     const schedule = DB.get('schedule', {});
     const OFF_SHIFTS = new Set(['Х', 'О', 'С']);
@@ -452,13 +455,15 @@ const Duties = {
       });
 
       // Список обов'язків для поточного типу
-      const DUTIES_LIST = type === 'daily' ? DAILY_DUTIES : HANDOVER_DUTIES;
+      const DUTIES_LIST = type === 'daily-zones' ? DAILY_ZONES
+        : type === 'daily' ? DAILY_DUTIES : HANDOVER_DUTIES;
 
       // Список реальних офіціантів з БД
       const allWaiters = getUsers().filter(u => u.role === 'waiter' || u.role2 === 'waiter');
       const waiterNames = allWaiters.map(w => w.displayName || w.login).join(', ');
 
-      const prompt = `Ти — асистент ресторану «Тифліс». На фото — рукописний чек-лист розподілу щоденних обов'язків офіціантів.
+      const listLabel = type === 'daily-zones' ? 'зон роботи між офіціантами' : 'щоденних обов\'язків офіціантів';
+      const prompt = `Ти — асистент ресторану «Тифліс». На фото — рукописний чек-лист розподілу ${listLabel}.
 
 Список офіціантів які зараз працюють: ${waiterNames}
 
@@ -577,11 +582,21 @@ ${DUTIES_LIST.map((d, i) => `${i}. ${d}`).join('\n')}
   },
 
   _applyPhotoAssignments(matched, type, storageKey) {
-    // Читаємо які чекбокси відмічені
-    const saved = Duties._normalizeSaved(DB.get(storageKey, {}));
-    matched.forEach((a, i) => {
+    // Рахуємо відмічені ДО закриття overlay (поки чекбокси ще є в DOM)
+    const toApply = matched.filter((a, i) => {
       const cb = document.getElementById(`photo-check-${i}`);
-      if (!cb || !cb.checked) return;
+      return cb && cb.checked;
+    });
+
+    if (!toApply.length) {
+      Duties._closePhotoOverlay();
+      toast('Нічого не вибрано', '');
+      return;
+    }
+
+    // Зберігаємо в DB
+    const saved = Duties._normalizeSaved(DB.get(storageKey, {}));
+    toApply.forEach(a => {
       const idxKey = String(a.dutyIndex);
       const existing = Array.isArray(saved[idxKey]) ? saved[idxKey] : (saved[idxKey] ? [saved[idxKey]] : []);
       if (!existing.includes(a.waiter.id)) {
@@ -589,15 +604,32 @@ ${DUTIES_LIST.map((d, i) => `${i}. ${d}`).join('\n')}
       }
     });
     DB.set(storageKey, saved);
-    Duties._persistKey(storageKey, saved);
+
+    // Закриваємо overlay
     Duties._closePhotoOverlay();
-    // Перерендеримо таблицю
-    Duties.initFromCal(type);
-    const appliedCount = matched.filter((_, i) => {
-      const cb = document.getElementById(`photo-check-${i}`);
-      return cb && cb.checked;
-    }).length;
-    toast(`✅ Застосовано ${appliedCount} призначень`, 'success-t');
+
+    // Показуємо toast одразу
+    toast(`✅ Застосовано ${toApply.length} призначень`, 'success-t');
+
+    // Зберігаємо в Supabase і перерендеримо (асинхронно, після toast)
+    Duties._persistKey(storageKey).then(() => {
+      if (type === 'daily-zones') {
+        // Для зон — перерендеримо тільки зони, не весь initFromCal
+        const selKey = Duties._selectedDateKey('daily');
+        const ww = Duties._workingWaiters(selKey);
+        Duties.renderZones(storageKey, ww, selKey);
+      } else {
+        Duties.initFromCal(type);
+      }
+    }).catch(() => {
+      if (type === 'daily-zones') {
+        const selKey = Duties._selectedDateKey('daily');
+        const ww = Duties._workingWaiters(selKey);
+        Duties.renderZones(storageKey, ww, selKey);
+      } else {
+        Duties.initFromCal(type);
+      }
+    });
   },
 
   _showPhotoOverlay(html) {
