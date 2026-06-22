@@ -198,11 +198,30 @@ const Duties = {
       Duties.render('handover', HANDOVER_DUTIES, storageKey, workingWaiters, selKey);
       Duties.renderTTLBanner('handover', selKey);
       const sa = $('handover-actions');
-      sa.innerHTML = `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('handover','${storageKey}')" title="Завантажити фото чек-листа — Claude розпізнає імена та обов'язки">📷 Фото</button>
-           ${isAdmin(currentUser) ? `
-           <button class="btn btn-gold btn-sm" onclick="Duties.sendTg('handover','${storageKey}')">📨 Надіслати</button>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.clear('handover','${storageKey}')">Очистити</button>` : ''}`;
+      // Будуємо кнопки через createElement — onclick в innerHTML не працює на мобільному
+      sa.innerHTML = '';
+      const _hHint = document.createElement('span');
+      _hHint.style.cssText = 'font-size:11px;color:var(--text-dim);margin-right:8px';
+      _hHint.innerHTML = `📅 ${shiftHint}`;
+      sa.appendChild(_hHint);
+      const _hPhoto = document.createElement('button');
+      _hPhoto.className = 'btn btn-ghost btn-sm';
+      _hPhoto.title = 'Завантажити фото чек-листа — Claude розпізнає імена та обов\u0027язки';
+      _hPhoto.textContent = '📷 Фото';
+      _hPhoto.addEventListener('click', () => Duties.readPhoto('handover', storageKey));
+      sa.appendChild(_hPhoto);
+      if (isAdmin(currentUser)) {
+        const _hSend = document.createElement('button');
+        _hSend.className = 'btn btn-gold btn-sm';
+        _hSend.textContent = '📨 Надіслати';
+        _hSend.addEventListener('click', () => Duties.sendTg('handover', storageKey));
+        sa.appendChild(_hSend);
+        const _hClear = document.createElement('button');
+        _hClear.className = 'btn btn-ghost btn-sm';
+        _hClear.textContent = 'Очистити';
+        _hClear.addEventListener('click', () => Duties.clear('handover', storageKey));
+        sa.appendChild(_hClear);
+      }
     } else {
       $('daily-date-label').textContent = dateStr;
       Duties.render('daily', DAILY_DUTIES, storageKey, workingWaiters, selKey);
@@ -210,11 +229,29 @@ const Duties = {
       Duties.renderZones(zonesKey, workingWaiters, selKey);
       Duties.renderTTLBanner('daily', selKey);
       const sa = $('daily-actions');
-      sa.innerHTML = `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('daily','${storageKey}')" title="Завантажити фото чек-листа — Claude розпізнає імена та обов'язки">📷 Фото</button>
-           ${isAdmin(currentUser) ? `
-           <button class="btn btn-gold btn-sm" onclick="Duties.sendTg('daily','${storageKey}')">📨 Надіслати</button>
-           <button class="btn btn-ghost btn-sm" onclick="Duties.clear('daily','${storageKey}')">Очистити</button>` : ''}`;
+      sa.innerHTML = '';
+      const _dHint = document.createElement('span');
+      _dHint.style.cssText = 'font-size:11px;color:var(--text-dim);margin-right:8px';
+      _dHint.innerHTML = `📅 ${shiftHint}`;
+      sa.appendChild(_dHint);
+      const _dPhoto = document.createElement('button');
+      _dPhoto.className = 'btn btn-ghost btn-sm';
+      _dPhoto.title = 'Завантажити фото чек-листа — Claude розпізнає імена та обов\u0027язки';
+      _dPhoto.textContent = '📷 Фото';
+      _dPhoto.addEventListener('click', () => Duties.readPhoto('daily', storageKey));
+      sa.appendChild(_dPhoto);
+      if (isAdmin(currentUser)) {
+        const _dSend = document.createElement('button');
+        _dSend.className = 'btn btn-gold btn-sm';
+        _dSend.textContent = '📨 Надіслати';
+        _dSend.addEventListener('click', () => Duties.sendTg('daily', storageKey));
+        sa.appendChild(_dSend);
+        const _dClear = document.createElement('button');
+        _dClear.className = 'btn btn-ghost btn-sm';
+        _dClear.textContent = 'Очистити';
+        _dClear.addEventListener('click', () => Duties.clear('daily', storageKey));
+        sa.appendChild(_dClear);
+      }
     }
   },
 
@@ -539,12 +576,23 @@ ${dutiesList.map((d, i) => `${i}. ${d}`).join('\n')}
       }
 
       // Нормалізуємо відповідь — два формати: {duties, zones} або {assignments}
-      const matchWaiter = (name) => allWaiters.find(w => {
-        const dn = (w.displayName || w.login).toLowerCase();
+      const matchWaiter = (name) => {
         const an = (name || '').toLowerCase().trim();
-        if (!an) return false;
-        return dn.includes(an) || an.includes(dn) || dn.split(' ')[0] === an.split(' ')[0];
-      });
+        if (!an) return null;
+        const anFirst = an.split(' ')[0]; // перше слово (ім'я)
+        // Пріоритет 1: точне співпадіння display_name (регістронезалежно)
+        let found = allWaiters.find(w => (w.displayName || w.login).toLowerCase() === an);
+        if (found) return found;
+        // Пріоритет 2: display_name містить введене (напр. 'андрій' в 'андрій швець')
+        found = allWaiters.find(w => (w.displayName || w.login).toLowerCase().startsWith(anFirst + ' ') || (w.displayName || w.login).toLowerCase() === anFirst);
+        if (found) return found;
+        // Пріоритет 3: будь-яке часткове співпадіння
+        found = allWaiters.find(w => {
+          const dn = (w.displayName || w.login).toLowerCase();
+          return dn.includes(an) || an.includes(dn.split(' ')[0]);
+        });
+        return found || null;
+      };
 
       let matchedDuties = [];
       let matchedZones  = [];
@@ -676,6 +724,21 @@ ${dutiesList.map((d, i) => `${i}. ${d}`).join('\n')}
       });
       DB.set(storageKey, savedDuties);
     }
+
+    // ── Оновлюємо графік: додаємо призначених у робочі на цей день ──
+    // (щоб вони не горіли червоним після фото-призначення)
+    try {
+      const _schedule = DB.get('schedule', {});
+      let _changed = false;
+      toApply.forEach(a => {
+        const _key = `${a.waiter.id}_${selKey}`;
+        if (!_schedule[_key] || ['Х','О','С'].includes(_schedule[_key])) {
+          _schedule[_key] = 'Р'; // Р = робочий
+          _changed = true;
+        }
+      });
+      if (_changed) DB.set('schedule', _schedule);
+    } catch(e) {}
 
     // ── Зберігаємо зони ──────────────────────────────────────────
     const zonesKey = `duties_daily_zones_${selKey}`;

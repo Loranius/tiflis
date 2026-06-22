@@ -12,7 +12,7 @@ function _genToken() {
 // Cookie helpers (для Telegram In-App Browser)
 function _setCookie(name, value, days=365) {
   const exp = new Date(Date.now() + days*864e5).toUTCString();
-  // SameSite=None;Secure потрібен для Telegram WebApp (iframe/webview контекст)
+  // SameSite=None;Secure потрібен для Telegram WebApp (cross-site webview)
   const secure = location.protocol === 'https:' ? ';Secure' : '';
   const sameSite = secure ? ';SameSite=None' : '';
   document.cookie = `${name}=${encodeURIComponent(value)};expires=${exp};path=/${sameSite}${secure}`;

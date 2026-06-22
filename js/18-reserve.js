@@ -101,7 +101,7 @@ const Reserve = {
         for (const h of Reserve.DEFAULT_HALLS) if (!merged.includes(h)) merged.push(h);
         return merged;
       }
-    } catch(e) { console.warn('Reserve.getHalls:', e); }
+    } catch(e) {}
     return [...Reserve.DEFAULT_HALLS];
   },
 
@@ -121,7 +121,7 @@ const Reserve = {
           localStorage.setItem(Reserve._key, JSON.stringify(remote));
         }
       }
-    } catch(e) { console.warn('Reserve.init halls:', e); }
+    } catch(e) {}
 
     // Підтягуємо бронювання з Supabase
     try {
@@ -132,7 +132,7 @@ const Reserve = {
         DB.set(LS_KEYS.RESERVE_BOOKINGS, parsed);
         if (changed) Reserve.saveAllBookings(parsed).catch(()=>{});
       }
-    } catch(e) { console.warn('Reserve.init bookings:', e); }
+    } catch(e) {}
 
     const halls = Reserve.getHalls();
     if (!Reserve._active || !halls.includes(Reserve._active)) Reserve._active = halls[0];
@@ -795,7 +795,7 @@ const Reserve = {
           zones = JSON.parse(rows[0].value);
           DB.set(zonesKey, zones);
         }
-      } catch(e) { console.warn('Reserve.zones:', e); }
+      } catch(e) {}
     }
     zones = zones || {};
 
