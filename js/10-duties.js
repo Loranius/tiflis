@@ -454,43 +454,75 @@ const Duties = {
         img.src = url;
       });
 
-      // Список обов'язків для поточного типу
-      const DUTIES_LIST = type === 'daily-zones' ? DAILY_ZONES
-        : type === 'daily' ? DAILY_DUTIES : HANDOVER_DUTIES;
-
       // Список реальних офіціантів з БД
       const allWaiters = getUsers().filter(u => u.role === 'waiter' || u.role2 === 'waiter');
       const waiterNames = allWaiters.map(w => w.displayName || w.login).join(', ');
 
-      const listLabel = type === 'daily-zones' ? 'зон роботи між офіціантами' : 'щоденних обов\'язків офіціантів';
-      const prompt = `Ти — асистент ресторану «Тифліс». На фото — рукописний чек-лист розподілу ${listLabel}.
+      // Визначаємо що читати з фото
+      // Для 'daily' — читаємо ОДНОЧАСНО обов'язки + зони (вони на одному аркуші)
+      // Для 'handover' — тільки обов'язки здачі зміни
+      // Для 'daily-zones' — тільки зони (окрема кнопка)
+      const isFullDaily = (type === 'daily');
 
-Список офіціантів які зараз працюють: ${waiterNames}
+      const dutiesList  = type === 'handover' ? HANDOVER_DUTIES : DAILY_DUTIES;
+      const zonesList   = DAILY_ZONES;
 
-Список обов'язків (пронумеровані від 0):
-${DUTIES_LIST.map((d, i) => `${i}. ${d}`).join('\n')}
+      let prompt;
+      if (isFullDaily) {
+        prompt = `Ти — асистент ресторану «Тифліс». На фото — рукописний чек-лист обов'язків офіціантів на день.
 
-Твоє завдання:
-1. Розпізнай рукописний текст на фото
-2. Для кожного обов'язку визнач ім'я офіціанта якому він призначений (якщо є)
-3. Зіставляй скорочені/рукописні імена з реальними зі списку офіціантів (наприклад "Ліза"="Ліза Тупік", "Андрій"="Андрій Швець", "Іра"="Іра Медуза" і т.д.)
-4. Якщо обов'язок не призначений — пропусти його
+Список офіціантів: ${waiterNames}
 
-Відповідай ТІЛЬКИ валідним JSON без пояснень, у форматі:
-{"assignments": [{"dutyIndex": 0, "waiterName": "Ліза"}, ...]}
+Список обов'язків (нумерація від 0):
+${dutiesList.map((d, i) => `${i}. ${d}`).join('\n')}
 
-Де dutyIndex — індекс обов'язку зі списку вище (0-based), waiterName — точне ім'я з мого списку офіціантів.`;
+Список зон роботи (нумерація від 0):
+${zonesList.map((z, i) => `${i}. ${z}`).join('\n')}
 
-      // Виклик через Supabase Edge Function (ANTHROPIC_KEY зберігається там)
+На аркуші є ДВІ частини:
+1. Таблиця вгорі — обов'язки і хто їх виконує
+2. Рукописний список внизу під таблицею — розподіл зон (наприклад "Заг. зал – Андрій, Іра", "Нов. зал №2 – Артем", "Літка – Дмитро, Даша")
+
+Зіставляй скорочені назви зон: "Заг. зал"="Загальний зал", "Нов. зал №2"="Нижній зал 2", "Камін."="Камінний зал", "Літка"="Літня тераса", "Каб."="Кабінки".
+Зіставляй скорочені імена: перше слово або перші літери (Андрій=Андрій Швець, Іра=Іра Медуза і т.д.)
+
+Відповідай ТІЛЬКИ валідним JSON, без пояснень:
+{
+  "duties": [{"dutyIndex": 0, "waiterName": "Іра"}],
+  "zones": [{"zoneIndex": 0, "waiterName": "Андрій"}, {"zoneIndex": 0, "waiterName": "Іра"}]
+}
+
+duties — призначення з таблиці обов'язків (один офіціант на обов'язок).
+zones — призначення зон (може бути кілька офіціантів на одну зону — окремий запис для кожного).
+Якщо щось не призначено — не включай у відповідь.`;
+      } else if (type === 'daily-zones') {
+        prompt = `Ти — асистент ресторану «Тифліс». На фото — розподіл зон роботи між офіціантами.
+
+Список офіціантів: ${waiterNames}
+
+Список зон (нумерація від 0):
+${zonesList.map((z, i) => `${i}. ${z}`).join('\n')}
+
+Зіставляй скорочені назви зон та імена. Відповідай ТІЛЬКИ JSON:
+{"assignments": [{"dutyIndex": 0, "waiterName": "Андрій"}]}`;
+      } else {
+        // handover
+        prompt = `Ти — асистент ресторану «Тифліс». На фото — чек-лист здачі зміни.
+
+Список офіціантів: ${waiterNames}
+
+Список обов'язків (нумерація від 0):
+${dutiesList.map((d, i) => `${i}. ${d}`).join('\n')}
+
+Зіставляй скорочені імена. Відповідай ТІЛЬКИ JSON:
+{"assignments": [{"dutyIndex": 0, "waiterName": "Іра"}]}`;
+      }
+
+      // Виклик через Supabase Edge Function
       const resp = await fetch(EDGE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
-        body: JSON.stringify({
-          action: 'read_duties_photo',
-          imageBase64: base64,
-          mediaType,
-          prompt,
-        })
+        body: JSON.stringify({ action: 'read_duties_photo', imageBase64: base64, mediaType, prompt })
       });
 
       if (!resp.ok) throw new Error(`Edge function ${resp.status}: ${await resp.text()}`);
@@ -498,75 +530,97 @@ ${DUTIES_LIST.map((d, i) => `${i}. ${d}`).join('\n')}
       if (!data.ok) throw new Error(data.error || data.detail || 'Edge function error');
       const rawText = (data.text || '').trim();
 
-      // Парсимо JSON відповідь
       let parsed;
       try {
-        const clean = rawText.replace(/```json|```/g, '').trim();
-        parsed = JSON.parse(clean);
+        parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
       } catch(e) {
-        throw new Error('Не вдалось розпарсити відповідь Claude: ' + rawText.slice(0, 200));
+        throw new Error('Не вдалось розпарсити відповідь: ' + rawText.slice(0, 200));
       }
 
-      const assignments = parsed.assignments || [];
-      if (!assignments.length) {
+      // Нормалізуємо відповідь — два формати: {duties, zones} або {assignments}
+      const matchWaiter = (name) => allWaiters.find(w => {
+        const dn = (w.displayName || w.login).toLowerCase();
+        const an = (name || '').toLowerCase().trim();
+        if (!an) return false;
+        return dn.includes(an) || an.includes(dn) || dn.split(' ')[0] === an.split(' ')[0];
+      });
+
+      let matchedDuties = [];
+      let matchedZones  = [];
+
+      if (isFullDaily) {
+        // Обов'язки
+        (parsed.duties || []).forEach(a => {
+          const waiter = matchWaiter(a.waiterName);
+          const duty   = dutiesList[a.dutyIndex];
+          if (waiter && duty !== undefined) matchedDuties.push({ ...a, waiter, duty, _list: 'duties' });
+        });
+        // Зони
+        (parsed.zones || []).forEach(a => {
+          const waiter = matchWaiter(a.waiterName);
+          const zone   = zonesList[a.zoneIndex];
+          if (waiter && zone !== undefined) matchedZones.push({ dutyIndex: a.zoneIndex, waiter, duty: zone, _list: 'zones' });
+        });
+      } else {
+        // handover або daily-zones — простий формат {assignments}
+        const list = type === 'daily-zones' ? zonesList : dutiesList;
+        (parsed.assignments || []).forEach(a => {
+          const waiter = matchWaiter(a.waiterName);
+          const duty   = list[a.dutyIndex];
+          if (waiter && duty !== undefined) {
+            const item = { ...a, waiter, duty, _list: type === 'daily-zones' ? 'zones' : 'duties' };
+            if (type === 'daily-zones') matchedZones.push(item);
+            else matchedDuties.push(item);
+          }
+        });
+      }
+
+      const allMatched = [...matchedDuties, ...matchedZones];
+
+      if (!allMatched.length) {
         Duties._showPhotoOverlay(`
           <div style="text-align:center;padding:40px 20px">
             <div style="font-size:40px;margin-bottom:12px">🤷</div>
             <div style="font-size:14px;font-weight:700;color:var(--text)">Призначень не знайдено</div>
-            <div style="font-size:12px;color:var(--text-dim);margin-top:8px">Спробуй фото з кращим освітленням</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:8px">Спробуй фото з кращим освітленням або під іншим кутом</div>
             <button class="btn btn-ghost btn-sm" style="margin-top:20px" onclick="Duties._closePhotoOverlay()">Закрити</button>
           </div>
         `);
         return;
       }
 
-      // Матчимо імена з реальними офіціантами
-      const matched = assignments.map(a => {
-        const waiter = allWaiters.find(w => {
-          const dn = (w.displayName || w.login).toLowerCase();
-          const an = (a.waiterName || '').toLowerCase();
-          return dn.includes(an) || an.includes(dn) || dn.split(' ')[0] === an.split(' ')[0];
-        });
-        return { ...a, waiter, duty: DUTIES_LIST[a.dutyIndex] };
-      }).filter(a => a.waiter && a.duty !== undefined);
+      // Превью — з розбивкою на секції "Обов'язки" і "Зони"
+      const makeSection = (items, title, startIdx) => {
+        if (!items.length) return '';
+        const rows = items.map((a, i) => `
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+            <input type="checkbox" id="photo-check-${startIdx + i}" checked
+              style="margin-top:3px;accent-color:var(--gold);width:16px;height:16px;flex-shrink:0">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:12px;color:var(--text-dim);line-height:1.3">${esc(a.duty)}</div>
+              <div style="font-size:13px;font-weight:700;color:var(--gold);margin-top:2px">→ ${esc(a.waiter.displayName || a.waiter.login)}</div>
+            </div>
+          </div>`).join('');
+        return `<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin:10px 0 4px">${title}</div>${rows}`;
+      };
 
-      if (!matched.length) {
-        Duties._showPhotoOverlay(`
-          <div style="text-align:center;padding:40px 20px">
-            <div style="font-size:40px;margin-bottom:12px">😕</div>
-            <div style="font-size:14px;font-weight:700;color:var(--text)">Імена не розпізнано</div>
-            <div style="font-size:12px;color:var(--text-dim);margin-top:8px">Claude розпізнав: ${assignments.map(a=>a.waiterName).join(', ')}</div>
-            <button class="btn btn-ghost btn-sm" style="margin-top:20px" onclick="Duties._closePhotoOverlay()">Закрити</button>
-          </div>
-        `);
-        return;
-      }
-
-      // Показуємо превью для підтвердження
-      const previewRows = matched.map((a, i) => `
-        <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">
-          <input type="checkbox" id="photo-check-${i}" checked
-            style="margin-top:3px;accent-color:var(--gold);width:16px;height:16px;flex-shrink:0">
-          <div style="min-width:0;flex:1">
-            <div style="font-size:12px;color:var(--text-dim);line-height:1.3">${esc(a.duty)}</div>
-            <div style="font-size:13px;font-weight:700;color:var(--gold);margin-top:3px">→ ${esc(a.waiter.displayName || a.waiter.login)}</div>
-          </div>
-        </div>
-      `).join('');
+      const dutySection = makeSection(matchedDuties, '📋 Обов\u0027язки', 0);
+      const zoneSection = makeSection(matchedZones,  '🗺️ Зони роботи', matchedDuties.length);
 
       Duties._showPhotoOverlay(`
         <div style="padding:20px">
-          <div style="font-size:15px;font-weight:700;color:var(--gold);margin-bottom:4px">📋 Розпізнано ${matched.length} призначень</div>
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:14px">Зніміть галочки з тих що не потрібні</div>
-          <div style="max-height:55vh;overflow-y:auto;margin-bottom:16px">${previewRows}</div>
+          <div style="font-size:15px;font-weight:700;color:var(--gold);margin-bottom:4px">Розпізнано ${allMatched.length} призначень</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Зніміть галочки з тих що не потрібні</div>
+          <div style="max-height:58vh;overflow-y:auto;margin-bottom:16px">${dutySection}${zoneSection}</div>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-gold" style="flex:1" onclick="Duties._applyPhotoAssignments(${JSON.stringify(matched).replace(/</g,'\u003c')}, '${type}', '${storageKey}')">
+            <button class="btn btn-gold" style="flex:1"
+              onclick="Duties._applyPhotoAssignments(${JSON.stringify(allMatched).replace(/</g,'\u003c')}, '${type}', '${storageKey}')">
               ✅ Застосувати
             </button>
             <button class="btn btn-ghost" onclick="Duties._closePhotoOverlay()">Скасувати</button>
           </div>
         </div>
-      `, matched);
+      `);
 
     } catch(err) {
       console.error('readPhoto error:', err);
@@ -582,7 +636,7 @@ ${DUTIES_LIST.map((d, i) => `${i}. ${d}`).join('\n')}
   },
 
   _applyPhotoAssignments(matched, type, storageKey) {
-    // Рахуємо відмічені ДО закриття overlay (поки чекбокси ще є в DOM)
+    // Рахуємо відмічені ДО закриття overlay
     const toApply = matched.filter((a, i) => {
       const cb = document.getElementById(`photo-check-${i}`);
       return cb && cb.checked;
@@ -594,38 +648,47 @@ ${DUTIES_LIST.map((d, i) => `${i}. ${d}`).join('\n')}
       return;
     }
 
-    // Зберігаємо в DB
-    const saved = Duties._normalizeSaved(DB.get(storageKey, {}));
-    toApply.forEach(a => {
-      const idxKey = String(a.dutyIndex);
-      const existing = Array.isArray(saved[idxKey]) ? saved[idxKey] : (saved[idxKey] ? [saved[idxKey]] : []);
-      if (!existing.includes(a.waiter.id)) {
-        saved[idxKey] = [...existing, a.waiter.id];
-      }
-    });
-    DB.set(storageKey, saved);
+    // Розділяємо на обов'язки і зони (поле _list)
+    const dutyItems = toApply.filter(a => a._list !== 'zones');
+    const zoneItems = toApply.filter(a => a._list === 'zones');
 
-    // Закриваємо overlay
+    const selKey = Duties._selectedDateKey(type === 'daily-zones' ? 'daily' : type);
+
+    // ── Зберігаємо обов'язки ─────────────────────────────────────
+    if (dutyItems.length) {
+      const savedDuties = Duties._normalizeSaved(DB.get(storageKey, {}));
+      dutyItems.forEach(a => {
+        const idxKey = String(a.dutyIndex);
+        const existing = Array.isArray(savedDuties[idxKey]) ? savedDuties[idxKey] : (savedDuties[idxKey] ? [savedDuties[idxKey]] : []);
+        if (!existing.includes(a.waiter.id)) savedDuties[idxKey] = [...existing, a.waiter.id];
+      });
+      DB.set(storageKey, savedDuties);
+    }
+
+    // ── Зберігаємо зони ──────────────────────────────────────────
+    const zonesKey = `duties_daily_zones_${selKey}`;
+    if (zoneItems.length) {
+      const savedZones = Duties._normalizeSaved(DB.get(zonesKey, {}));
+      zoneItems.forEach(a => {
+        const idxKey = String(a.dutyIndex);
+        const existing = Array.isArray(savedZones[idxKey]) ? savedZones[idxKey] : (savedZones[idxKey] ? [savedZones[idxKey]] : []);
+        if (!existing.includes(a.waiter.id)) savedZones[idxKey] = [...existing, a.waiter.id];
+      });
+      DB.set(zonesKey, savedZones);
+    }
+
     Duties._closePhotoOverlay();
-
-    // Показуємо toast одразу
     toast(`✅ Застосовано ${toApply.length} призначень`, 'success-t');
 
-    // Зберігаємо в Supabase і перерендеримо (асинхронно, після toast)
-    Duties._persistKey(storageKey).then(() => {
+    // Зберігаємо в Supabase і перерендеримо
+    const saves = [];
+    if (dutyItems.length) saves.push(Duties._persistKey(storageKey));
+    if (zoneItems.length)  saves.push(Duties._persistKey(zonesKey));
+
+    Promise.allSettled(saves).then(() => {
       if (type === 'daily-zones') {
-        // Для зон — перерендеримо тільки зони, не весь initFromCal
-        const selKey = Duties._selectedDateKey('daily');
         const ww = Duties._workingWaiters(selKey);
-        Duties.renderZones(storageKey, ww, selKey);
-      } else {
-        Duties.initFromCal(type);
-      }
-    }).catch(() => {
-      if (type === 'daily-zones') {
-        const selKey = Duties._selectedDateKey('daily');
-        const ww = Duties._workingWaiters(selKey);
-        Duties.renderZones(storageKey, ww, selKey);
+        Duties.renderZones(zonesKey, ww, selKey);
       } else {
         Duties.initFromCal(type);
       }
