@@ -9,7 +9,16 @@ const toast = (msg, type='') => {
   t._t = setTimeout(() => t.className = '', 2800);
 };
 function showModal(html) {
-  $('modal-content').innerHTML = html;
+  const mc = $('modal-content');
+  mc.innerHTML = html;
+  // На мобільному Chrome onclick в innerHTML не реєструється — призначаємо через addEventListener
+  mc.querySelectorAll('[onclick]').forEach(el => {
+    const code = el.getAttribute('onclick');
+    el.removeAttribute('onclick');
+    el.addEventListener('click', (e) => {
+      try { new Function('event', code)(e); } catch(err) { console.error('modal onclick:', err); }
+    });
+  });
   $('modal-overlay').classList.add('active');
 }
 function closeModal() {

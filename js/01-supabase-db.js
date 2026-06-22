@@ -255,6 +255,7 @@ const sb = {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`, // Storage вимагає Authorization на відміну від REST
         'Content-Type': file.type,
         'x-upsert': 'true',
       },
