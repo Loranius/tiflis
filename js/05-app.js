@@ -655,6 +655,16 @@ const App = {
     if (u.role === 'runner' || u.role2 === 'runner') {
       document.querySelectorAll('.bn-btn:not(.bn-home)').forEach(b => b.style.display = 'none');
     }
+    // Кухар — замінюємо «Каса» на «Резерв» в нижній панелі
+    if ((u.role === 'cook' || u.role2 === 'cook') && !isAdmin(u)) {
+      const cashBtn = document.querySelector('.bn-btn[data-bnpage="cash"]');
+      if (cashBtn) {
+        cashBtn.setAttribute('data-bnpage', 'reserve');
+        cashBtn.querySelector('.bn-icon').textContent = '🗓️';
+        cashBtn.querySelector('span:last-child').textContent = 'Резерв';
+        cashBtn.onclick = () => { App.navigate('reserve'); App.closeBnDrawer(); };
+      }
+    }
   },
 
   renderSidebarNav() {
