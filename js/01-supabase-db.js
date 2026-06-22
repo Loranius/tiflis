@@ -12,6 +12,7 @@ const sb = {
     if (opts.filter)  Object.entries(opts.filter).forEach(([k,v]) => params.push(`${k}=eq.${encodeURIComponent(v)}`));
     if (opts.order)   params.push(`order=${opts.order}`);
     if (opts.limit)   params.push(`limit=${opts.limit}`);
+    if (opts._raw)    params.push(opts._raw); // довільні Supabase filter рядки
     if (params.length) url += '?' + params.join('&');
 
     const res = await fetch(url, {

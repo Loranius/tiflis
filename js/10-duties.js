@@ -200,6 +200,7 @@ const Duties = {
       sa.innerHTML = isAdmin(currentUser)
         ? `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
            <button class="btn btn-gold btn-sm" onclick="Duties.sendTg('handover','${storageKey}')">📨 Надіслати</button>
+           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('handover','${storageKey}')">📷 Фото</button>
            <button class="btn btn-ghost btn-sm" onclick="Duties.clear('handover','${storageKey}')">Очистити</button>`
         : '';
     } else {
@@ -212,6 +213,7 @@ const Duties = {
       sa.innerHTML = isAdmin(currentUser)
         ? `<span style="font-size:11px;color:var(--text-dim);margin-right:8px">📅 ${shiftHint}</span>
            <button class="btn btn-gold btn-sm" onclick="Duties.sendTg('daily','${storageKey}')">📨 Надіслати</button>
+           <button class="btn btn-ghost btn-sm" onclick="Duties.readPhoto('daily','${storageKey}')">📷 Фото</button>
            <button class="btn btn-ghost btn-sm" onclick="Duties.clear('daily','${storageKey}')">Очистити</button>`
         : '';
     }
@@ -226,7 +228,7 @@ const Duties = {
   },
 
   render(type, duties, storageKey, workingWaiters, scheduleDateKey) {
-    const saved = DB.get(storageKey, {});
+    const saved = Duties._normalizeSaved(DB.get(storageKey, {}));
     const schedDateKey = scheduleDateKey || Duties._selectedDateKey(type);
     const schedule = DB.get('schedule', {});
     const OFF_SHIFTS = new Set(['Х', 'О', 'С']);
@@ -239,35 +241,39 @@ const Duties = {
     const workingIds = new Set(waiters.map(w => w.id));
     const MAX_SLOTS = type === 'handover' ? 16 : 2;
 
-    // Будує рядок чіпів + кнопку +
+    // Будує блок призначення (великі чіпи + велика кнопка)
     const chipRow = (assignedIds, idx, dataType, dataKey, maxSlots, isHandover) => {
       const chips = assignedIds.map(uid => {
         const w = allWaiters.find(w => w.id === uid);
         if (!w) return '';
         const shift = schedule[`${w.id}_${schedDateKey}`] || '';
-        const nm = (w.displayName || w.login) + (shift ? ` · ${shift}` : '');
+        const nm = w.displayName || w.login;
         const isOff = !workingIds.has(uid);
-        const chipStyle = isOff
-          ? 'background:rgba(224,90,90,.18);border-color:rgba(224,90,90,.4);color:var(--danger)'
-          : 'background:var(--gold-dim);border-color:var(--gold-border);color:var(--gold)';
-        return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 10px;border-radius:20px;border:1px solid;font-size:11px;font-weight:600;${chipStyle}">
-          ${nm}
-          <button onclick="Duties.removeAssigned('${dataKey}','${idx}','${uid}')" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;color:inherit;opacity:.7;font-size:13px" title="Зняти">×</button>
-        </span>`;
-      }).filter(Boolean).join(' ');
+        const bg  = isOff ? 'rgba(224,90,90,.15)' : 'rgba(212,175,55,.12)';
+        const brd = isOff ? 'rgba(224,90,90,.4)'  : 'rgba(212,175,55,.35)';
+        const clr = isOff ? 'var(--danger)'        : 'var(--gold)';
+        return `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px 6px 12px;border-radius:22px;border:1px solid ${brd};background:${bg};max-width:100%;box-sizing:border-box;">
+          <span style="font-size:13px;font-weight:700;color:${clr};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(nm)}</span>
+          ${shift ? `<span style="font-size:10px;font-weight:600;color:${clr};opacity:.65;flex-shrink:0">[${shift}]</span>` : ''}
+          <button onclick="Duties.removeAssigned('${dataKey}','${idx}','${uid}')"
+            style="display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1px solid ${brd};background:${isOff ? 'rgba(224,90,90,.2)' : 'rgba(212,175,55,.15)'};cursor:pointer;color:${clr};font-size:14px;line-height:1;flex-shrink:0;padding:0"
+            title="Зняти">×</button>
+        </div>`;
+      }).filter(Boolean).join('');
 
       const canAdd = assignedIds.length < maxSlots;
       const addBtn = canAdd ? `<button
           onclick="Duties.openWaiterPicker(this,'${dataKey}','${idx}','${dataType}'${isHandover ? ",true" : ""})"
-          style="display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:20px;border:1px dashed rgba(212,175,55,.35);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:Montserrat,sans-serif">
-          ＋
+          style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:22px;border:1px dashed rgba(212,175,55,.4);background:rgba(212,175,55,.05);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;font-family:Montserrat,sans-serif;min-height:36px;transition:all .15s"
+          onmouseenter="this.style.borderColor='rgba(212,175,55,.7)';this.style.color='var(--gold)'"
+          onmouseleave="this.style.borderColor='rgba(212,175,55,.4)';this.style.color='var(--text-dim)'">
+          <span style="font-size:16px;line-height:1">＋</span><span>Призначити</span>
         </button>` : '';
 
-      const empty = !assignedIds.length
-        ? `<span style="color:var(--text-muted);font-size:11px">— не призначено —</span> `
-        : '';
-
-      return `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">${empty}${chips}${addBtn}</div>`;
+      if (!assignedIds.length) {
+        return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${addBtn}</div>`;
+      }
+      return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${chips}${addBtn}</div>`;
     };
 
     let html = '<tbody>';
@@ -278,8 +284,8 @@ const Duties = {
 
       if (canEdit) {
         html += `<tr>
-          <td style="padding:8px 10px;vertical-align:middle;font-size:12px">${duty}</td>
-          <td style="padding:6px 8px;vertical-align:middle" id="duty-cell-${Duties._dtSafe(type)}-${i}">
+          <td style="padding:10px 12px;vertical-align:top;font-size:13px;font-weight:600;color:var(--text);line-height:1.4;width:50%">${esc(duty)}</td>
+          <td style="padding:8px 12px;vertical-align:middle" id="duty-cell-${Duties._dtSafe(type)}-${i}">
             ${chipRow(assignedIds, i, type, storageKey, MAX_SLOTS, isHandover)}
           </td>
         </tr>`;
@@ -289,13 +295,15 @@ const Duties = {
           if (!w) return '';
           const isOff = !workingIds.has(w.id);
           const shift = schedule[`${w.id}_${schedDateKey}`] || '';
-          const nm = (w.displayName || w.login) + (shift ? ` · ${shift}` : '');
-          const st = isOff ? 'color:var(--danger);font-weight:700;opacity:.7' : 'color:var(--gold);font-weight:700';
-          return `<span style="${st}">${nm}</span>`;
+          const nm = w.displayName || w.login;
+          const bg  = isOff ? 'rgba(224,90,90,.12)' : 'rgba(212,175,55,.10)';
+          const brd = isOff ? 'rgba(224,90,90,.3)'  : 'rgba(212,175,55,.3)';
+          const clr = isOff ? 'var(--danger)'        : 'var(--gold)';
+          return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:16px;border:1px solid ${brd};background:${bg};font-size:13px;font-weight:700;color:${clr}">${esc(nm)}${shift ? ` <span style="font-size:10px;opacity:.65">[${shift}]</span>` : ''}</span>`;
         }).filter(Boolean);
         html += `<tr>
-          <td style="padding:8px 10px;vertical-align:middle;font-size:12px">${duty}</td>
-          <td style="padding:8px 10px;vertical-align:middle">${names.length ? names.join(' · ') : '<span style="color:var(--text-muted);font-size:11px">—</span>'}</td>
+          <td style="padding:10px 12px;vertical-align:top;font-size:13px;font-weight:600;color:var(--text);line-height:1.4;width:50%">${esc(duty)}</td>
+          <td style="padding:8px 12px;vertical-align:middle">${names.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${names.join('')}</div>` : '<span style="color:var(--text-muted);font-size:12px">— не призначено —</span>'}</td>
         </tr>`;
       }
     });
@@ -305,7 +313,7 @@ const Duties = {
   },
 
   renderZones(zonesKey, workingWaiters, scheduleDateKey) {
-    const saved = DB.get(zonesKey, {});
+    const saved = Duties._normalizeSaved(DB.get(zonesKey, {}));
     const schedule = DB.get('schedule', {});
     const OFF_SHIFTS = new Set(['Х', 'О', 'С']);
     const allWaiters = getUsers().filter(u => u.role === 'waiter' || u.role2 === 'waiter');
@@ -322,24 +330,31 @@ const Duties = {
         const w = allWaiters.find(w => w.id === uid);
         if (!w) return '';
         const shift = schedule[`${w.id}_${scheduleDateKey}`] || '';
-        const nm = (w.displayName || w.login) + (shift ? ` · ${shift}` : '');
+        const nm = w.displayName || w.login;
         const isOff = !workingIds.has(uid);
-        const chipStyle = isOff
-          ? 'background:rgba(224,90,90,.18);border-color:rgba(224,90,90,.4);color:var(--danger)'
-          : 'background:var(--gold-dim);border-color:var(--gold-border);color:var(--gold)';
-        return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 10px;border-radius:20px;border:1px solid;font-size:11px;font-weight:600;${chipStyle}">
-          ${nm}
-          <button onclick="Duties.removeAssigned('${zonesKey}','${idx}','${uid}')" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;color:inherit;opacity:.7;font-size:13px" title="Зняти">×</button>
-        </span>`;
-      }).filter(Boolean).join(' ');
+        const bg  = isOff ? 'rgba(224,90,90,.15)' : 'rgba(212,175,55,.12)';
+        const brd = isOff ? 'rgba(224,90,90,.4)'  : 'rgba(212,175,55,.35)';
+        const clr = isOff ? 'var(--danger)'        : 'var(--gold)';
+        return `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px 6px 12px;border-radius:22px;border:1px solid ${brd};background:${bg};max-width:100%;box-sizing:border-box;">
+          <span style="font-size:13px;font-weight:700;color:${clr};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(nm)}</span>
+          ${shift ? `<span style="font-size:10px;font-weight:600;color:${clr};opacity:.65;flex-shrink:0">[${shift}]</span>` : ''}
+          <button onclick="Duties.removeAssigned('${zonesKey}','${idx}','${uid}')"
+            style="display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1px solid ${brd};background:${isOff ? 'rgba(224,90,90,.2)' : 'rgba(212,175,55,.15)'};cursor:pointer;color:${clr};font-size:14px;line-height:1;flex-shrink:0;padding:0"
+            title="Зняти">×</button>
+        </div>`;
+      }).filter(Boolean).join('');
       const canAdd = assignedIds.length < MAX_SLOTS;
       const addBtn = canAdd ? `<button
           onclick="Duties.openWaiterPicker(this,'${zonesKey}','${idx}','daily-zones')"
-          style="display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:20px;border:1px dashed rgba(212,175,55,.35);background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:Montserrat,sans-serif">
-          ＋
+          style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:22px;border:1px dashed rgba(212,175,55,.4);background:rgba(212,175,55,.05);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;font-family:Montserrat,sans-serif;min-height:36px;transition:all .15s"
+          onmouseenter="this.style.borderColor='rgba(212,175,55,.7)';this.style.color='var(--gold)'"
+          onmouseleave="this.style.borderColor='rgba(212,175,55,.4)';this.style.color='var(--text-dim)'">
+          <span style="font-size:16px;line-height:1">＋</span><span>Призначити</span>
         </button>` : '';
-      const empty = !assignedIds.length ? `<span style="color:var(--text-muted);font-size:11px">— </span> ` : '';
-      return `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">${empty}${chips}${addBtn}</div>`;
+      if (!assignedIds.length) {
+        return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${addBtn}</div>`;
+      }
+      return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${chips}${addBtn}</div>`;
     };
 
     let html = '<tbody>';
@@ -348,8 +363,8 @@ const Duties = {
       const assignedIds = Array.isArray(rawSaved) ? rawSaved.filter(Boolean) : (rawSaved ? [rawSaved] : []);
       if (canEdit) {
         html += `<tr>
-          <td style="padding:8px 10px;vertical-align:middle;font-size:12px">${zone}</td>
-          <td style="padding:6px 8px;vertical-align:middle">${chipRow(assignedIds, i)}</td>
+          <td style="padding:10px 12px;vertical-align:top;font-size:13px;font-weight:600;color:var(--text);line-height:1.4;width:40%">${esc(zone)}</td>
+          <td style="padding:8px 12px;vertical-align:middle">${chipRow(assignedIds, i)}</td>
         </tr>`;
       } else {
         const names = assignedIds.map(uid => {
@@ -357,13 +372,15 @@ const Duties = {
           if (!w) return '';
           const isOff = !workingIds.has(w.id);
           const shift = schedule[`${w.id}_${scheduleDateKey}`] || '';
-          const nm = (w.displayName || w.login) + (shift ? ` · ${shift}` : '');
-          const st = isOff ? 'color:var(--danger);font-weight:700;opacity:.7' : 'color:var(--gold);font-weight:700';
-          return `<span style="${st}">${nm}</span>`;
+          const nm = w.displayName || w.login;
+          const bg  = isOff ? 'rgba(224,90,90,.12)' : 'rgba(212,175,55,.10)';
+          const brd = isOff ? 'rgba(224,90,90,.3)'  : 'rgba(212,175,55,.3)';
+          const clr = isOff ? 'var(--danger)'        : 'var(--gold)';
+          return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:16px;border:1px solid ${brd};background:${bg};font-size:13px;font-weight:700;color:${clr}">${esc(nm)}${shift ? ` <span style="font-size:10px;opacity:.65">[${shift}]</span>` : ''}</span>`;
         }).filter(Boolean);
         html += `<tr>
-          <td style="padding:8px 10px;vertical-align:middle;font-size:12px">${zone}</td>
-          <td style="padding:8px 10px;vertical-align:middle">${names.length ? names.join(' · ') : '<span style="color:var(--text-muted);font-size:11px">—</span>'}</td>
+          <td style="padding:10px 12px;vertical-align:top;font-size:13px;font-weight:600;color:var(--text);line-height:1.4;width:40%">${esc(zone)}</td>
+          <td style="padding:8px 12px;vertical-align:middle">${names.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${names.join('')}</div>` : '<span style="color:var(--text-muted);font-size:12px">— не призначено —</span>'}</td>
         </tr>`;
       }
     });
@@ -376,14 +393,244 @@ const Duties = {
   _dtSafe: t => t.replace(/[^a-z0-9]/gi, '_'),
 
   // ── Видалити конкретного офіціанта з обов'язку/зони ──────────────
+
+  // ── Читання фото чек-листа через Claude Vision API ────────────────────
+  readPhoto(type, storageKey) {
+    // Прихований <input type=file> — показуємо вибір файлу
+    let inp = document.getElementById('duties-photo-input');
+    if (!inp) {
+      inp = document.createElement('input');
+      inp.type = 'file';
+      inp.id = 'duties-photo-input';
+      inp.accept = 'image/*';
+      inp.capture = 'environment';
+      inp.style.display = 'none';
+      document.body.appendChild(inp);
+    }
+    // Скидаємо щоразу щоб onchange спрацював навіть на те саме фото
+    inp.value = '';
+    inp.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) Duties._processPhoto(file, type, storageKey);
+    };
+    inp.click();
+  },
+
+  async _processPhoto(file, type, storageKey) {
+    // Показуємо оверлей-лоадер
+    Duties._showPhotoOverlay(`
+      <div style="text-align:center;padding:40px 20px">
+        <div style="font-size:40px;margin-bottom:16px">🔍</div>
+        <div style="font-size:15px;font-weight:700;color:var(--gold);margin-bottom:8px">Читаю рукопис...</div>
+        <div style="font-size:12px;color:var(--text-dim)">Claude аналізує фото чек-листа</div>
+        <div style="margin-top:20px;width:40px;height:40px;border:3px solid var(--gold-border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-left:auto;margin-right:auto"></div>
+      </div>
+    `);
+
+    try {
+      // Конвертуємо файл в base64
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const mediaType = file.type || 'image/jpeg';
+
+      // Список обов'язків для поточного типу
+      const DUTIES_LIST = type === 'daily' ? DAILY_DUTIES : HANDOVER_DUTIES;
+
+      // Список реальних офіціантів з БД
+      const allWaiters = getUsers().filter(u => u.role === 'waiter' || u.role2 === 'waiter');
+      const waiterNames = allWaiters.map(w => w.displayName || w.login).join(', ');
+
+      const prompt = `Ти — асистент ресторану «Тифліс». На фото — рукописний чек-лист розподілу щоденних обов'язків офіціантів.
+
+Список офіціантів які зараз працюють: ${waiterNames}
+
+Список обов'язків (пронумеровані від 0):
+${DUTIES_LIST.map((d, i) => `${i}. ${d}`).join('\n')}
+
+Твоє завдання:
+1. Розпізнай рукописний текст на фото
+2. Для кожного обов'язку визнач ім'я офіціанта якому він призначений (якщо є)
+3. Зіставляй скорочені/рукописні імена з реальними зі списку офіціантів (наприклад "Ліза"="Ліза Тупік", "Андрій"="Андрій Швець", "Іра"="Іра Медуза" і т.д.)
+4. Якщо обов'язок не призначений — пропусти його
+
+Відповідай ТІЛЬКИ валідним JSON без пояснень, у форматі:
+{"assignments": [{"dutyIndex": 0, "waiterName": "Ліза"}, ...]}
+
+Де dutyIndex — індекс обов'язку зі списку вище (0-based), waiterName — точне ім'я з мого списку офіціантів.`;
+
+      // Виклик Claude API напряму (ключ інжектується проксі claude.ai)
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+              { type: 'text', text: prompt }
+            ]
+          }]
+        })
+      });
+
+      if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+      const data = await resp.json();
+      const rawText = (data.content || []).map(b => b.text || '').join('').trim();
+
+      // Парсимо JSON відповідь
+      let parsed;
+      try {
+        const clean = rawText.replace(/```json|```/g, '').trim();
+        parsed = JSON.parse(clean);
+      } catch(e) {
+        throw new Error('Не вдалось розпарсити відповідь Claude: ' + rawText.slice(0, 200));
+      }
+
+      const assignments = parsed.assignments || [];
+      if (!assignments.length) {
+        Duties._showPhotoOverlay(`
+          <div style="text-align:center;padding:40px 20px">
+            <div style="font-size:40px;margin-bottom:12px">🤷</div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">Призначень не знайдено</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:8px">Спробуй фото з кращим освітленням</div>
+            <button class="btn btn-ghost btn-sm" style="margin-top:20px" onclick="Duties._closePhotoOverlay()">Закрити</button>
+          </div>
+        `);
+        return;
+      }
+
+      // Матчимо імена з реальними офіціантами
+      const matched = assignments.map(a => {
+        const waiter = allWaiters.find(w => {
+          const dn = (w.displayName || w.login).toLowerCase();
+          const an = (a.waiterName || '').toLowerCase();
+          return dn.includes(an) || an.includes(dn) || dn.split(' ')[0] === an.split(' ')[0];
+        });
+        return { ...a, waiter, duty: DUTIES_LIST[a.dutyIndex] };
+      }).filter(a => a.waiter && a.duty !== undefined);
+
+      if (!matched.length) {
+        Duties._showPhotoOverlay(`
+          <div style="text-align:center;padding:40px 20px">
+            <div style="font-size:40px;margin-bottom:12px">😕</div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">Імена не розпізнано</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:8px">Claude розпізнав: ${assignments.map(a=>a.waiterName).join(', ')}</div>
+            <button class="btn btn-ghost btn-sm" style="margin-top:20px" onclick="Duties._closePhotoOverlay()">Закрити</button>
+          </div>
+        `);
+        return;
+      }
+
+      // Показуємо превью для підтвердження
+      const previewRows = matched.map((a, i) => `
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+          <input type="checkbox" id="photo-check-${i}" checked
+            style="margin-top:3px;accent-color:var(--gold);width:16px;height:16px;flex-shrink:0">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:12px;color:var(--text-dim);line-height:1.3">${esc(a.duty)}</div>
+            <div style="font-size:13px;font-weight:700;color:var(--gold);margin-top:3px">→ ${esc(a.waiter.displayName || a.waiter.login)}</div>
+          </div>
+        </div>
+      `).join('');
+
+      Duties._showPhotoOverlay(`
+        <div style="padding:20px">
+          <div style="font-size:15px;font-weight:700;color:var(--gold);margin-bottom:4px">📋 Розпізнано ${matched.length} призначень</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:14px">Зніміть галочки з тих що не потрібні</div>
+          <div style="max-height:55vh;overflow-y:auto;margin-bottom:16px">${previewRows}</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-gold" style="flex:1" onclick="Duties._applyPhotoAssignments(${JSON.stringify(matched).replace(/</g,'\u003c')}, '${type}', '${storageKey}')">
+              ✅ Застосувати
+            </button>
+            <button class="btn btn-ghost" onclick="Duties._closePhotoOverlay()">Скасувати</button>
+          </div>
+        </div>
+      `, matched);
+
+    } catch(err) {
+      console.error('readPhoto error:', err);
+      Duties._showPhotoOverlay(`
+        <div style="text-align:center;padding:40px 20px">
+          <div style="font-size:40px;margin-bottom:12px">❌</div>
+          <div style="font-size:14px;font-weight:700;color:var(--danger)">Помилка читання</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:8px;word-break:break-word">${esc(err.message)}</div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:20px" onclick="Duties._closePhotoOverlay()">Закрити</button>
+        </div>
+      `);
+    }
+  },
+
+  _applyPhotoAssignments(matched, type, storageKey) {
+    // Читаємо які чекбокси відмічені
+    const saved = Duties._normalizeSaved(DB.get(storageKey, {}));
+    matched.forEach((a, i) => {
+      const cb = document.getElementById(`photo-check-${i}`);
+      if (!cb || !cb.checked) return;
+      const idxKey = String(a.dutyIndex);
+      const existing = Array.isArray(saved[idxKey]) ? saved[idxKey] : (saved[idxKey] ? [saved[idxKey]] : []);
+      if (!existing.includes(a.waiter.id)) {
+        saved[idxKey] = [...existing, a.waiter.id];
+      }
+    });
+    DB.set(storageKey, saved);
+    Duties._persistKey(storageKey, saved);
+    Duties._closePhotoOverlay();
+    // Перерендеримо таблицю
+    Duties.initFromCal(type);
+    const appliedCount = matched.filter((_, i) => {
+      const cb = document.getElementById(`photo-check-${i}`);
+      return cb && cb.checked;
+    }).length;
+    toast(`✅ Застосовано ${appliedCount} призначень`, 'success-t');
+  },
+
+  _showPhotoOverlay(html) {
+    let ov = document.getElementById('duties-photo-overlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'duties-photo-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.75);display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+      ov.addEventListener('click', e => { if (e.target === ov) Duties._closePhotoOverlay(); });
+      document.body.appendChild(ov);
+    }
+    ov.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--gold-border);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:90vh;overflow-y:auto">
+        ${html}
+      </div>`;
+    ov.style.display = 'flex';
+  },
+
+  _closePhotoOverlay() {
+    const ov = document.getElementById('duties-photo-overlay');
+    if (ov) ov.style.display = 'none';
+  },
+
+  // Нормалізує saved: всі ключі → рядки, видаляє числові дублікати
+  _normalizeSaved(saved) {
+    const norm = {};
+    Object.keys(saved).forEach(k => {
+      const sk = String(parseInt(k, 10));
+      // Якщо є числовий і рядковий — мержимо (union)
+      const existing = Array.isArray(norm[sk]) ? norm[sk] : (norm[sk] ? [norm[sk]] : []);
+      const incoming = Array.isArray(saved[k])  ? saved[k]  : (saved[k]  ? [saved[k]]  : []);
+      const merged = [...new Set([...existing, ...incoming].filter(Boolean))];
+      norm[sk] = merged.length === 1 ? merged : merged;
+    });
+    return norm;
+  },
+
   removeAssigned(key, idx, uid) {
-    const saved = DB.get(key, {});
+    const rawSaved = DB.get(key, {});
+    const saved = Duties._normalizeSaved(rawSaved); // нормалізуємо всі ключі
     const idxKey = String(idx);
-    const raw = saved[idxKey] !== undefined ? saved[idxKey] : saved[Number(idx)];
-    const arr = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : []);
+    const arr = Array.isArray(saved[idxKey]) ? saved[idxKey].filter(Boolean) : (saved[idxKey] ? [saved[idxKey]] : []);
     saved[idxKey] = arr.filter(id => id !== uid);
-    // Прибираємо числовий дублікат якщо є
-    if (saved[Number(idx)] !== undefined) delete saved[Number(idx)];
     DB.set(key, saved);
     // Визначаємо тип і перерендеримо одразу з локального DB
     if (key.startsWith('duties_daily_zones_')) {

@@ -209,7 +209,7 @@ const Admin = {
           <div style="font-size:10px;color:var(--text-dim)">${getRoleLabel(u.role)}</div>
         </div>
         <input type="text" id="tg-manual-${u.id}" class="field"
-          style="width:130px;padding:5px 8px;font-size:11px;${hasTg?'border-color:rgba(80,200,120,.4)':''}"
+          style="width:110px;padding:5px 8px;font-size:11px;${hasTg?'border-color:rgba(80,200,120,.4)':''}"
           placeholder="Telegram ID"
           value="${tgVal}">
         <button class="btn btn-sm ${hasTg?'btn-outline':'btn-gold'}"
@@ -217,6 +217,12 @@ const Admin = {
           onclick="Admin.saveTgManual('${u.id}')">
           ${hasTg?'✏️':'Зберегти'}
         </button>
+        <label title="Може надсилати сповіщення" style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-dim);cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="can-notify-${u.id}" ${raw?.can_notify?'checked':''}
+            onchange="Admin.saveCanNotify('${u.id}',this.checked)"
+            style="accent-color:var(--gold);width:14px;height:14px">
+          🔔
+        </label>
       </div>`;
     }).join('');
   },
@@ -249,6 +255,16 @@ const Admin = {
         `linear-gradient(135deg,rgba(14,36,32,.95) 0%,rgba(22,56,50,.92) 100%), url('${url}')`;
     }
     toast('Фон збережено', 'success-t');
+  },
+
+  async saveCanNotify(userId, value) {
+    try {
+      await sb.update('users', { can_notify: value }, { id: userId });
+      const users = DB.get('users', []);
+      const i = users.findIndex(u => u.id === userId);
+      if (i >= 0) { users[i].can_notify = value; DB.set('users', users); }
+      toast(value ? '🔔 Права на сповіщення надано' : '🔕 Права на сповіщення знято', 'success-t');
+    } catch(e) { toast('Помилка збереження', 'error'); console.error(e); }
   },
 
   async addUser() {

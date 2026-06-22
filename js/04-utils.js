@@ -66,12 +66,11 @@ function avatarHTML(user, size=48, fontSize=18) {
 }
 // Адмін = сисадмін (за ID) або роль admin
 const isAdmin = (u) => u && (isSysadmin(u) || u._isSysadmin || u.role==='admin');
-// Може надсилати сповіщення: адміни, сисадмін, або офіціант Оксана
+// Може надсилати сповіщення: адміни, сисадмін, або користувач з can_notify=true
+// (поле can_notify у таблиці users — встановлює адмін через профіль персоналу)
 const canSendNotify = (u) => {
   if (!u) return false;
   if (isAdmin(u)) return true;
-  // Офіціант Оксана — перевіряємо login і displayName (регістронезалежно)
-  const name = (u.displayName || u.login || '').trim().toLowerCase();
-  return name === 'оксана';
+  return !!u.can_notify;
 };
 

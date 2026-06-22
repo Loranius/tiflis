@@ -1,6 +1,5 @@
 const Notify = {
   init() {
-    Theme.render();
     Notify.render();
     Notify.checkTgBanner();
     Notify.renderBotSettings();

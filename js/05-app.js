@@ -1,3 +1,11 @@
+// SHA-256 хешування пароля у браузері (Web Crypto API)
+// Використовується для збереження та перевірки — plain-text у БД/localStorage не зберігається
+async function hashPassword(password) {
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(password));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
 // ╔═══════════════════════════════════════════════════════════════╗
 // ║  [6/13]  APP + СЕСІЯ (навігація, логін, ініціалізація)        ║
 // ╚═══════════════════════════════════════════════════════════════╝
@@ -14,12 +22,14 @@ const App = {
 
     try {
       const users = await sb.query('users', { filter: { login } });
-      const user = users.find(u => u.password === pass);
+      const passHash = await hashPassword(pass);
+      // Підтримка обох форматів: новий (SHA-256 хеш) і legacy (plain-text)
+      const user = users.find(u => u.password === passHash || u.password === pass);
       if (!user) { errEl.textContent='Невірний логін або пароль'; errEl.classList.remove('hidden'); btnUnlock(btn); return; }
       if (user.fired) { errEl.textContent='Акаунт заблоковано'; errEl.classList.remove('hidden'); btnUnlock(btn); return; }
 
-      // Зберегти сесію
-      localStorage.setItem('tiflis_session', JSON.stringify({ login, password: pass }));
+      // Зберегти сесію (тільки хеш, без plain-text пароля)
+      localStorage.setItem('tiflis_session', JSON.stringify({ login, passHash }));
 
       await App.loadCache();
       currentUser = { ...user, displayName: user.display_name, tg: user.tg_username || user.tg || '' };
@@ -27,7 +37,8 @@ const App = {
       $('login-screen').remove();
       $('app').classList.remove('hidden');
       App.initUI();
-      App.navigate('home');
+      const _loginLastPage = localStorage.getItem('tiflis_last_page') || 'home';
+      App.navigate(_loginLastPage);
       App.startPolling();
       setTimeout(() => logEvent('auth', 'Вхід в систему'), 500);
     } catch(e) {
@@ -42,16 +53,24 @@ const App = {
     try {
       const saved = localStorage.getItem('tiflis_session');
       if (!saved) return false;
-      const { login, password } = JSON.parse(saved);
+      const { login, passHash, password: legacyPass } = JSON.parse(saved);
       const users = await sb.query('users', { filter: { login } });
-      const user = users.find(u => u.password === password);
+      // Підтримка legacy-сесій де ще зберігся plain-text пароль
+      const user = users.find(u => u.password === (passHash || legacyPass));
       if (!user || user.fired) { localStorage.removeItem('tiflis_session'); return false; }
+      // Якщо сесія legacy — оновити до хешованої
+      if (!passHash && legacyPass) {
+        hashPassword(legacyPass).then(h => {
+          localStorage.setItem('tiflis_session', JSON.stringify({ login, passHash: h }));
+        }).catch(()=>{});
+      }
       await App.loadCache();
       currentUser = { ...user, displayName: user.display_name, tg: user.tg_username || user.tg || '' };
       $('login-screen').remove();
       $('app').classList.remove('hidden');
       App.initUI();
-      App.navigate('home');
+      const _restoreLastPage = localStorage.getItem('tiflis_last_page') || 'home';
+      App.navigate(_restoreLastPage);
       App.startPolling();
       return true;
     } catch(e) { return false; }
@@ -89,7 +108,8 @@ const App = {
       if (existing.length) { errEl.textContent='Це ім\'я вже зайняте'; errEl.classList.remove('hidden'); btn.textContent='Подати заявку'; btn.disabled=false; return; }
       const existingReq = await sb.query('registration_requests', { filter: { login } });
       if (existingReq.length) { errEl.textContent='Заявка з таким іменем вже існує'; errEl.classList.remove('hidden'); btn.textContent='Подати заявку'; btn.disabled=false; return; }
-      await sb.insert('registration_requests', { login, password: pass, role, status: 'pending', created_at: new Date().toISOString() });
+      const regHash = await hashPassword(pass);
+      await sb.insert('registration_requests', { login, password: regHash, role, status: 'pending', created_at: new Date().toISOString() });
       okEl.textContent = '✅ Заявку подано! Очікуйте підтвердження від адміністратора.';
       okEl.classList.remove('hidden');
       $('reg-login').value=''; $('reg-pass').value=''; $('reg-pass2').value='';
@@ -122,7 +142,13 @@ const App = {
     ] = await Promise.all([
       sb.query('users',            { order: 'created_at' }),
       sb.query('roles',            { order: 'key' }),
-      sb.query('schedule'),
+      // Завантажуємо schedule лише за ±2 місяці (зменшує payload при великій БД)
+      sb.query('schedule', { _raw: (() => {
+        const _n=new Date();
+        const _f=new Date(_n.getFullYear(),_n.getMonth()-1,1).toISOString().slice(0,10);
+        const _t=new Date(_n.getFullYear(),_n.getMonth()+3,0).toISOString().slice(0,10);
+        return `date=gte.${_f}&date=lte.${_t}`;
+      })() }),
       sb.query('ratings'),
       sb.query('rating_comments',  { order: 'created_at' }),
       sb.query('notifications',    { order: 'created_at.desc' }),
@@ -144,22 +170,10 @@ const App = {
     DB.set('schedule', scheduleMap);
 
     // ── Рейтинги ───────────────────────────────────────────────────
-    const ratingsMap = {};
-    ratings.forEach(r => { ratingsMap[r.user_id] = { score: r.score, comments: [] }; });
-    ratingComments.forEach(c => {
-      if (ratingsMap[c.user_id]) ratingsMap[c.user_id].comments.push({
-        date: new Date(c.created_at).toLocaleDateString('uk'),
-        by: c.author, delta: c.delta, text: c.comment
-      });
-    });
-    DB.set('ratings', ratingsMap);
+    DB.set('ratings', App._buildRatingsMap(ratings, ratingComments));
 
     // ── Сповіщення (фільтруємо протерміновані одразу при завантаженні) ──
-    const _notifCutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
-    const _freshNotifs = notifications.filter(n => {
-      const exp = n.expires_at ? new Date(n.expires_at).getTime() : (new Date(n.created_at).getTime() + 3*24*60*60*1000);
-      return exp > Date.now();
-    });
+    const _freshNotifs = notifications.filter(n => App._isNotifFresh(n));
     DB.set('notifications', _freshNotifs);
     // Тихо видаляємо протерміновані з Supabase
     notifications.filter(n => !_freshNotifs.includes(n)).forEach(n => {
@@ -238,6 +252,30 @@ const App = {
   // ╔═══════════════════════════════════════════════════════════════╗
   // ║  REALTIME POLLING — синхронізація між вкладками/пристроями    ║
   // ╚═══════════════════════════════════════════════════════════════╝
+
+  // ── Спільні хелпери для роботи з нотифікаціями і рейтингами ──
+  // Чи не протермінована нотифікація (єдине місце визначення логіки)
+  _isNotifFresh(n) {
+    const exp = n.expires_at
+      ? new Date(n.expires_at).getTime()
+      : new Date(n.created_at).getTime() + 3 * 24 * 60 * 60 * 1000;
+    return exp > Date.now();
+  },
+
+  // Будує ratingsMap з масивів ratings + comments (єдине місце логіки)
+  _buildRatingsMap(ratings, comments) {
+    const map = {};
+    ratings.forEach(r => { map[r.user_id] = { score: r.score, comments: [] }; });
+    comments.forEach(c => {
+      if (map[c.user_id]) map[c.user_id].comments.push({
+        date: new Date(c.created_at).toLocaleDateString('uk'),
+        by: c.author, delta: c.delta, text: c.comment,
+        ts: new Date(c.created_at).getTime(),
+      });
+    });
+    return map;
+  },
+
   _pollInterval: null,
   _lastPollTs: {},      // { tableName: timestamp }
   _SETTINGS_TTL: 60000, // settings (меню) — не частіше 1 разу на хвилину
@@ -312,6 +350,7 @@ const App = {
       if (active === 'page-cash')   alwaysPolls.push(App._pollCash().catch(_noop));
       if (active === 'page-handover' || active === 'page-daily')
                                     alwaysPolls.push(App._pollDuties().catch(_noop));
+      if (active === 'page-reserve') alwaysPolls.push(App._pollReserve().catch(_noop));
 
       await Promise.all(alwaysPolls);
       sb._setOffline(false);
@@ -326,8 +365,11 @@ const App = {
   },
 
   async _pollSchedule() {
-    // Завантажуємо весь графік заново (таблиця невелика)
-    const rows = await sb.query('schedule');
+    // Завантажуємо графік за ±2 місяці (той самий діапазон що й при логіні)
+    const _n=new Date();
+    const _f=new Date(_n.getFullYear(),_n.getMonth()-1,1).toISOString().slice(0,10);
+    const _t=new Date(_n.getFullYear(),_n.getMonth()+3,0).toISOString().slice(0,10);
+    const rows = await sb.query('schedule', { _raw: `date=gte.${_f}&date=lte.${_t}` });
     const scheduleMap = {};
     rows.forEach(s => { scheduleMap[`${s.user_id}_${s.date}`] = s.shift; });
     const old = JSON.stringify(DB.get('schedule', {}));
@@ -414,12 +456,8 @@ const App = {
 
   async _pollNotifications() {
     const allNotifications = await sb.query('notifications', { order: 'created_at.desc' });
-    // Фільтруємо протерміновані (старші 3 днів)
-    const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
-    const notifications = allNotifications.filter(n => {
-      if (n.expires_at) return new Date(n.expires_at).getTime() > Date.now();
-      return new Date(n.created_at).getTime() > cutoff;
-    });
+    // Фільтруємо протерміновані через загальний хелпер
+    const notifications = allNotifications.filter(n => App._isNotifFresh(n));
     // Автовидалення протермінованих з Supabase (тихо, в фоні)
     allNotifications.filter(n => !notifications.includes(n)).forEach(n => {
       sb.delete('notifications', { id: n.id }).catch(() => {});
@@ -467,20 +505,28 @@ const App = {
     }
   },
 
+
+  async _pollReserve() {
+    // Підтягуємо тільки ключ бронювань — без завантаження всіх settings
+    const rows = await sb.query('settings', { filter: { key: LS_KEYS.RESERVE_BOOKINGS } });
+    if (!rows.length) return;
+    const fresh = rows[0];
+    const result = App._applyOneSetting(fresh);
+    if (result.menuChanged || fresh.key === LS_KEYS.RESERVE_BOOKINGS) {
+      if ($('page-reserve')?.classList.contains('active')) {
+        Reserve.renderContent();
+        Reserve.renderTablesList();
+        Reserve.renderStrip();
+      }
+    }
+  },
+
   async _pollRatings() {
     const [ratings, ratingComments] = await Promise.all([
       sb.query('ratings'),
       sb.query('rating_comments', { order: 'created_at' }),
     ]);
-    const ratingsMap = {};
-    ratings.forEach(r => { ratingsMap[r.user_id] = { score: r.score, comments: [] }; });
-    ratingComments.forEach(c => {
-      if (ratingsMap[c.user_id]) ratingsMap[c.user_id].comments.push({
-        date: new Date(c.created_at).toLocaleDateString('uk'),
-        by: c.author, delta: c.delta, text: c.comment,
-        ts: new Date(c.created_at).getTime(),
-      });
-    });
+    const ratingsMap = App._buildRatingsMap(ratings, ratingComments);
     const old = JSON.stringify(DB.get('ratings', {}));
     const fresh = JSON.stringify(ratingsMap);
     if (old !== fresh) {
@@ -702,8 +748,11 @@ const App = {
     // Якщо офіціант покидає графік з незбереженими змінами — попереджаємо
     if (page !== 'schedule' && !isAdmin(currentUser) &&
         Object.keys(Schedule._pendingChanges).length > 0) {
-      if (!confirm('У вас є незбережені зміни в графіку. Покинути без збереження?')) return;
-      Schedule._pendingChanges = {};
+      showConfirm('У вас є незбережені зміни в графіку. Покинути без збереження?', () => {
+        Schedule._pendingChanges = {};
+        App.navigate(page);
+      }, { okLabel: '⚠️ Покинути', okClass: 'btn-danger', cancelLabel: 'Залишитись' });
+      return; // showConfirm асинхронний — навігація відбудеться в callback
     }
 
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -754,7 +803,7 @@ const App = {
     if (page==='journal')     EventLog.init();
 
     // Lazy poll: одразу підтягуємо свіжі дані для сторінок що не в постійному циклі
-    const lazyPages = { schedule: '_pollSchedule', rating: '_pollRatings', cash: '_pollCash', handover: '_pollDuties', daily: '_pollDuties' };
+    const lazyPages = { schedule: '_pollSchedule', rating: '_pollRatings', cash: '_pollCash', handover: '_pollDuties', daily: '_pollDuties', reserve: '_pollReserve' };
     if (lazyPages[page]) App[lazyPages[page]]().catch(() => {});
   },
   toggleSidebar() {

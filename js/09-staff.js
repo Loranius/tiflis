@@ -135,24 +135,33 @@ const Staff = {
         const hasIg = rawU?.ig;
         const hasTgUser = rawU?.tg;
         html += `<div class="staff-card" data-role="${user.role||''}" onclick="Staff.showProfile('${user.id}')">
-          <!-- Права колонка: бейдж ролі + соцмережі під ним -->
-          <div class="staff-card-badge" style="display:flex;flex-direction:column;align-items:flex-end;gap:5px" onclick="event.stopPropagation()">
-            <div style="display:flex;align-items:center;gap:4px">
-              ${currentUser.id===user.id?'<span style="font-size:10px;font-weight:800;background:rgba(212,175,55,.2);border:1px solid rgba(212,175,55,.3);color:var(--gold);padding:1px 6px;border-radius:6px">Я</span>':''}
-              <span class="badge badge-gold" style="font-size:10px">${getRoleLabel(user.role)}</span>
+          <!-- Верхній рядок: аватар + ім'я + бейдж ролі -->
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <div class="staff-card-avatar" style="flex-shrink:0">${avatarContent}</div>
+            <div style="flex:1;min-width:0;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
+                <div class="staff-card-name" style="min-width:0">${esc(user.displayName||user.login)}</div>
+                ${currentUser.id===user.id?'<span style="font-size:9px;font-weight:800;background:rgba(212,175,55,.2);border:1px solid rgba(212,175,55,.3);color:var(--gold);padding:1px 5px;border-radius:5px;flex-shrink:0">Я</span>':''}
+              </div>
+              ${user.nick?`<div style="font-size:11px;color:var(--gold);font-style:italic;line-height:1.3">✨ ${esc(user.nick)}</div>`:''}
+              ${dateStr?`<div class="staff-card-date">⏳ ${dateStr}</div>`:''}
             </div>
-            ${hasIg?`<a href="https://instagram.com/${hasIg}" target="_blank" onclick="event.stopPropagation()" style="font-size:10px;color:#f472b6;display:flex;align-items:center;gap:3px;text-decoration:none;background:rgba(244,114,182,.08);border:1px solid rgba(244,114,182,.2);padding:2px 8px;border-radius:8px;white-space:nowrap">📸 @${hasIg}</a>`:''}
-            ${hasTgUser?`<a href="https://t.me/${hasTgUser}" target="_blank" onclick="event.stopPropagation()" style="font-size:10px;color:#7ec8e3;display:flex;align-items:center;gap:3px;text-decoration:none;background:rgba(126,200,227,.08);border:1px solid rgba(126,200,227,.2);padding:2px 8px;border-radius:8px;white-space:nowrap">✈️ @${hasTgUser}</a>`:''}
-          </div>
-          <!-- Ліва: аватар + ім'я -->
-          <div class="staff-card-top" style="margin-bottom:0">
-            <div class="staff-card-avatar">${avatarContent}</div>
-            <div style="flex:1;min-width:0;padding-right:${(hasIg||hasTgUser)?(currentUser.id===user.id?'100':'90'):(currentUser.id===user.id?'60':'75')}px">
-              <div class="staff-card-name">${user.displayName||user.login}</div>
-              ${user.nick?`<div style="font-size:11px;color:var(--gold);font-style:italic;margin-top:1px">✨ ${user.nick}</div>`:''}
-              ${dateStr ? `<div class="staff-card-date">⏳ ${dateStr}</div>` : ''}
+            <!-- Бейдж ролі — праворуч, flex-shrink:0 -->
+            <div style="flex-shrink:0" onclick="event.stopPropagation()">
+              <span class="badge badge-gold" style="font-size:10px;white-space:nowrap">${getRoleLabel(user.role)}</span>
             </div>
           </div>
+          <!-- Соцмережі — окремий рядок знизу, завжди вміщаються -->
+          ${(hasIg||hasTgUser)?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)" onclick="event.stopPropagation()">
+            ${hasTgUser?`<a href="https://t.me/${hasTgUser}" target="_blank" onclick="event.stopPropagation()"
+              style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#7ec8e3;text-decoration:none;background:rgba(126,200,227,.08);border:1px solid rgba(126,200,227,.2);padding:4px 10px;border-radius:10px;overflow:hidden;max-width:100%;box-sizing:border-box">
+              <span style="flex-shrink:0">✈️</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@${esc(hasTgUser)}</span>
+            </a>`:''}
+            ${hasIg?`<a href="https://instagram.com/${hasIg}" target="_blank" onclick="event.stopPropagation()"
+              style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#f472b6;text-decoration:none;background:rgba(244,114,182,.08);border:1px solid rgba(244,114,182,.2);padding:4px 10px;border-radius:10px;overflow:hidden;max-width:100%;box-sizing:border-box">
+              <span style="flex-shrink:0">📸</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@${esc(hasIg)}</span>
+            </a>`:''}
+          </div>`:''}
         </div>`;
       });
       html += `</div>`;

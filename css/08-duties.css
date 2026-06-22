@@ -3,18 +3,18 @@
    ╚══════════════════════════════════════════╝ */
 .duties-table { width: 100%; border-collapse: collapse; }
 .duties-table th {
-  background: rgba(0,0,0,.3); padding: 10px 16px; font-size: 10px;
+  background: rgba(0,0,0,.3); padding: 10px 14px; font-size: 10px;
   font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
   color: var(--text-dim); text-align: left; border-bottom: 2px solid var(--gold-border);
 }
 .duties-table td {
-  padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.05);
-  vertical-align: middle; font-size: 12px;
+  padding: 12px 12px; border-bottom: 1px solid rgba(255,255,255,.06);
+  vertical-align: middle; font-size: 13px;
 }
 .duties-table tr:last-child td { border-bottom: none; }
-.duties-table tr:hover td { background: rgba(255,255,255,.03); }
-.duties-table td:first-child { color: var(--text); font-weight: 500; }
-.duties-table td:last-child { min-width: 180px; }
+.duties-table tr:hover td { background: rgba(255,255,255,.025); }
+.duties-table td:first-child { color: var(--text); font-weight: 600; line-height: 1.45; }
+.duties-table td:last-child { min-width: 160px; }
 
 .duty-select {
   width: 100%; background: rgba(0,0,0,.25); border: 1px solid var(--gold-border);

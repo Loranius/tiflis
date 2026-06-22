@@ -304,32 +304,32 @@ const Reserve = {
 
     'Літня тераса': {
       note: 'Столики 5.13–5.16 круглі, без накриття. Великі: 6 ос., малі: 4 ос.',
-      fixedScale: 1, // столи такого ж розміру, як в Загальному залі
+      cellH: 0.88,
       tables: [
-        // Верхній ряд (зліва праворуч), з розривом для бару після 5.3
-        {n:'5.1',  x:0,   y:0, type:'big'},
-        {n:'5.2',  x:1,   y:0, type:'small'},
-        {n:'5.3',  x:2,   y:0, type:'big'},
-        // [Бар — проміжок]
-        {n:'5.4',  x:3.4, y:0, type:'big'},
-        {n:'5.5',  x:4.4, y:0, type:'small'},
-        {n:'5.6',  x:5.4, y:0, type:'big'},
-        {n:'5.7',  x:6.4, y:0, type:'small'},
-        {n:'5.8',  x:7.4, y:0, type:'big'},
-        {n:'5.9',  x:8.4, y:0, type:'small'},
-        {n:'5.10', x:9.4, y:0, type:'big'},
-        {n:'5.11', x:10.4,y:0, type:'small'},
+        // ── Рядок 1: 5.1–5.6 ─────────────────────────────────────────
+        {n:'5.1', x:0, y:0, type:'big'},
+        {n:'5.2', x:1, y:0, type:'small'},
+        {n:'5.3', x:2, y:0, type:'big'},
+        {n:'5.4', x:3, y:0, type:'big'},
+        {n:'5.5', x:4, y:0, type:'small'},
+        {n:'5.6', x:5, y:0, type:'big'},
 
-        // 5.12 окремо нижче, правіше основного ряду
-        {n:'5.12', x:10.4, y:1.2, type:'big'},
+        // ── Рядок 2: 5.7–5.12 ────────────────────────────────────────
+        {n:'5.7',  x:0, y:1, type:'small'},
+        {n:'5.8',  x:1, y:1, type:'big'},
+        {n:'5.9',  x:2, y:1, type:'small'},
+        {n:'5.10', x:3, y:1, type:'big'},
+        {n:'5.11', x:4, y:1, type:'small'},
+        {n:'5.12', x:5, y:1, type:'big'},
 
-        // Нижній ряд круглих (під 5.4–5.7)
-        {n:'5.16', x:3.4, y:1.2, type:'round'},
-        {n:'5.15', x:4.4, y:1.2, type:'round'},
-        {n:'5.14', x:5.4, y:1.2, type:'round'},
-        {n:'5.13', x:6.4, y:1.2, type:'round'},
+        // ── Рядок 3: круглі 5.13–5.16 (без накриття) ─────────────────
+        {type:'divider', x:0, y:2.05, label:'без накриття'},
+        {n:'5.13', x:0, y:2.45, type:'round'},
+        {n:'5.14', x:1, y:2.45, type:'round'},
+        {n:'5.15', x:2, y:2.45, type:'round'},
+        {n:'5.16', x:3, y:2.45, type:'round'},
       ],
-      cols:11.6, rows:2.2,
+      cols:6, rows:3.6,
     },
   },
 
@@ -527,6 +527,19 @@ const Reserve = {
     const CELL_Y = CELL * (layout.cellH || 1);
 
     const tablesHtml = layout.tables.map(t => {
+      // ── Роздільник / підпис зони ───────────────────────────────────
+      if (t.type === 'divider') {
+        const dw = (layout.cols - (t.x || 0)) * CELL;
+        const dh = CELL_Y * (t.h || 0.4);
+        const dleft = (t.x || 0) * CELL;
+        const dtop  = t.y * CELL_Y + CELL_Y * 0.1;
+        return `<div style="position:absolute;left:${dleft}px;top:${dtop}px;width:${dw}px;height:${dh}px;
+          display:flex;align-items:center;gap:8px;pointer-events:none">
+          <div style="flex:1;height:1px;background:rgba(255,255,255,.12)"></div>
+          ${t.label ? `<span style="font-size:${Math.max(8,9*scale)}px;font-weight:700;color:rgba(255,255,255,.35);white-space:nowrap;text-transform:uppercase;letter-spacing:.06em">${esc(t.label)}</span>` : ''}
+          <div style="flex:1;height:1px;background:rgba(255,255,255,.12)"></div>
+        </div>`;
+      }
       const info = Reserve.TYPE_INFO[t.type] || Reserve.TYPE_INFO['small'];
       const w = info.w * scale;
       const h = info.h * scale;
@@ -936,16 +949,15 @@ const Reserve = {
 
   // Видалення прямо зі списку бронювань (✕)
   async deleteBookingFromList(hall, tableNum, realIdx) {
-    if (!confirm('Скасувати це бронювання?')) return;
-
-    const removed = await Reserve._removeBooking(hall, tableNum, realIdx);
-    if (!removed) return;
-
-    toast('Бронювання скасовано', 'success-t');
-    Reserve.renderContent();
-    Reserve.renderTablesList();
-    Reserve.renderStrip();
-    Reserve.notifyZoneWaitersCancel(removed, hall, tableNum);
+    showConfirm('Скасувати це бронювання?', async () => {
+      const removed = await Reserve._removeBooking(hall, tableNum, realIdx);
+      if (!removed) return;
+      toast('Бронювання скасовано', 'success-t');
+      Reserve.renderContent();
+      Reserve.renderTablesList();
+      Reserve.renderStrip();
+      Reserve.notifyZoneWaitersCancel(removed, hall, tableNum);
+    }, { okLabel: '🗑 Скасувати', okClass: 'btn-danger', cancelLabel: 'Ні' });
   },
 
 
