@@ -165,64 +165,152 @@ const Interactive = {
     const ZODIAC_LIST = ['♈ Овен','♉ Телець','♊ Близнюки','♋ Рак','♌ Лев','♍ Діва','♎ Терези','♏ Скорпіон','♐ Стрілець','♑ Козеріг','♒ Водолій','♓ Риби'];
     const todayStr = new Date().toLocaleDateString('uk-UA', {day:'numeric',month:'long',year:'numeric'});
     const todayISO = new Date().toISOString().slice(0,10);
-    const cacheKey = 'horoscope_cache_' + todayISO + '_' + (zodiac||'none') + '_' + role;
+    const scheduleMap = DB.get('schedule', {});
+    const WORKING_SHIFTS = ['Р', 'СН', 'Б', 'С', 'Р/Б', 'СН/Б'];
+    const shift = (scheduleMap[`${currentUser?.id}_${todayISO}`] || '').trim();
+    const isWorking = WORKING_SHIFTS.includes(shift);
+
+    // Ключ кешу: робочий або вихідний
+    const cacheKey = isWorking
+      ? 'horoscope_cache_' + todayISO + '_' + (zodiac||'none') + '_' + role
+      : 'horoscope_cache_' + todayISO + '_' + (zodiac||'none') + '_offday';
     const cached = (() => { try { return JSON.parse(localStorage.getItem(cacheKey)||'null'); } catch(e) { return null; } })();
     const roleCtx = Horoscope._getRoleContext(role);
-
-    // Визначити чи вже 11:00 сьогодні відправлено
     const now = new Date();
-    const sentToday = now.getHours() >= 11;
+    const after11 = now.getHours() >= 11;
 
-    el.innerHTML = `
-      <div style="background:linear-gradient(135deg,rgba(212,175,55,.06) 0%,rgba(22,56,50,.4) 100%);border:1px solid var(--gold-border);border-radius:16px;padding:20px;margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-          <div>
-            <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--gold);font-weight:700;margin-bottom:2px">🔮 Гороскоп дня</div>
-            <div style="font-size:11px;color:var(--text-dim)">${todayStr}</div>
-          </div>
-          <div style="background:rgba(212,175,55,.12);border:1px solid var(--gold-border);border-radius:8px;padding:4px 10px;font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.07em">${roleCtx.title}</div>
-        </div>
-      </div>
+    // Будуємо HTML
+    el.innerHTML = '';
 
-      ${!zodiac ? `
-      <div style="background:rgba(212,175,55,.06);border:1px solid var(--gold-border);border-radius:14px;padding:20px;text-align:center;margin-bottom:16px">
-        <div style="font-size:36px;margin-bottom:10px">🔮</div>
-        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Знак зодіаку не вказано</div>
-        <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px">Додай свій знак зодіаку в профіль щоб отримувати персональний гороскоп</div>
-        <button class="btn btn-gold" onclick="Staff.showProfile('${currentUser?.id}')">✏️ Відкрити профіль</button>
-      </div>` : `
-      <div style="background:rgba(212,175,55,.06);border:1px solid var(--gold-border);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
-        <div style="font-size:40px;line-height:1">${zodiac.split(' ')[0]}</div>
+    // ── Заголовок ─────────────────────────────────────────────────
+    const header = document.createElement('div');
+    header.style.cssText = 'background:linear-gradient(135deg,rgba(212,175,55,.06) 0%,rgba(22,56,50,.4) 100%);border:1px solid var(--gold-border);border-radius:16px;padding:20px;margin-bottom:16px';
+    header.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <div>
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);font-weight:700">Твій знак</div>
-          <div style="font-size:18px;font-weight:800;color:var(--gold)">${zodiac}</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--gold);font-weight:700;margin-bottom:2px">🔮 Гороскоп дня</div>
+          <div style="font-size:11px;color:var(--text-dim)">${todayStr}</div>
         </div>
-      </div>`}
-
-      <div id="horoscope-result" style="margin-bottom:16px">
-        ${cached
-          ? Horoscope._renderCard(cached)
-          : zodiac
-            ? (sentToday
-                ? '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:28px 20px;text-align:center"><div style="font-size:36px;margin-bottom:10px">📭</div><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">Гороскоп ще не завантажено</div><div style="font-size:11px;color:var(--text-dim)">Гороскоп надсилається о 11:00. Якщо ти не отримав — перевір підключення Telegram або зверни до адміністратора.</div></div>'
-                : `<div style="background:rgba(212,175,55,.05);border:1px solid var(--gold-border);border-radius:14px;padding:28px 20px;text-align:center"><div style="font-size:36px;margin-bottom:10px">⏳</div><div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px">Гороскоп надійде о 11:00</div><div style="font-size:11px;color:var(--text-dim)">Щоранку о 11:00 зірки надсилають твій персональний гороскоп у Telegram. Тут ти зможеш переглянути його в будь-який час протягом дня.</div></div>`)
-            : ''
-        }
-      </div>
-
-      <!-- Колеги за знаком (показуємо гороскоп для їхньої ролі = поточного юзера) -->
-      ${zodiac ? `
-      <div style="margin-top:24px;border-top:1px solid var(--gold-border);padding-top:20px">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);font-weight:700;margin-bottom:12px">Гороскоп колег (твоя роль)</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-          ${ZODIAC_LIST.map(z => `
-            <button onclick="Horoscope.generateFor('${z}')"
-              style="background:${z===zodiac?'rgba(212,175,55,.15)':'var(--surface)'};border:1px solid ${z===zodiac?'var(--gold-border)':'rgba(255,255,255,.08)'};border-radius:12px;padding:10px 6px;cursor:pointer;font-family:'Montserrat',sans-serif;transition:all .15s;color:${z===zodiac?'var(--gold)':'var(--text-dim)'};font-size:11px;font-weight:700">
-              <div style="font-size:20px;margin-bottom:4px">${z.split(' ')[0]}</div>
-              <div style="font-size:9px;letter-spacing:.04em">${z.split(' ').slice(1).join(' ')}</div>
-            </button>`).join('')}
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          ${shift ? `<span style="background:rgba(90,175,122,.12);border:1px solid rgba(90,175,122,.25);border-radius:8px;padding:3px 8px;font-size:10px;font-weight:700;color:#5aaf7a">${shift}</span>` : ''}
+          <span style="background:rgba(212,175,55,.12);border:1px solid var(--gold-border);border-radius:8px;padding:4px 10px;font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.07em">${isWorking ? roleCtx.title : 'Вихідний'}</span>
         </div>
-      </div>` : ''}`;
+      </div>`;
+    el.appendChild(header);
+
+    // ── Знак зодіаку відсутній ─────────────────────────────────────
+    if (!zodiac) {
+      const noSign = document.createElement('div');
+      noSign.style.cssText = 'background:rgba(212,175,55,.06);border:1px solid var(--gold-border);border-radius:14px;padding:20px;text-align:center;margin-bottom:16px';
+      noSign.innerHTML = `<div style="font-size:36px;margin-bottom:10px">🔮</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Знак зодіаку не вказано</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px">Додай знак зодіаку в профіль</div>`;
+      const profileBtn = document.createElement('button');
+      profileBtn.className = 'btn btn-gold';
+      profileBtn.textContent = '✏️ Відкрити профіль';
+      profileBtn.addEventListener('click', () => Staff.showProfile(currentUser?.id));
+      noSign.appendChild(profileBtn);
+      el.appendChild(noSign);
+      return;
+    }
+
+    // ── Знак ──────────────────────────────────────────────────────
+    const signBlock = document.createElement('div');
+    signBlock.style.cssText = 'background:rgba(212,175,55,.06);border:1px solid var(--gold-border);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:12px';
+    signBlock.innerHTML = `
+      <div style="font-size:40px;line-height:1">${zodiac.split(' ')[0]}</div>
+      <div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);font-weight:700">Твій знак · ${isWorking ? 'Робоча зміна' : 'Вихідний день'}</div>
+        <div style="font-size:18px;font-weight:800;color:var(--gold)">${zodiac}</div>
+      </div>`;
+    el.appendChild(signBlock);
+
+    // ── Блок результату ────────────────────────────────────────────
+    const resultDiv = document.createElement('div');
+    resultDiv.id = 'horoscope-result';
+    resultDiv.style.marginBottom = '16px';
+    el.appendChild(resultDiv);
+
+    if (cached) {
+      // Є кеш — показуємо одразу
+      resultDiv.innerHTML = Horoscope._renderCard(cached);
+      // Кнопка оновлення
+      const refreshBtn = document.createElement('button');
+      refreshBtn.className = 'btn btn-ghost btn-sm';
+      refreshBtn.style.cssText = 'width:100%;margin-top:8px';
+      refreshBtn.textContent = '🔄 Оновити гороскоп';
+      refreshBtn.id = 'horoscope-gen-btn';
+      refreshBtn.addEventListener('click', () => {
+        // Скидаємо кеш і генеруємо новий
+        try { localStorage.removeItem(cacheKey); } catch(e) {}
+        Interactive.renderHoroscope();
+      });
+      el.appendChild(refreshBtn);
+    } else {
+      // Немає кешу — кнопка отримати + пояснення
+      const noHoro = document.createElement('div');
+      noHoro.style.cssText = 'background:rgba(212,175,55,.05);border:1px solid var(--gold-border);border-radius:14px;padding:28px 20px;text-align:center';
+      noHoro.innerHTML = `
+        <div style="font-size:40px;margin-bottom:12px">${after11 ? '📭' : '⏳'}</div>
+        <div style="font-size:14px;font-weight:800;color:var(--gold);margin-bottom:6px">${after11 ? 'Гороскоп не надійшов' : 'Гороскоп надійде о 11:00'}</div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:20px">${after11
+          ? 'Щось пішло не так з розсилкою. Отримай свій гороскоп просто зараз:'
+          : 'Щоранку о 11:00 гороскоп надходить у Telegram. Або отримай його прямо зараз:'
+        }</div>`;
+      const getBtn = document.createElement('button');
+      getBtn.className = 'btn btn-gold';
+      getBtn.id = 'horoscope-gen-btn';
+      getBtn.textContent = '✨ Отримати передбачення';
+      getBtn.addEventListener('click', () => {
+        getBtn.disabled = true;
+        getBtn.innerHTML = '<span class="btn-spinner"></span> Зорі говорять...';
+        const genFn = isWorking
+          ? Horoscope._callClaude(zodiac, role)
+          : Horoscope._callClaudeOffDay(zodiac);
+        genFn.then(result => {
+          try { localStorage.setItem(cacheKey, JSON.stringify(result)); } catch(e) {}
+          resultDiv.innerHTML = Horoscope._renderCard(result);
+          noHoro.remove();
+          // Додаємо кнопку оновлення
+          const rBtn = document.createElement('button');
+          rBtn.className = 'btn btn-ghost btn-sm';
+          rBtn.style.cssText = 'width:100%;margin-top:8px';
+          rBtn.textContent = '🔄 Оновити гороскоп';
+          rBtn.addEventListener('click', () => {
+            try { localStorage.removeItem(cacheKey); } catch(e) {}
+            Interactive.renderHoroscope();
+          });
+          resultDiv.after(rBtn);
+        }).catch(e => {
+          console.error(e);
+          getBtn.disabled = false;
+          getBtn.textContent = '✨ Спробувати ще раз';
+          toast('Помилка генерації. Перевір з\'єднання.', 'error');
+        });
+      });
+      noHoro.appendChild(getBtn);
+      resultDiv.appendChild(noHoro);
+    }
+
+    // ── Сітка знаків колег ─────────────────────────────────────────
+    const colleaguesDiv = document.createElement('div');
+    colleaguesDiv.style.cssText = 'margin-top:24px;border-top:1px solid var(--gold-border);padding-top:20px';
+    const colleaguesTitle = document.createElement('div');
+    colleaguesTitle.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);font-weight:700;margin-bottom:12px';
+    colleaguesTitle.textContent = 'Гороскоп колег';
+    colleaguesDiv.appendChild(colleaguesTitle);
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px';
+    ZODIAC_LIST.forEach(z => {
+      const btn = document.createElement('button');
+      const isMe = z === zodiac;
+      btn.style.cssText = `background:${isMe?'rgba(212,175,55,.15)':'var(--surface)'};border:1px solid ${isMe?'var(--gold-border)':'rgba(255,255,255,.08)'};border-radius:12px;padding:10px 6px;cursor:pointer;font-family:'Montserrat',sans-serif;transition:all .15s;color:${isMe?'var(--gold)':'var(--text-dim)'};font-size:11px;font-weight:700`;
+      btn.innerHTML = `<div style="font-size:20px;margin-bottom:4px">${z.split(' ')[0]}</div><div style="font-size:9px;letter-spacing:.04em">${z.split(' ').slice(1).join(' ')}</div>`;
+      btn.addEventListener('click', () => Horoscope.generateFor(z));
+      grid.appendChild(btn);
+    });
+    colleaguesDiv.appendChild(grid);
+    el.appendChild(colleaguesDiv);
   },
 };
 
