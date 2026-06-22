@@ -462,26 +462,22 @@ ${DUTIES_LIST.map((d, i) => `${i}. ${d}`).join('\n')}
 
 Де dutyIndex — індекс обов'язку зі списку вище (0-based), waiterName — точне ім'я з мого списку офіціантів.`;
 
-      // Виклик Claude API напряму (ключ інжектується проксі claude.ai)
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      // Виклик через Supabase Edge Function (ANTHROPIC_KEY зберігається там)
+      const resp = await fetch(EDGE_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1000,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-              { type: 'text', text: prompt }
-            ]
-          }]
+          action: 'read_duties_photo',
+          imageBase64: base64,
+          mediaType,
+          prompt,
         })
       });
 
-      if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+      if (!resp.ok) throw new Error(`Edge function ${resp.status}: ${await resp.text()}`);
       const data = await resp.json();
-      const rawText = (data.content || []).map(b => b.text || '').join('').trim();
+      if (!data.ok) throw new Error(data.error || data.detail || 'Edge function error');
+      const rawText = (data.text || '').trim();
 
       // Парсимо JSON відповідь
       let parsed;
