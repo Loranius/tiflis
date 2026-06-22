@@ -176,11 +176,14 @@ const Schedule = {
         DB.set('notifications', items);
       } catch(e) { console.warn('Notify insert error:', e); }
 
-      // Telegram — тільки адмінам
-      const admins = DB.get('users', []).filter(u => !u.fired && isAdmin(u));
-      for (const adm of admins) {
-        const chatId = adm.chat_id || adm.tg_id;
-        if (chatId) await tgSendPersonal(chatId, tgText);
+      // Telegram — тільки адмінам, і лише якщо зміну зробив офіціант (не кухар)
+      const authorIsCook = currentUser.role === 'cook' || currentUser.role2 === 'cook';
+      if (!authorIsCook) {
+        const admins = DB.get('users', []).filter(u => !u.fired && isAdmin(u));
+        for (const adm of admins) {
+          const chatId = adm.chat_id || adm.tg_id;
+          if (chatId) await tgSendPersonal(chatId, tgText);
+        }
       }
 
       // Скидаємо pending
