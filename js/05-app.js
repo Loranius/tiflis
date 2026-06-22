@@ -900,10 +900,12 @@ const App = {
     if (u.role === 'runner' || u.role2 === 'runner') { grid.innerHTML = ''; return; }
     // Усі сторінки крім тих що вже в bottom nav + адмін окремо
     const BN_MAIN = ['schedule','cash','menu','home'];
+    const _bnCookPages = ['schedule','staff','menu','interactive','reserve'];
     const items = App.getNavItems().filter(item => {
       if (BN_MAIN.includes(item.page)) return false;
       if (item.page === 'cash' && u.role !== 'waiter' && !isSysadmin(u)) return false;
       if (item.adminOnly) return false;
+      if ((u.role === 'cook' || u.role2 === 'cook') && !isAdmin(u) && !_bnCookPages.includes(item.page)) return false;
       return true;
     });
     if (isAdmin(u)) {
