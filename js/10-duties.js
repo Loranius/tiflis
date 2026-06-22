@@ -50,6 +50,7 @@ const Duties = {
   // Стан стрипів { handover: {centerDate, selectedDate}, daily: {centerDate, selectedDate} }
   _strip: {},
   STRIP_VISIBLE: 7, // скільки днів показувати
+  _pendingPhoto: null, // тимчасове сховище даних фото для overlay
 
   _initStrip(type) {
     if (Duties._strip[type]) return;
@@ -607,14 +608,17 @@ ${dutiesList.map((d, i) => `${i}. ${d}`).join('\n')}
       const dutySection = makeSection(matchedDuties, '📋 Обов\u0027язки', 0);
       const zoneSection = makeSection(matchedZones,  '🗺️ Зони роботи', matchedDuties.length);
 
+      // Зберігаємо дані у замиканні — не передаємо через onclick атрибут
+      // (уникаємо проблем з екрануванням password та інших полів)
+      Duties._pendingPhoto = { matched: allMatched, type, storageKey };
+
       Duties._showPhotoOverlay(`
         <div style="padding:20px">
           <div style="font-size:15px;font-weight:700;color:var(--gold);margin-bottom:4px">Розпізнано ${allMatched.length} призначень</div>
           <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Зніміть галочки з тих що не потрібні</div>
           <div style="max-height:58vh;overflow-y:auto;margin-bottom:16px">${dutySection}${zoneSection}</div>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-gold" style="flex:1"
-              onclick="Duties._applyPhotoAssignments(${JSON.stringify(allMatched).replace(/</g,'\u003c')}, '${type}', '${storageKey}')">
+            <button class="btn btn-gold" style="flex:1" onclick="Duties._applyPendingPhoto()">
               ✅ Застосувати
             </button>
             <button class="btn btn-ghost" onclick="Duties._closePhotoOverlay()">Скасувати</button>
@@ -633,6 +637,13 @@ ${dutiesList.map((d, i) => `${i}. ${d}`).join('\n')}
         </div>
       `);
     }
+  },
+
+  _applyPendingPhoto() {
+    // Читаємо дані з замикання (не з атрибуту — уникаємо проблем з екрануванням)
+    const pending = Duties._pendingPhoto;
+    if (!pending) { Duties._closePhotoOverlay(); return; }
+    Duties._applyPhotoAssignments(pending.matched, pending.type, pending.storageKey);
   },
 
   _applyPhotoAssignments(matched, type, storageKey) {
