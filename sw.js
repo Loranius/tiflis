@@ -1,92 +1,69 @@
-// Tiflis Portal — Service Worker
-// Потрібен для встановлення PWA (Add to Home Screen)
-// + кешування статичних ресурсів для офлайн-старту.
-// Після переходу на модульну структуру кешуємо всі css/js файли.
+// Tiflis Portal — Service Worker v5
+// network-first для HTML + JS + CSS (оновлення завжди свіжі)
+// cache-first тільки для іконок і manifest
 
-const CACHE_NAME = 'tiflis-portal-v4';
-const CORE_ASSETS = [
-  './index.html',
+const CACHE_NAME = 'tiflis-portal-v5';
+
+const STATIC_ASSETS = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
-  // CSS
-  './css/01-base.css',
-  './css/02-login.css',
-  './css/03-interface.css',
-  './css/04-schedule.css',
-  './css/05-cash.css',
-  './css/06-rating.css',
-  './css/07-staff.css',
-  './css/08-duties.css',
-  './css/09-calendar-menu.css',
-  // JS (порядок = порядок виконання)
-  './js/00-utils-security.js',
-  './js/01-supabase-db.js',
-  './js/02-uploads.js',
-  './js/03-menu.js',
-  './js/04-utils.js',
-  './js/05-app.js',
-  './js/06-schedule.js',
-  './js/07-cash.js',
-  './js/08-rating.js',
-  './js/09-staff.js',
-  './js/10-duties.js',
-  './js/11-telegram.js',
-  './js/12-admin.js',
-  './js/13-home.js',
-  './js/14-theme.js',
-  './js/15-notify.js',
-  './js/16-interactive.js',
-  './js/17-horoscope.js',
-  './js/18-reserve.js',
-  './js/19-shiftswap.js',
-  './js/20-eventlog.js',
-  './js/21-bootstrap.js',
+  './icon-180.png',
 ];
 
+// Встановлення — кешуємо тільки іконки і маніфест
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
-  self.skipWaiting();
+  self.skipWaiting(); // активуємось одразу, не чекаємо закриття вкладок
 });
 
+// Активація — видаляємо всі старі кеші (v1-v4)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
     )
   );
-  self.clients.claim();
+  self.clients.claim(); // перехоплюємо всі відкриті вкладки одразу
 });
 
-// network-first для HTML (щоб завжди тягнути оновлення),
-// cache-first для css/js/іконок.
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // не кешуємо Supabase / Telegram / зовнішнє
 
-  if (req.mode === 'navigate' || req.destination === 'document') {
+  // Не чіпаємо зовнішні запити (Supabase, Telegram, Google Fonts тощо)
+  if (url.origin !== self.location.origin) return;
+
+  const path = url.pathname;
+
+  // cache-first тільки для іконок і маніфесту — вони не змінюються
+  const isStatic = path.endsWith('.png') || path.endsWith('.ico') || path.endsWith('manifest.json');
+  if (isStatic) {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-          return res;
-        })
-        .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
+      caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        return res;
+      }))
     );
     return;
   }
 
+  // network-first для ВСЬОГО іншого: HTML, JS, CSS
+  // Завжди тягнемо з мережі, фолбек на кеш тільки якщо немає інтернету
   event.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-      return res;
-    }))
+    fetch(req)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
   );
 });
