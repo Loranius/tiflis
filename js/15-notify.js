@@ -384,7 +384,7 @@ const Notify = {
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-gold" id="notif-send-final-btn" onclick="Notify.save('${encodeURIComponent(title)}','${encodeURIComponent(body)}','${encodeURIComponent(priority)}','${encodeURIComponent(roles.join(','))}','${encodeURIComponent(photoUrl)}')">
+        <button class="btn btn-gold" id="notif-send-final-btn">
           📨 Надіслати
         </button>
         <button class="btn btn-ghost" onclick="Notify.openNew()">✏️ Редагувати</button>
@@ -393,6 +393,11 @@ const Notify = {
     // Вставити текст після рендеру модалки (уникаємо escaping в template literal)
     const ta = document.getElementById('notif-tg-text');
     if (ta) ta.value = tgTextInit;
+
+    // Зберігаємо всі дані в замиканні — не передаємо через onclick атрибут
+    Notify._pendingNotif = { title, body, priority, roles, photoUrl };
+    const sendBtn = document.getElementById('notif-send-final-btn');
+    if (sendBtn) sendBtn.addEventListener('click', () => Notify._sendPending());
   },
 
   _saveNotifyTpl() {
@@ -411,13 +416,23 @@ const Notify = {
     toast('Шаблон завантажено', 'success-t');
   },
 
-  async save(titleEnc, bodyEnc, priorityEnc, rolesStr, photoUrlEnc) {
+  _pendingNotif: null,
+
+  _sendPending() {
+    const p = Notify._pendingNotif;
+    if (!p) return;
+    // Читаємо відредагований TG-текст з textarea (може бути змінений)
+    Notify.save(p.title, p.body, p.priority, p.roles, p.photoUrl);
+  },
+
+  async save(title, body, priority, roles, photoUrl) {
     if (!canSendNotify(currentUser)) { toast('Недостатньо прав', 'error'); return; }
-    const title    = decodeURIComponent(titleEnc || '');
-    const body     = decodeURIComponent(bodyEnc  || '');
-    const photoUrl = decodeURIComponent(photoUrlEnc || '');
-    const priority = decodeURIComponent(priorityEnc || 'medium');
-    const roles    = rolesStr ? decodeURIComponent(rolesStr).split(',').filter(Boolean) : [];
+    // Дані передаються напряму (не через URL encoding)
+    title    = title    || '';
+    body     = body     || '';
+    photoUrl = photoUrl || '';
+    priority = priority || 'medium';
+    roles    = Array.isArray(roles) ? roles : [];
     const author   = currentUser.displayName || currentUser.login;
 
     const btn = $('notif-send-final-btn');
