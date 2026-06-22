@@ -2,7 +2,7 @@
 // ║  [1/13]  SUPABASE КЛІЄНТ + LocalStorage DB                    ║
 // ╚═══════════════════════════════════════════════════════════════╝
 const SUPA_URL = 'https://duzfttrrzeqvxpfnyxfg.supabase.co';
-const SUPA_KEY = 'sb_publishable_ICnIrODW2ZMbbhia8iBoCA_vCgQwoPx';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1emZ0dHJyemVxdnhwZm55eGZnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTk1MDk2MiwiZXhwIjoyMDk1NTI2OTYyfQ.xujdEDKsPebp_BvMHUEw_vyubQSCee47l1LS8byUsEE';
 
 const sb = {
   async query(table, opts = {}) {

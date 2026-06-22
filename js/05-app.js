@@ -56,7 +56,7 @@ const App = {
       App.navigate(_restoreLastPage);
       App.startPolling();
       return true;
-    } catch(e) { return false; }
+    } catch(e) { console.error('[restoreSession] FAILED:', e); return false; }
   },
 
   showAuthTab(tab) {
@@ -122,8 +122,8 @@ const App = {
       users, roles, schedule, ratings, ratingComments,
       notifications, duties, settings, cash, extraWages
     ] = await Promise.all([
-      sb.query('users',            { order: 'created_at' }),
-      sb.query('roles',            { order: 'key' }),
+      sb.query('users',            { order: 'created_at' }).catch(() => []),
+      sb.query('roles',            { order: 'key' }).catch(() => []),
       // Завантажуємо schedule лише за ±2 місяці (зменшує payload при великій БД)
       sb.query('schedule', { _raw: (() => {
         const _n=new Date();
@@ -131,9 +131,9 @@ const App = {
         const _t=new Date(_n.getFullYear(),_n.getMonth()+3,0).toISOString().slice(0,10);
         return `date=gte.${_f}&date=lte.${_t}`;
       })() }),
-      sb.query('ratings'),
-      sb.query('rating_comments',  { order: 'created_at' }),
-      sb.query('notifications',    { order: 'created_at.desc' }),
+      sb.query('ratings').catch(() => []),
+      sb.query('rating_comments',  { order: 'created_at' }).catch(() => []),
+      sb.query('notifications',    { order: 'created_at.desc' }).catch(() => []),
       sb.query('duties').catch(() => []),
       sb.query('settings').catch(() => []),
       sb.query('cash').catch(() => []),
