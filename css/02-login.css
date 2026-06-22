@@ -1,0 +1,39 @@
+/* ╔══════════════════════════════════════════╗
+   ║  CSS [2/9]  ЕКРАН ВХОДУ                 ║
+   ╚══════════════════════════════════════════╝ */
+#login-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+  background:
+    linear-gradient(135deg, rgba(14,36,32,.95) 0%, rgba(22,56,50,.92) 100%),
+    url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=1200') center/cover no-repeat;
+}
+.login-box {
+  width: 100%;
+  max-width: 400px;
+  background: rgba(14,36,32,.75);
+  border: 1px solid var(--gold-border);
+  border-radius: 16px;
+  padding: 40px 36px;
+}
+@media (max-width: 480px) {
+  .login-box { padding: 28px 20px; }
+}
+.login-logo {
+  font-family: 'Cormorant Garamond', serif; font-size: 42px; font-weight: 700;
+  color: var(--gold); text-align: center; letter-spacing: .15em; margin-bottom: 4px;
+}
+.login-sub {
+  text-align: center; font-size: 10px; font-weight: 700; letter-spacing: .2em;
+  text-transform: uppercase; color: var(--text-dim); margin-bottom: 32px;
+}
+.login-divider {
+  width: 40px; height: 1px; background: var(--gold-border); margin: 0 auto 28px;
+}
+
+

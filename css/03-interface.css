@@ -1,0 +1,301 @@
+/* ╔══════════════════════════════════════════╗
+   ║  CSS [3/9]  ГОЛОВНИЙ ІНТЕРФЕЙС          ║
+   ║             (сайдбар, контент, адаптив)  ║
+   ╚══════════════════════════════════════════╝ */
+#app { display: flex; min-height: 100vh; }
+#app.hidden { display: none !important; }
+
+/* ── Сайдбар ── */
+#sidebar {
+  width: var(--sidebar-w);
+  background:
+    linear-gradient(180deg, rgba(14,36,32,.98) 0%, rgba(10,28,24,.99) 100%);
+  border-right: 1px solid var(--gold-border);
+  display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 50;
+  transition: transform .3s;
+  /* Тонка текстура на сайдбарі */
+  background-image:
+    repeating-linear-gradient(
+      0deg, transparent, transparent 32px,
+      rgba(212,175,55,.025) 32px, rgba(212,175,55,.025) 33px
+    ),
+    linear-gradient(180deg, rgba(14,36,32,.98) 0%, rgba(10,28,24,.99) 100%);
+}
+
+/* Логін екран завжди зверху поки видимий */
+#login-screen { position: relative; z-index: 9999; }
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--gold-border);
+  text-align: center;
+  position: relative;
+  background: linear-gradient(180deg, rgba(212,175,55,.06) 0%, transparent 100%);
+}
+/* Декоративна золота лінія під логотипом */
+.sidebar-logo::after {
+  content: '';
+  position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+  width: 60px; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+.sidebar-logo-text {
+  font-family: 'Cormorant Garamond', serif; font-size: 24px;
+  color: var(--gold); letter-spacing: .15em; font-weight: 700;
+  text-shadow: 0 0 25px rgba(212,175,55,.35);
+}
+.sidebar-logo-sub { font-size: 9px; color: var(--text-muted); letter-spacing: .15em; text-transform: uppercase; margin-top: 2px; }
+
+.sidebar-user {
+  padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.06);
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-avatar {
+  width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+  background: var(--eden-light); border: 2px solid var(--gold-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: var(--gold); flex-shrink: 0;
+  overflow: hidden;
+}
+.sidebar-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.sidebar-user-info { flex: 1; min-width: 0; }
+.sidebar-user-name { font-weight: 700; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-user-role { font-size: 10px; color: var(--gold); text-transform: uppercase; letter-spacing: .06em; }
+
+nav#sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
+
+/* ── Акордеон-групи (десктоп) ── */
+.nav-group { margin-bottom: 4px; }
+.nav-group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px 7px 12px; border-radius: 7px; cursor: pointer;
+  font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-muted); user-select: none; transition: all .18s;
+}
+.nav-group-header:hover { background: var(--surface); color: var(--text-dim); }
+.nav-group-header.has-active { color: var(--gold); }
+.nav-group-arrow {
+  font-size: 10px; transition: transform .22s; display: inline-block;
+}
+.nav-group.open .nav-group-arrow { transform: rotate(180deg); }
+.nav-group-body {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height .28s cubic-bezier(.4,0,.2,1);
+}
+.nav-group.open .nav-group-body { max-height: 600px; }
+
+.nav-section-title {
+  font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-muted); padding: 10px 10px 4px;
+}
+.nav-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 12px; border-radius: 7px; border: none; background: transparent;
+  color: var(--text-dim); font-family: 'Montserrat', sans-serif;
+  font-size: 11px; font-weight: 600; cursor: pointer; transition: all .18s;
+  text-align: left; letter-spacing: .04em;
+}
+.nav-btn:hover { background: var(--surface-hover); color: var(--text); }
+.nav-btn.active { background: var(--gold-dim); color: var(--gold); border-left: 2px solid var(--gold); }
+.nav-btn .icon { font-size: 15px; width: 20px; text-align: center; }
+
+.sidebar-footer {
+  padding: 12px 10px; border-top: 1px solid rgba(255,255,255,.06);
+}
+
+/* ── Bottom Navigation (мобільний) ── */
+#bottom-nav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  background: linear-gradient(180deg, rgba(10,26,22,.97) 0%, rgba(8,22,18,.99) 100%);
+  border-top: 1px solid var(--gold-border);
+  box-shadow: 0 -4px 24px rgba(0,0,0,.45);
+  padding: 0 0 env(safe-area-inset-bottom, 0px);
+  height: calc(62px + env(safe-area-inset-bottom, 0px));
+}
+.bottom-nav-inner {
+  display: flex; align-items: stretch; height: 62px;
+}
+.bn-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 4px; background: transparent; border: none;
+  color: var(--text-muted); font-family: 'Montserrat', sans-serif;
+  font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  cursor: pointer; transition: all .18s; padding: 0 4px;
+  position: relative;
+}
+.bn-btn:active { opacity: .7; }
+.bn-btn.active { color: var(--gold); }
+.bn-btn .bn-icon { font-size: 20px; line-height: 1; }
+.bn-btn.active .bn-icon { filter: drop-shadow(0 0 6px rgba(212,175,55,.5)); }
+
+/* Центральна кнопка "Головна" — виділена */
+.bn-btn.bn-home {
+  flex: 0 0 72px;
+}
+.bn-home-fab {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: linear-gradient(145deg, var(--gold-light), var(--gold));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; line-height: 1;
+  box-shadow: 0 4px 20px rgba(212,175,55,.45), 0 0 0 3px rgba(212,175,55,.15);
+  margin-top: -20px; /* підіймаємо над панеллю */
+  transition: all .18s;
+  border: 2px solid rgba(255,255,255,.15);
+}
+.bn-btn.bn-home:active .bn-home-fab { transform: scale(.92); }
+.bn-btn.bn-home.active .bn-home-fab {
+  box-shadow: 0 4px 24px rgba(212,175,55,.7), 0 0 0 4px rgba(212,175,55,.2);
+}
+.bn-home-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; color: var(--gold); }
+
+/* Кнопка "Ще" */
+.bn-more-dot {
+  width: 4px; height: 4px; border-radius: 50%; background: currentColor;
+  display: inline-block; margin: 0 1px;
+}
+
+/* Drawer "Ще" */
+#bn-more-drawer {
+  display: none;
+  position: fixed; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); left: 0; right: 0;
+  z-index: 49;
+  background: linear-gradient(180deg, rgba(10,26,22,.98) 0%, rgba(8,22,18,.99) 100%);
+  border-top: 1px solid var(--gold-border);
+  border-radius: 20px 20px 0 0;
+  padding: 16px 16px 8px;
+  box-shadow: 0 -8px 40px rgba(0,0,0,.5);
+  animation: slideUp .28s cubic-bezier(.34,1.2,.64,1);
+}
+#bn-more-drawer.open { display: block; }
+.bn-drawer-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--text-muted); margin-bottom: 12px; padding: 0 4px;
+}
+.bn-drawer-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+}
+.bn-drawer-item {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 12px 4px; border-radius: 12px; background: var(--surface);
+  border: 1px solid rgba(255,255,255,.07); cursor: pointer;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-dim); font-family: 'Montserrat', sans-serif; transition: all .15s;
+}
+.bn-drawer-item:active { background: var(--gold-dim); color: var(--gold); }
+.bn-drawer-item.active { background: var(--gold-dim); color: var(--gold); border-color: var(--gold-border); }
+.bn-drawer-item .bn-d-icon { font-size: 22px; }
+.bn-drawer-overlay {
+  display: none; position: fixed; inset: 0; z-index: 48;
+}
+.bn-drawer-overlay.open { display: block; }
+
+@media (max-width: 768px) {
+  #bottom-nav { display: flex; flex-direction: column; }
+  #main-content { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
+}
+
+/* ── Мобільна шапка ── */
+#mobile-header {
+  display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+  background:
+    linear-gradient(90deg, rgba(10,26,22,.97) 0%, rgba(16,42,36,.97) 50%, rgba(10,26,22,.97) 100%);
+  border-bottom: 1px solid var(--gold-border);
+  padding: 12px 16px; align-items: center; justify-content: space-between;
+  /* Тонка золота лінія під шапкою */
+  box-shadow: 0 1px 0 rgba(212,175,55,.15), 0 4px 20px rgba(0,0,0,.4);
+}
+/* Декоративна золота лінія-орнамент під логотипом в header */
+#mobile-header::after {
+  content: '';
+  position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+  width: 80px; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+.mobile-logo {
+  font-family:'Cormorant Garamond',serif; font-size:20px; color:var(--gold);
+  font-weight:700; letter-spacing:.12em;
+  text-shadow: 0 0 20px rgba(212,175,55,.3);
+}
+
+/* ── Контент ── */
+#main-content {
+  flex: 1; margin-left: var(--sidebar-w); padding: 28px;
+  overflow-x: hidden; min-width: 0;
+}
+.page { display: none; }
+.page.active { display: block; animation: pageIn .18s ease-out; }
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-header {
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--gold-border);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.page-title {
+  font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 600; color: var(--gold);
+  text-shadow: 0 0 30px rgba(212,175,55,.2);
+}
+.page-subtitle { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+/* ── Адаптив ── */
+@media (max-width: 768px) {
+  .page-title { font-size: 23px; }
+  .page-subtitle { font-size: 10px; }
+  .card { padding: 14px; }
+  #sidebar { display: none !important; }
+  .sidebar-overlay { display: none !important; }
+  html, body { height: 100%; overflow: hidden; }
+  #app { height: 100dvh; min-height: 100dvh; overflow: hidden; }
+  #main-content {
+    margin-left: 0;
+    padding: 64px 14px 16px;
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  #mobile-header { display: flex; }
+}
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 45;
+}
+.sidebar-overlay.visible { display: block; }
+
+/* ── Десктоп: collapsed сайдбар ── */
+#sidebar.collapsed {
+  transform: translateX(-100%);
+}
+#main-content.sidebar-collapsed {
+  margin-left: 0;
+}
+/* Кнопка відкрити сайдбар (десктоп, коли collapsed) */
+#sidebar-open-btn {
+  display: none;
+  position: fixed;
+  top: 18px;
+  left: 16px;
+  z-index: 60;
+  background: var(--eden-dark);
+  border: 1px solid var(--gold-border);
+  border-radius: 10px;
+  color: var(--gold);
+  font-size: 18px;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: all .2s;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+#sidebar-open-btn:hover { background: var(--surface-hover); }
+@media (min-width: 769px) {
+  #sidebar.collapsed ~ * #sidebar-open-btn,
+  body.sidebar-collapsed-desktop #sidebar-open-btn { display: flex; }
+}
+
+
