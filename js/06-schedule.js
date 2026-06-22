@@ -243,12 +243,281 @@ const Schedule = {
     if (isAdmin(currentUser)) {
       sa.innerHTML = `
         <button class="btn btn-outline btn-sm" onclick="ShiftSwap.openMySwaps()" id="my-swaps-btn" style="font-size:10px">⇄ Обміни</button>
+        <button class="btn btn-ghost btn-sm" id="schedule-photo-btn">📷 Фото</button>
         <button class="btn btn-gold btn-sm" onclick="Schedule.saveAll()">💾 Зберегти</button>`;
       ShiftSwap._updateMySwapsBtn();
+      // Кнопка фото — через addEventListener щоб працювала на мобільному
+      const _spBtn = document.getElementById('schedule-photo-btn');
+      if (_spBtn) _spBtn.addEventListener('click', () => Schedule.readPhoto());
     } else {
       sa.innerHTML = `<button class="btn btn-outline btn-sm" onclick="ShiftSwap.openMySwaps()" id="my-swaps-btn">⇄ Мої обміни</button>`;
       ShiftSwap._updateMySwapsBtn();
     }
+  },
+
+
+  // ── Читання фото графіку через Claude ────────────────────────────
+  readPhoto() {
+    let inp = document.getElementById('schedule-photo-input');
+    if (!inp) {
+      inp = document.createElement('input');
+      inp.type = 'file';
+      inp.id = 'schedule-photo-input';
+      inp.accept = '.jpg,.jpeg,.png,.webp,.heic,.heif,image/*';
+      inp.style.display = 'none';
+      document.body.appendChild(inp);
+    }
+    inp.value = '';
+    inp.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) Schedule._processSchedulePhoto(file);
+    };
+    inp.click();
+  },
+
+  async _processSchedulePhoto(file) {
+    // Показуємо оверлей-лоадер
+    Schedule._showScheduleOverlay(`
+      <div style="text-align:center;padding:48px 24px">
+        <div style="font-size:44px;margin-bottom:16px">🔍</div>
+        <div style="font-size:16px;font-weight:800;color:var(--gold);margin-bottom:6px">Claude читає графік</div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.5">Розпізнаю таблицю змін<br>Зазвичай займає 10–15 секунд</div>
+        <div style="margin-top:24px;width:44px;height:44px;border:3px solid var(--gold-border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-left:auto;margin-right:auto"></div>
+      </div>
+    `);
+
+    try {
+      // Стискаємо фото (графік велика таблиця — потрібна хороша якість)
+      const { base64, mediaType } = await new Promise((res, rej) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const MAX = 2400; // більше ніж для обов'язків — таблиця детальна
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else       { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          res({ base64: dataUrl.split(',')[1], mediaType: 'image/jpeg' });
+        };
+        img.onerror = rej;
+        img.src = url;
+      });
+
+      // Список офіціантів з БД
+      const allUsers = getUsers().filter(u => !u.fired);
+      const userNames = allUsers.map(u => `${u.displayName || u.login} (id:${u.id})`).join(', ');
+
+      // Поточний місяць і рік з відображення
+      const year  = Schedule.calYear  || new Date().getFullYear();
+      const month = Schedule.calMonth !== null ? Schedule.calMonth + 1 : new Date().getMonth() + 1;
+      const daysInMonth = new Date(year, month, 0).getDate();
+
+      const prompt = `Ти — асистент ресторану «Тифліс». На фото — паперовий графік змін офіціантів на ${month}-й місяць ${year} року.
+
+Список офіціантів в системі:
+${userNames}
+
+Можливі позначки в клітинках:
+- "р" або "Р" → зміна "Р" (робоча)
+- "сн" або "СН" → зміна "СН" (сніданки)  
+- "б" або "Б" → зміна "Б" (барна)
+- "р/б" або "Р/Б" → зміна "Р/Б" (робоча + бар)
+- "сн/б" або "СН/Б" → зміна "СН/Б" (сніданки + бар)
+- "с" або "С" → зміна "С"
+- "о" або "О" → зміна "О" (відпустка)
+- порожня клітинка → вихідний (не включати у відповідь)
+
+Твоє завдання:
+1. Знайди кожного офіціанта з таблиці — зіставляй імена з моїм списком (Оксана=Оксана, Діма=Діма, Андрій=Андрій Швець тощо)
+2. Для кожного офіціанта прочитай усі дні де є позначка (1–${daysInMonth})
+3. Порожні клітинки = вихідний — НЕ включай у відповідь
+
+Відповідай ТІЛЬКИ валідним JSON без пояснень:
+{
+  "month": ${month},
+  "year": ${year},
+  "schedule": [
+    {"userId": "id_з_мого_списку", "name": "Ім'я", "days": {"1": "Р", "2": "Х", "5": "СН"}}
+  ]
+}
+
+Де userId — це id з дужок в моєму списку (наприклад якщо список містить "Оксана (id:abc123)" то userId="abc123").
+days — тільки дні з позначками (не вихідні).`;
+
+      const resp = await fetch(EDGE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
+        body: JSON.stringify({ action: 'read_duties_photo', imageBase64: base64, mediaType, prompt })
+      });
+
+      if (!resp.ok) throw new Error(`Edge ${resp.status}: ${await resp.text()}`);
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || 'Edge function error');
+
+      let parsed;
+      try {
+        parsed = JSON.parse((data.text || '').replace(/\`\`\`json|\`\`\`/g, '').trim());
+      } catch(e) {
+        throw new Error('Не вдалось розпарсити відповідь: ' + (data.text || '').slice(0, 200));
+      }
+
+      const entries = parsed.schedule || [];
+      if (!entries.length) {
+        Schedule._showScheduleOverlay(`
+          <div style="text-align:center;padding:40px 20px">
+            <div style="font-size:40px;margin-bottom:12px">🤷</div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">Нічого не розпізнано</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:8px">Спробуй фото з кращим освітленням</div>
+            <button class="btn btn-ghost btn-sm" style="margin-top:20px" data-action="close">Закрити</button>
+          </div>
+        `);
+        return;
+      }
+
+      // Рахуємо загальну кількість записів
+      let totalDays = 0;
+      entries.forEach(e => { totalDays += Object.keys(e.days || {}).length; });
+
+      // Превью по офіціантах
+      const previewRows = entries.map((e, i) => {
+        const dayCount = Object.keys(e.days || {}).length;
+        const sample = Object.entries(e.days || {}).slice(0, 5)
+          .map(([d, v]) => `${d}:${v}`).join(' ');
+        return `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+            <input type="checkbox" id="sched-check-${i}" checked
+              style="accent-color:var(--gold);width:16px;height:16px;flex-shrink:0">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:13px;font-weight:700;color:var(--text)">${esc(e.name || e.userId)}</div>
+              <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${dayCount} днів · ${esc(sample)}${dayCount > 5 ? '…' : ''}</div>
+            </div>
+          </div>`;
+      }).join('');
+
+      Schedule._pendingSchedulePhoto = { entries, month: parsed.month, year: parsed.year };
+
+      Schedule._showScheduleOverlay(`
+        <div style="padding:20px">
+          <div style="font-size:15px;font-weight:700;color:var(--gold);margin-bottom:4px">📅 Розпізнано ${entries.length} офіціантів · ${totalDays} записів</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Зніміть галочки з тих кого не потрібно імпортувати</div>
+          <div style="max-height:55vh;overflow-y:auto;margin-bottom:16px">${previewRows}</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-gold" style="flex:1" data-action="apply">✅ Імпортувати</button>
+            <button class="btn btn-ghost" data-action="close">Скасувати</button>
+          </div>
+        </div>
+      `);
+
+    } catch(err) {
+      console.error('Schedule photo error:', err);
+      Schedule._showScheduleOverlay(`
+        <div style="text-align:center;padding:40px 20px">
+          <div style="font-size:40px;margin-bottom:12px">❌</div>
+          <div style="font-size:14px;font-weight:700;color:var(--danger)">Помилка читання</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:8px;word-break:break-word">${esc(err.message)}</div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:20px" data-action="close">Закрити</button>
+        </div>
+      `);
+    }
+  },
+
+  async _applySchedulePhoto() {
+    const pending = Schedule._pendingSchedulePhoto;
+    if (!pending) { Schedule._closeScheduleOverlay(); return; }
+
+    const { entries, month, year } = pending;
+    const toApply = entries.filter((e, i) => {
+      const cb = document.getElementById(`sched-check-${i}`);
+      return cb && cb.checked;
+    });
+
+    if (!toApply.length) {
+      Schedule._closeScheduleOverlay();
+      toast('Нічого не вибрано', '');
+      return;
+    }
+
+    Schedule._closeScheduleOverlay();
+    toast('⏳ Зберігаємо графік...', '');
+
+    // Зберігаємо в локальний кеш і в Supabase
+    const scheduleMap = DB.get('schedule', {});
+    let saved = 0;
+
+    for (const entry of toApply) {
+      const userId = entry.userId;
+      if (!userId) continue;
+
+      for (const [dayStr, shift] of Object.entries(entry.days || {})) {
+        const day = parseInt(dayStr, 10);
+        if (!day || day < 1 || day > 31) continue;
+
+        // Формуємо дату YYYY-MM-DD
+        const mm = String(month).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        const date = `${year}-${mm}-${dd}`;
+
+        const key = `${userId}_${date}`;
+        scheduleMap[key] = shift;
+
+        // Зберігаємо в Supabase
+        try {
+          await sb.upsert('schedule', { user_id: userId, date, shift }, 'user_id,date');
+          saved++;
+        } catch(e) {
+          console.warn('schedule upsert error:', date, e);
+        }
+      }
+    }
+
+    DB.set('schedule', scheduleMap);
+
+    // Переходимо на місяць з графіку якщо він відрізняється
+    if (month && year) {
+      Schedule.calYear  = year;
+      Schedule.calMonth = month - 1;
+      Schedule._updateMonthLabel();
+    }
+
+    Schedule.renderTable(scheduleActiveRole, Schedule.calYear, Schedule.calMonth);
+    toast(`✅ Імпортовано ${saved} записів графіку`, 'success-t');
+    logEvent('schedule', `Імпорт графіку з фото: ${saved} записів`);
+  },
+
+  _pendingSchedulePhoto: null,
+
+  _showScheduleOverlay(html) {
+    let ov = document.getElementById('schedule-photo-overlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'schedule-photo-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.75);display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)';
+      ov.addEventListener('click', e => { if (e.target === ov) Schedule._closeScheduleOverlay(); });
+      document.body.appendChild(ov);
+    }
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:var(--surface);border:1px solid var(--gold-border);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:90vh;overflow-y:auto';
+    inner.innerHTML = html;
+    // addEventListener замість onclick — надійно на мобільному
+    const applyBtn = inner.querySelector('[data-action="apply"]');
+    if (applyBtn) applyBtn.addEventListener('click', () => Schedule._applySchedulePhoto());
+    inner.querySelectorAll('[data-action="close"]').forEach(btn =>
+      btn.addEventListener('click', () => Schedule._closeScheduleOverlay())
+    );
+    ov.innerHTML = '';
+    ov.appendChild(inner);
+    ov.style.display = 'flex';
+  },
+
+  _closeScheduleOverlay() {
+    const ov = document.getElementById('schedule-photo-overlay');
+    if (ov) ov.style.display = 'none';
   },
 
   toggleLegend() {
