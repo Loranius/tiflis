@@ -773,5 +773,30 @@
 <script src="./js/19-shiftswap.js"></script>
 <script src="./js/20-eventlog.js"></script>
 <script src="./js/21-bootstrap.js"></script>
+  <script src="./js/22-morakx.js"></script>
+
+  <!-- ══ МОРАКС — плаваючий AI-асистент ══ -->
+  <div id="morakx-fab" onclick="Morakx.toggle()" title="Моракс — AI-асистент">
+    🔮
+    <div class="fab-badge"></div>
+  </div>
+
+  <div id="morakx-panel">
+    <div id="morakx-header">
+      <div class="mhdr-ico">🔮</div>
+      <div>
+        <div class="mhdr-name">Моракс</div>
+        <div class="mhdr-sub">AI-асистент · Тифліс</div>
+      </div>
+      <button class="mhdr-close" onclick="Morakx.toggle()">✕</button>
+    </div>
+    <div id="morakx-messages"></div>
+    <div id="morakx-input-row">
+      <textarea id="morakx-input" placeholder="Запитай Моракса…" rows="1"></textarea>
+      <button id="morakx-send" onclick="Morakx.send()">➤</button>
+    </div>
+  </div>
+
+  <script>document.addEventListener("DOMContentLoaded", () => { if (typeof Morakx !== "undefined") Morakx.init(); });</script>
 </body>
 </html>
