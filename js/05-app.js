@@ -60,6 +60,7 @@ const App = {
       const _loginLastPage = localStorage.getItem('tiflis_last_page') || 'home';
       App.navigate(_loginLastPage);
       App.startPolling();
+      if (typeof Morakx !== 'undefined') Morakx.init();
       setTimeout(() => logEvent('auth', 'Вхід в систему'), 500);
     } catch(e) {
       errEl.textContent = 'Помилка з\'єднання з сервером';
@@ -114,6 +115,7 @@ const App = {
         || sessionStorage.getItem('tiflis_last_page') || 'home';
       App.navigate(_restoreLastPage);
       App.startPolling();
+      if (typeof Morakx !== 'undefined') Morakx.init();
       return true;
     } catch(e) { console.error('[restoreSession] FAILED:', e); return false; }
   },
@@ -650,9 +652,6 @@ const App = {
       </div>`;
 
     App.renderSidebarNav();
-
-    // Ініціалізуємо Моракс після логіну (коли currentUser вже є)
-    if (typeof Morakx !== 'undefined') Morakx.init();
 
     // Ранер — приховуємо нижню навігацію крім "Головна"
     if (u.role === 'runner' || u.role2 === 'runner') {
