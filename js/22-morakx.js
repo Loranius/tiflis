@@ -222,9 +222,12 @@ const Morakx = {
         }),
       });
 
-      if (!resp.ok) throw new Error(`${resp.status}`);
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => resp.status.toString());
+        throw new Error(`HTTP ${resp.status}: ${errText.slice(0,100)}`);
+      }
       const data = await resp.json();
-      if (!data.ok) throw new Error(data.error || 'error');
+      if (!data.ok) throw new Error(data.error || data.detail || 'edge function error');
 
       const rawText = data.text || '🤔';
       if (typingDiv) typingDiv.remove();
@@ -265,7 +268,9 @@ const Morakx = {
       }
     } catch(e) {
       if (typingDiv) typingDiv.remove();
-      Morakx._addMsg('bot', '😔 Помилка зв\'язку. Спробуй ще раз.');
+      console.error('Morakx error:', e);
+      const errMsg = e?.message || String(e);
+      Morakx._addMsg('bot', '😔 Помилка: ' + errMsg.slice(0, 80) + '. Спробуй ще раз.');
     } finally {
       Morakx._loading = false;
       if (sendBtn) sendBtn.disabled = false;
