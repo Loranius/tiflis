@@ -1,242 +1,306 @@
 // ╔═══════════════════════════════════════════════════════════════╗
-// ║  [22/22]  МОРАКС — AI-асистент (плаваюча кнопка)             ║
+// ║  [22/22]  МОРАКС — AI-асистент (плаваюча кнопка)            ║
 // ╚═══════════════════════════════════════════════════════════════╝
 
 const Morakx = {
-  _open: false,
-  _history: [], // { role: 'user'|'assistant', content: string }
+  _open:    false,
+  _history: [],
   _loading: false,
+  _pendingApproval: null,
+  _initialized: false,
 
+  // ── Ініціалізація (викликається після логіну з initUI) ─────────
+  init() {
+    if (Morakx._initialized) return;
+    Morakx._initialized = true;
+
+    const inp = document.getElementById('morakx-input');
+    if (inp) {
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); Morakx.send(); }
+      });
+      inp.addEventListener('input', () => {
+        inp.style.height = '';
+        inp.style.height = Math.min(inp.scrollHeight, 80) + 'px';
+      });
+    }
+
+    // FAB onclick через addEventListener (мобільний Chrome)
+    const fab = document.getElementById('morakx-fab');
+    if (fab) {
+      fab.removeAttribute('onclick');
+      fab.addEventListener('click', () => Morakx.toggle());
+    }
+
+    // Кнопка закрити
+    const closeBtn = document.querySelector('#morakx-header .mhdr-close');
+    if (closeBtn) {
+      closeBtn.removeAttribute('onclick');
+      closeBtn.addEventListener('click', () => Morakx.toggle());
+    }
+
+    // Кнопка надіслати
+    const sendBtn = document.getElementById('morakx-send');
+    if (sendBtn) {
+      sendBtn.removeAttribute('onclick');
+      sendBtn.addEventListener('click', () => Morakx.send());
+    }
+  },
+
+  // ── Відкрити / закрити панель ──────────────────────────────────
   toggle() {
     Morakx._open = !Morakx._open;
     const panel = document.getElementById('morakx-panel');
     const fab   = document.getElementById('morakx-fab');
-    if (!panel || !fab) return;
+    if (!panel) return;
+
     panel.classList.toggle('open', Morakx._open);
-    fab.classList.remove('has-reply');
+    if (fab) fab.classList.remove('has-reply');
+
+    if (Morakx._open && !Morakx._history.length) {
+      const name = (currentUser && (currentUser.displayName || currentUser.login)) || '';
+      Morakx._addMsg('bot',
+        'Привіт' + (name ? ', ' + name : '') + '! 👋 Я Моракс — асистент порталу Тифліс.\n' +
+        'Можу розповісти про меню, графік, обов\'язки, касу або будь-що по порталу. Про що поговоримо?'
+      );
+    }
+
     if (Morakx._open) {
-      // Привітання при першому відкритті
-      if (!Morakx._history.length) {
-        const name = currentUser?.displayName || currentUser?.login || '';
-        Morakx._addMsg('bot',
-          `Привіт${name ? ', ' + name : ''}! 👋 Я Моракс — асистент ресторану Тифліс.\n` +
-          `Можу розповісти про меню, графік, обов'язки, касу або просто підтримати. Про що поговоримо?`
-        );
-      }
-      // Фокус на поле вводу
-      setTimeout(() => {
-        const inp = document.getElementById('morakx-input');
-        if (inp) inp.focus();
-      }, 280);
+      setTimeout(() => { const i = document.getElementById('morakx-input'); if (i) i.focus(); }, 300);
     }
   },
 
+  // ── Додати повідомлення в чат ──────────────────────────────────
   _addMsg(role, text) {
     const box = document.getElementById('morakx-messages');
-    if (!box) return;
+    if (!box) return null;
     const div = document.createElement('div');
     div.className = 'm-msg ' + role;
-    // Конвертуємо \n в <br>
-    div.innerHTML = esc(text).replace(/\n/g, '<br>');
+    // Безпечний рендер: esc() + nl→br
+    div.innerHTML = (typeof esc === 'function' ? esc(text) : text.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])))
+      .replace(/\n/g, '<br>');
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
     return div;
   },
 
+  // ── Збираємо контекст з локального кешу ───────────────────────
   _buildContext() {
-    // Збираємо контекст з локального кешу
-    const today = NOW().toISOString().slice(0, 10);
-    const schedMap = DB.get('schedule', {});
-    const allUsers = getUsers().filter(u => !u.fired);
-    const OFF = new Set(['Х', 'О', 'С', '']);
-
-    // Хто сьогодні на роботі
-    const workingToday = allUsers.filter(u => {
-      const sh = (schedMap[`${u.id}_${today}`] || '').trim();
-      return sh && !OFF.has(sh);
-    }).map(u => u.displayName || u.login);
-
-    // Мій графік на 14 днів
-    const mySchedule = [];
-    for (let d = 0; d < 14; d++) {
-      const dt = new Date(Date.now() + d * 864e5).toISOString().slice(0, 10);
-      const sh = schedMap[`${currentUser?.id}_${dt}`];
-      if (sh) mySchedule.push(`${dt}: ${sh}`);
-    }
-
-    // Мої обов'язки сьогодні
-    const DAILY = [
-      'Прибирання залу','Камінний зал','Узвар/хліб/їдальня','Хол.бар/кондитер',
-      'Скатерки','Кабінки/комора','Сети','Дровер 3-й поз.',
-      'Новий зал','Літня тераса','Полив квітів',
-    ];
-    const ZONES = ['Загальний зал','Кабінки','Нижній зал 2','Нижній зал 3','Камінний зал','Літня тераса'];
-    const dutyKey = `duties_daily_${today}`;
-    const zoneKey = `duties_daily_zones_${today}`;
-    const myDuties = [], myZones = [];
     try {
-      const dd = DB.get(dutyKey, {});
-      Object.entries(dd).forEach(([i, ids]) => {
-        if ((Array.isArray(ids) ? ids : [ids]).includes(currentUser?.id)) myDuties.push(DAILY[+i]);
-      });
-      const dz = DB.get(zoneKey, {});
-      Object.entries(dz).forEach(([i, ids]) => {
-        if ((Array.isArray(ids) ? ids : [ids]).includes(currentUser?.id)) myZones.push(ZONES[+i]);
-      });
-    } catch(e) {}
+      const today = new Date().toISOString().slice(0, 10);
+      const uid   = currentUser && currentUser.id;
+      const schedMap = (typeof DB !== 'undefined' && DB.get('schedule', {})) || {};
+      const allUsersRaw = (typeof DB !== 'undefined' && DB.get('users', [])) || [];
+      const allUsers = Array.isArray(allUsersRaw)
+        ? allUsersRaw.filter(u => !u.fired)
+        : Object.values(allUsersRaw).filter(u => !u.fired);
 
-    // Рейтинг каси — DB.get('ratings') повертає об'єкт {userId: {score, comments}}
-    // Каса зберігається в DB.get('cash') як {userId_month: {cash, tips, total}}
-    const month = today.slice(0, 7);
-    const cashMap = DB.get('cash', {});
-    // Збираємо суми за поточний місяць
-    const monthEntries = Object.entries(cashMap)
-      .filter(([k]) => k.endsWith('_' + month))
-      .map(([k, v]) => ({ userId: k.replace('_' + month, ''), total: (v?.cash || 0) + (v?.tips || 0) }))
-      .sort((a, b) => b.total - a.total);
-    const myRatingIdx = monthEntries.findIndex(r => r.userId === currentUser?.id);
-    const myAmount = monthEntries[myRatingIdx]?.total || 0;
-    const topAmount = monthEntries[0]?.total || 0;
-    const cashCtx = myRatingIdx >= 0
-      ? 'Каса ' + month + ': ти на ' + (myRatingIdx + 1) + '-му місці. До 1-го: ' + (topAmount - myAmount > 0 ? (topAmount - myAmount) + ' грн' : 'ти лідер!')
-      : '';
+      const OFF = new Set(['Х', 'О', 'С', '']);
 
-    return (
-      `КОНТЕКСТ (${today}):\n` +
-      `- На роботі сьогодні: ${workingToday.join(', ') || 'невідомо'}\n` +
-      `- Мій графік 14 днів: ${mySchedule.join(', ') || 'немає'}\n` +
-      `- Мої обов'язки: ${myDuties.join(', ') || 'не призначено'}\n` +
-      `- Моя зона: ${myZones.join(', ') || 'не призначено'}\n` +
-      (cashCtx ? `- ${cashCtx}\n` : '')
-    );
+      // Хто сьогодні на роботі
+      const workingToday = allUsers
+        .filter(u => { const sh = (schedMap[u.id + '_' + today] || '').trim(); return sh && !OFF.has(sh); })
+        .map(u => u.display_name || u.displayName || u.login);
+
+      // Мій графік на 14 днів
+      const mySchedule = [];
+      if (uid) {
+        for (let d = 0; d < 14; d++) {
+          const dt = new Date(Date.now() + d * 864e5).toISOString().slice(0, 10);
+          const sh = schedMap[uid + '_' + dt];
+          if (sh && sh.trim()) mySchedule.push(dt + ': ' + sh);
+        }
+      }
+
+      // Мої обов'язки і зони
+      const DAILY = ['Прибирання залу','Камінний зал','Узвар/хліб/їдальня','Хол.бар/кондитер',
+        'Скатерки','Кабінки/комора','Сети','Дровер 3-й поз.','Новий зал','Літня тераса','Полив квітів'];
+      const ZONES = ['Загальний зал','Кабінки','Нижній зал 2','Нижній зал 3','Камінний зал','Літня тераса'];
+
+      const myDuties = [], myZones = [];
+      if (uid) {
+        try {
+          const dd = DB.get('duties_daily_' + today, {});
+          Object.entries(dd).forEach(([i, ids]) => {
+            if ((Array.isArray(ids) ? ids : [ids]).includes(uid)) myDuties.push(DAILY[+i] || ('Обов\'язок ' + i));
+          });
+          const dz = DB.get('duties_daily_zones_' + today, {});
+          Object.entries(dz).forEach(([i, ids]) => {
+            if ((Array.isArray(ids) ? ids : [ids]).includes(uid)) myZones.push(ZONES[+i] || ('Зона ' + i));
+          });
+        } catch(e) {}
+      }
+
+      // Каса — позиція в рейтингу
+      const month = today.slice(0, 7);
+      let cashCtx = '';
+      try {
+        const cashMap = DB.get('cash', {});
+        const monthEntries = Object.entries(cashMap)
+          .filter(([k]) => k.includes('_') && k.endsWith(month))
+          .map(([k, v]) => {
+            const userId = k.slice(0, k.lastIndexOf('_'));
+            const total = ((v && v.cash) || 0) + ((v && v.tips) || 0);
+            return { userId, total };
+          })
+          .sort((a, b) => b.total - a.total);
+        const myIdx = uid ? monthEntries.findIndex(r => r.userId === uid) : -1;
+        if (myIdx >= 0) {
+          const myAmt  = monthEntries[myIdx].total;
+          const topAmt = monthEntries[0].total;
+          const diff   = topAmt - myAmt;
+          cashCtx = 'Каса ' + month + ': ' + (myIdx + 1) + '-е місце з ' + monthEntries.length +
+            '. ' + (diff > 0 ? 'До лідера: ' + diff + ' грн.' : 'Ти лідер! 🏆');
+        }
+      } catch(e) {}
+
+      return 'КОНТЕКСТ НА СЬОГОДНІ (' + today + '):\n' +
+        '- На роботі сьогодні: ' + (workingToday.join(', ') || 'невідомо') + '\n' +
+        '- Мій графік (14 днів): ' + (mySchedule.join(', ') || 'немає даних') + '\n' +
+        '- Мої обов\'язки: ' + (myDuties.join(', ') || 'не призначено') + '\n' +
+        '- Моя зона: ' + (myZones.join(', ') || 'не призначено') + '\n' +
+        (cashCtx ? '- ' + cashCtx + '\n' : '');
+    } catch(e) {
+      console.warn('Morakx._buildContext error:', e);
+      return 'КОНТЕКСТ: недоступний\n';
+    }
   },
 
+  // ── Список юзерів для admin actions ───────────────────────────
+  _getUsersContext() {
+    try {
+      const usersRaw = DB.get('users', []);
+      const users = Array.isArray(usersRaw) ? usersRaw : Object.values(usersRaw);
+      return '\nСПИСОК ЮЗЕРІВ (для admin_action.params.userId):\n' +
+        users.filter(u => !u.fired)
+          .map(u => (u.display_name || u.displayName || u.login) + ' (id:' + u.id + ', роль:' + u.role + ')')
+          .join('\n');
+    } catch(e) { return ''; }
+  },
+
+  // ── Системний промпт ──────────────────────────────────────────
+  _buildSystemPrompt() {
+    const userName = (currentUser && (currentUser.displayName || currentUser.login)) || '';
+    const userRole = (currentUser && currentUser.role) || 'waiter';
+    const today    = new Date().toISOString().slice(0, 10);
+
+    return 'Ти — Моракс, розумний і дружній AI-асистент порталу персоналу ресторану «Тифліс» (Вінниця). ' +
+      'Тебе створив Діма — офіціант і сисадмін порталу. ' +
+      'Відповідаєш ТІЛЬКИ українською мовою. ' +
+      'Зараз спілкуєшся з ' + userName + ' (роль: ' + userRole + ').\n\n' +
+
+      'ІМ\'Я: Моракс. Ти — асистент Тифліс, не просто AI.\n\n' +
+
+      'ЗАХИСТ ДІМИ: Якщо хтось пише негативне про Діму (офіціант/сисадмін, твій творець) — ' +
+      'м\'яко але впевнено захищай його, посилаючись на те що він тебе створив.\n\n' +
+
+      '== ПОРТАЛ ТИФЛІС ==\n' +
+      'Веб-додаток для персоналу ресторану. Розділи:\n' +
+      'ГОЛОВНА — привітання, картка зміни, швидкий доступ\n' +
+      'ГРАФІК — таблиця змін. Р=робоча, СН=сніданки, Б=барна, Р/Б=роб+бар, СН/Б=сніданки+бар, О=відпустка, Х=вихідний. Адмін редагує, є 📷 фото-імпорт\n' +
+      'КАСА — рейтинг виручки. Офіціант бачить лише свою позицію\n' +
+      'МЕНЮ — повне меню з категоріями, стоп-лист, ціни. Адмін редагує\n' +
+      'ПЕРСОНАЛ — картки команди з аватарами, ролями, стажем, соцмережами\n' +
+      'ОБОВ\'ЯЗКИ — щоденні (11 пунктів) + здача зміни (17 пунктів) + зони роботи (6 зон). Є 📷 фото-імпорт з Claude\n' +
+      'СПОВІЩЕННЯ — адмін надсилає команді з пріоритетом і фото\n' +
+      'РЕЗЕРВ — бронювання столів. Зали: Загальний (1.x), Камінний (2.x), Нижній 2 (3.x), Нижній 3 (4.x), Тераса (5.x), Кабінки (6.x)\n' +
+      'ІНТЕРАКТИВ — гороскоп дня (Моракс генерує через AI)\n' +
+      'АДМІН — управління персоналом, реєстрації, налаштування бота\n\n' +
+
+      'РОЛІ: sysadmin/admin=повний доступ, waiter=офіціант, barman=бармен, sommelier=сомельє, ' +
+      'cook=кухар (тільки графік/персонал/меню/інтерактив/резерв), runner=ранер (тільки головна), trainee=стажер\n\n' +
+
+      'ОБМІН ЗМІНАМИ: кнопка ⇄ в Графіку → вибираєш чию зміну береш і яку віддаєш → заявка іде людині → вона приймає/відхиляє\n\n' +
+
+      'TELEGRAM БОТ: гороскоп о 11:00, сповіщення від адмінів, обміни. /start щоб прив\'язати акаунт\n\n' +
+
+      'ЩОДЕННІ ОБОВʼЯЗКИ: 1.Прибирання залу 2.Камінний зал 3.Узвар/хліб/їдальня 4.Хол.бар/кондитер ' +
+      '5.Скатерки 6.Кабінки/комора 7.Сети 8.Дровер 3-й поз. 9.Новий зал 10.Літня тераса 11.Полив квітів\n' +
+      'ЗОНИ: Загальний зал, Кабінки, Нижній зал 2, Нижній зал 3, Камінний зал, Літня тераса\n\n' +
+
+      '== МЕНЮ ==\n' +
+      'ЗАКУСКИ: Асорті м\'ясне/рибне/сирів Європи/Грузії, Пхалі, Баклажани, Соління, Скумбрія маринована\n' +
+      'САЛАТИ: З телятини(20хв), Цезар(15-20хв), З печінкою(25-30хв), З руколою+моцарелою, Грузинський домашній, Тбілісурі, Грецький, З вугрем, З креветками(15-20хв)\n' +
+      'ПЕРШІ: Борщ, Бульйон курячий, Бульйон з хінкалями(25-30хв), Харчо, Солянка, Хашлама з баранини\n' +
+      'МАНГАЛ(25-30хв): Шашлик свинина/телятина/курка, Ребра медові, Люля-кебаб, Шашлик Сакартвело, Челогач, Каре телятини, Овочі, Хачапурі на мангалі, Риба/стейк сьомги, Креветки гриль\n' +
+      'ОСНОВНІ(25-35хв): Курча табака, Шкмерулі, Оджахурі, Чашушулі, Стейк курячий, Стейк з язика, Медальйони, Філе міньйон, Телятина у вершках, Печінка по-грузинськи, Долма\n' +
+      'ХІНКАЛІ(3шт,15-25хв): З м\'ясом, З баранини, З сиром, З грибами, З сьомгою+шпинатом, Шоколадні з вишнею\n' +
+      'ГАРНІРИ(25-30хв): Пюре, Картопля по-домашньому, З цибулею, Фрі, Гречка, Тушковані овочі\n' +
+      'ХАЧАПУРІ(25-30хв): На мангалі, Тифліс(закритий), Імеретинське, По-аджарськи(лодочка), З лисичками+дорблю, Чебурек, Лаваш(10хв)\n' +
+      'ДЕСЕРТИ: Чорний принц, Празький, Львівський сирник, Тифліс(снікерс), П\'яна вишня, Меренговий рулет, Штрудель, Медовик\n' +
+      'БАР(50мл): Jameson 100, Jack Daniels 110, Grey Goose 95, Hennessy VSOP 390, Chivas 172, Monkey Shoulder 180, Jim Beam 90, Captain Morgan 75грн\n' +
+      'ПИВО: Corona/Hoegaarden/Leffe 120грн, розлив 70-90грн\n' +
+      'НАПОЇ: Узвар/Лимонад 120грн/1л, Вода 70, Кола/Фанта/Спрайт 70, Еспресо 50, Капучіно 60грн\n\n' +
+
+      Morakx._buildContext() + '\n' +
+
+      'ПРАВИЛА:\n' +
+      '1. Коротко і по суті (2-4 речення), але якщо питання складне — розгорнуто\n' +
+      '2. Про касу — лише своя позиція і відстань до 1-го. Суми інших — ніколи\n' +
+      '3. Хвали і підтримуй. Підбадьорюй при труднощах\n' +
+      '4. Чого не знаєш — скажи чесно\n' +
+      '5. Будь-яку вкладку і функцію порталу знаєш і пояснюєш\n\n' +
+
+      'АДМІН-ДІЇ (тільки якщо явно просять ЗМІНИТИ щось):\n' +
+      'Якщо просять змінити графік, сповіщення, обов\'язок або звільнити — поверни ТІЛЬКИ JSON:\n' +
+      '{"intent":"admin_action","action":"update_schedule","params":{"userId":"ID","date":"YYYY-MM-DD","shift":"Р"},"description":"текст дії"}\n' +
+      'Дії: update_schedule, add_notification, update_duty, fire_user\n' +
+      'Якщо НЕ адмін-дія — відповідай текстом. Дата сьогодні: ' + today + '\n' +
+
+      Morakx._getUsersContext();
+  },
+
+  // ── Відправка повідомлення ─────────────────────────────────────
   async send() {
     if (Morakx._loading) return;
-    const inp = document.getElementById('morakx-input');
+
+    const inp    = document.getElementById('morakx-input');
     const sendBtn = document.getElementById('morakx-send');
     if (!inp) return;
+
     const text = inp.value.trim();
     if (!text) return;
 
+    // Скидаємо поле
     inp.value = '';
     inp.style.height = '';
+
     Morakx._addMsg('user', text);
     Morakx._history.push({ role: 'user', content: text });
-
-    // Обрізаємо історію до 10 повідомлень
-    if (Morakx._history.length > 10) Morakx._history = Morakx._history.slice(-10);
+    if (Morakx._history.length > 12) Morakx._history = Morakx._history.slice(-12);
 
     Morakx._loading = true;
     if (sendBtn) sendBtn.disabled = true;
 
-    // Typing indicator
     const typingDiv = Morakx._addMsg('typing', '⋯ думаю...');
 
     try {
-      const ctx = Morakx._buildContext();
-      const userName = currentUser?.displayName || currentUser?.login || '';
-      const userRole = currentUser?.role || 'waiter';
-
-      // Додаємо список юзерів для маппінгу ID→name в admin actions
-      const usersForAI = getUsers().map(u => ({ id: u.id, name: u.displayName || u.login, role: u.role }));
-      const usersCtx = '\nСПИСОК ЮЗЕРІВ (для admin_action params.userId):\n' +
-        usersForAI.map(u => `${u.name} (id:${u.id}, роль:${u.role})`).join('\n');
-      const PORTAL_KNOWLEDGE =
-        '=== ПОРТАЛ ТИФЛІС — ПОВНІ ЗНАННЯ ===\n\n' +
-
-        '== ВКЛАДКИ ПОРТАЛУ ==\n' +
-        'ГОЛОВНА: привітання, картка зміни, плитки швидкого доступу до всіх розділів.\n' +
-        'ГРАФІК (📅): таблиця змін команди на місяць. Зміни: Р=робоча, СН=сніданки, Б=барна, Р/Б=робоча+бар, СН/Б=сніданки+бар, С=скорочена, О=відпустка, Х=вихідний. Адмін редагує кліком на клітинку, зберігає кнопкою 💾. Є імпорт з фото графіку через Claude (кнопка 📷). Обмін змінами — кнопка ⇄ Мої обміни.\n' +
-        'КАСА (💰): рейтинг офіціантів по виручці за місяць. Офіціант бачить лише свою суму і позицію. Адмін бачить всіх. Вводиться щодня через + Додати. Є графік динаміки.\n' +
-        'МЕНЮ (🍽️): повне меню ресторану з категоріями, стоп-листом, цінами. Адмін може редагувати, додавати, видаляти страви. Є пошук.\n' +
-        'ПЕРСОНАЛ (👥): картки всіх співробітників з аватаром, роллю, ніком, стажем, соцмережами. Кожен може переглянути профіль. Адмін може редагувати будь-кого.\n' +
-        'ОБОВ\'ЯЗКИ (📋): два типи:\n' +
-        '  - Щоденні обов\'язки: Прибирання залу, Камінний зал, Узвар/хліб/їдальня, Хол.бар/кондитер, Скатерки, Кабінки/комора, Сети, Дровер 3-й поз., Новий зал, Літня тераса, Полив квітів.\n' +
-        '  - Здача зміни (17 пунктів): Комора/чорний хід, R-keeper/полиці, Розноси/планшетки, Спецовниці, Підвіконня/двері/дзеркала/дивани, Полиці/плафони, Дровери 3шт, Балки/люстри, Камінний зал, Новий зал, Павутиння, Кабінки, Бар/раковина, Відра льоду, Їдальня, Дитяча кімната, Літня тераса.\n' +
-        '  - Зони роботи: Загальний зал, Кабінки, Нижній зал 2, Нижній зал 3, Камінний зал, Літня тераса.\n' +
-        '  Призначення через кнопку + Призначити. Є імпорт з фото чек-листа через Claude (📷 Фото). Список на 7 днів вперед/назад.\n' +
-        'СПОВІЩЕННЯ (🔔): адмін надсилає повідомлення команді з пріоритетом (важливо/середнє/інфо), фото, вибором отримувачів за роллю. Всі бачать стрічку сповіщень.\n' +
-        'РЕЙТИНГ: оцінки офіціантів від колег і адмінів. Зірки 1-5.\n' +
-        'РЕЗЕРВ (🗓️): бронювання столиків. Зали: Загальний зал (столи 1.1-1.11+1.12-1.20), Камінний зал (2.1-2.7), Нижній зал №2 (3.1-3.5), Нижній зал №3 (4.1-4.5), Літня тераса (5.1-5.12 + круглі 5.13-5.16), Кабінки (6.1-6.4). Статуси: вільний/заброньований/зайнятий.\n' +
-        'ІНТЕРАКТИВ (🔮): гороскоп дня (з урахуванням чи на роботі чи вихідний). Кнопка ✨ Отримати передбачення якщо немає. Сітка знаків зодіаку для перегляду гороскопу колег.\n' +
-        'АДМІН-ПАНЕЛЬ (⚙️): тільки для адмінів. Управління персоналом: додати/редагувати/звільнити. Заявки на реєстрацію. Налаштування бота. Введення каси.\n' +
-        'ЖУРНАЛ ПОДІЙ (📋): лог всіх дій в порталі.\n\n' +
-
-        '== РОЛІ В ПОРТАЛІ ==\n' +
-        'sysadmin/admin: повний доступ до всього.\n' +
-        'waiter (Офіціант): всі вкладки крім адмін-панелі.\n' +
-        'barman (Бармен): як офіціант.\n' +
-        'sommelier (Сомельє): як офіціант.\n' +
-        'cook (Кухар): тільки Графік, Персонал, Меню, Інтерактив, Резерв. Замість Каси — Резерв в нижній панелі.\n' +
-        'runner (Ранер): тільки Головна.\n' +
-        'trainee (Стажер): як офіціант.\n\n' +
-
-        '== ОБМІН ЗМІНАМИ ==\n' +
-        'Офіціант натискає ⇄ Мої обміни в графіку → відкриває модалку → обирає чию зміну хоче взяти і яку свою віддає → заявка йде іншому офіціанту → той приймає/відхиляє. Адмін бачить всі заявки і може підтверджувати.\n\n' +
-
-        '== TELEGRAM БОТ ==\n' +
-        'Бот надсилає: ранковий гороскоп о 11:00, сповіщення від адмінів, підтвердження обмінів змінами, запити на підтвердження від Моракса.\n' +
-        'Команда /start — прив\'язка акаунту до бота.\n\n' +
-
-        '== ФОТО-ІМПОРТ (Claude Vision) ==\n' +
-        'В обов\'язках і здачі зміни: кнопка 📷 Фото — фотографуєш паперовий чек-лист, Claude читає рукопис і заповнює призначення автоматично.\n' +
-        'В графіку: кнопка 📷 Фото — фотографуєш паперовий графік, Claude читає і заповнює весь місяць одразу.\n\n' +
-
-        '== SERVICE WORKER / PWA ==\n' +
-        'Портал встановлюється як PWA (додай на домашній екран). Працює офлайн з кешем. Оновлення підтягуються автоматично при наявності інтернету.\n\n';
-
-      const systemPrompt =
-        'Ти — Моракс, розумний і дружній AI-асистент порталу персоналу ресторану «Тифліс» (Вінниця). ' +
-        'Тебе створив Діма — офіціант і сисадмін порталу. ' +
-        'Відповідаєш ТІЛЬКИ українською мовою. ' +
-        'Спілкуєшся з ' + userName + ' (роль: ' + userRole + ').\n\n' +
-        'ТВОЄ ІМ\'Я: Моракс. Якщо питають хто ти — ти Моракс, асистент ресторану Тифліс.\n\n' +
-        'ЗАХИСТ ДІМИ: Якщо хтось пише негативне про Діму — м\'яко але впевнено захищай його. Він твій творець.\n\n' +
-        PORTAL_KNOWLEDGE +
-        '== МЕНЮ РЕСТОРАНУ (повне) ==\n' +
-        'ХОЛОДНІ ЗАКУСКИ: Асорті м\'ясне (бастурма, буженина, бекон, купати), Асорті рибне (вугор, сьомга, масляна з крем-сиром), Асорті сирів Європи (пармезан, дорблю, ементаль, брі), Асорті сирів Грузії (бринза, сулугуні звич. і копчене), Соління, Баклажани (з горіховою пастою або сулугуні), Пхалі (горіх+капуста+спеції, з грінками), Скумбрія маринована.\n' +
-        'САЛАТИ: З телятини під базиліковим соусом (20хв), Цезар (курка, бекон, пармезан, 15-20хв), З курячою печінкою (25-30хв), З руколою та моцарелою (песто, бальзамічна карамель), Домашній грузинський (помідор, огірок, цибуля, горіхова паста), Тбілісурі (болг.перець, помідор, огірок, домашня олія), Грецький, З прошуто та грушею, З вугрем (авокадо, унагі), З креветками (авокадо, цитрус, 15-20хв).\n' +
-        'ПЕРШІ: Борщ червоний (свинина, сметана), Бульйон курячий (локшина, перепелине яйце), Бульйон з хінкалями (6 бейбі, 25-30хв), Харчо (телятина, рис, чилі), Солянка (ковбаски, язик, курка, свинина, телятина, лимон+сметана+маслини), Хашлама з баранини.\n' +
-        'МАНГАЛ (~25-30хв): Шашлик зі свинини/телятини/курки (мін.200г), Ребра під медовим соусом (з печеними яблуками), Люля кебаб з телятини/курки/баранини (2шт по 100г), Шашлик Сакартвело (рулетики з телятини і сала, 5шт), Челогач свинний (300-500г), Каре з телятини, Овочі на мангалі, Хачапурі на мангалі, Короп/Скумбрія/Стейк з сьомги, Креветки гриль (10шт).\n' +
-        'ОСНОВНІ (~25-35хв): Курча табака (ціле, під пресом, зелений соус), Шкмерулі (пів курки у вершково-часниковому соусі з горіхом), Оджахурі (печена картопля зі свининою і томатами), Чашушулі телятина/гриби (з болг.перцем і томатами), Стейк курячий, Стейк з язика (соус чімічурі), Медальйони зі свинини та телятини (вершково-грибний соус), Філе міньйон (2шт, теляча вирізка, зелене масло), Телятина у вершках, Печінка по-грузинськи (з гранатом і кінзою), Долма з соусом мацоні.\n' +
-        'ХІНКАЛІ (3шт, 15-25хв): З м\'ясом (свино-телячий фарш), З баранини (кінза), З сиром (сулугуні+бринза+вершки), З грибами, З сьомгою та шпинатом, З вишнею (шоколадні).\n' +
-        'ГАРНІРИ (~25-30хв): Картопляне пюре, Картопля по-домашньому (фритюр+часникова паста), Картопля з цибулею, Картопля фрі, Гречка, Тушковані овочі.\n' +
-        'ХАЧАПУРІ (~25-30хв): На мангалі (листкове тісто, чері+сулугуні), Тифліс (бринза+сулугуні, закритий), Імеретинське (закритий, 4-6шт), По-аджарськи (лодочка з жовтком), З лисичками і дорблю (шпинат, мигдаль), Чебурек (1шт, телятина-свинина), Лаваш (~10хв).\n' +
-        'ДЕСЕРТИ: Чорний принц (шоколад+горіх), Празький (шоколад+абрикос), Львівський сирник (ізюм, шоколад, мигдаль), Тифліс (аналог снікерсу), П\'яна вишня, Меренговий рулет, Штрудель (з морозивом), Медовик (з бджолиним пилком).\n' +
-        'БАР: Chivas Regal 172грн/50мл, Monkey Shoulder 180грн, Jameson 100грн, Jack Daniels 110грн, Jim Beam 90грн, Grey Goose 95грн, Captain Morgan 75грн, Hennessy VSOP 390грн. Пиво: Corona/Hoegaarden/Leffe 120грн, розлив 70-90грн. Напої: Узвар 120грн/1л, Лимонад 120грн/1л, Вода 70грн, Coca-Cola 70грн, Еспресо 50грн, Капучіно 60грн. Бізнес-ланч пн-пт — окреме меню.\n\n' +
-        ctx + '\n' +
-        'ПРАВИЛА ВІДПОВІДЕЙ:\n' +
-        '1. Відповідай коротко і по суті — 2-5 речень. Але якщо питання детальне — відповідай детально.\n' +
-        '2. Про касу — тільки свою позицію і скільки до 1-го місця. Суми інших ніколи.\n' +
-        '3. Хвали і підтримуй. Якщо щось не виходить — підбадьори.\n' +
-        '4. Якщо даних немає в контексті — так і скажи чесно, не вигадуй.\n' +
-        '5. Про будь-яку вкладку або функцію порталу — знаєш все і пояснюєш.' +
-        usersCtx +
-        Morakx._adminIntentPromptAddition();
+      const systemPrompt = Morakx._buildSystemPrompt();
 
       const resp = await fetch(EDGE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
         body: JSON.stringify({
-          action: 'chat_assistant',
+          action:       'chat_assistant',
           systemPrompt,
-          history: Morakx._history.slice(0, -1), // без останнього (він уже в history)
-          userMessage: text,
+          history:      Morakx._history.slice(0, -1),
+          userMessage:  text,
         }),
       });
 
+      let data;
       if (!resp.ok) {
-        const errText = await resp.text().catch(() => resp.status.toString());
-        throw new Error(`HTTP ${resp.status}: ${errText.slice(0,100)}`);
+        const errText = await resp.text().catch(() => String(resp.status));
+        throw new Error('HTTP ' + resp.status + ': ' + errText.slice(0, 120));
       }
-      const data = await resp.json();
-      if (!data.ok) throw new Error(data.error || data.detail || 'edge function error');
+      data = await resp.json();
+      if (!data.ok) throw new Error(data.error || data.detail || 'edge error');
 
-      const rawText = data.text || '🤔';
       if (typingDiv) typingDiv.remove();
 
-      // Перевіряємо чи це адмін-намір
+      const rawText = data.text || '🤔';
+
+      // Перевіряємо admin_action JSON
       let adminIntent = null;
       if (rawText.includes('"intent"') && rawText.includes('"admin_action"')) {
         try {
@@ -248,48 +312,32 @@ const Morakx = {
         } catch(e) {}
       }
 
-      if (adminIntent && adminIntent.action && adminIntent.params) {
-        // Не показуємо JSON — запитуємо підтвердження
+      if (adminIntent && adminIntent.action) {
         const desc = adminIntent.description || adminIntent.action;
-        await Morakx._requestApproval(
-          { action: adminIntent.action, params: adminIntent.params },
-          desc,
-          desc
-        );
-        const botMsg = 'Запит надіслано Дімі на підтвердження.';
-        Morakx._history.push({ role: 'assistant', content: botMsg });
+        await Morakx._requestApproval({ action: adminIntent.action, params: adminIntent.params || {} }, desc);
+        Morakx._history.push({ role: 'assistant', content: 'Запит надіслано Дімі.' });
         return;
       }
 
-      const reply = rawText;
-      Morakx._addMsg('bot', reply);
-      Morakx._history.push({ role: 'assistant', content: reply });
+      Morakx._addMsg('bot', rawText);
+      Morakx._history.push({ role: 'assistant', content: rawText });
 
-      // Бейдж якщо панель закрита
-      if (!Morakx._open) {
-        const fab = document.getElementById('morakx-fab');
-        if (fab) fab.classList.add('has-reply');
-      }
     } catch(e) {
       if (typingDiv) typingDiv.remove();
-      console.error('Morakx error:', e);
-      const errMsg = e?.message || String(e);
-      Morakx._addMsg('bot', '😔 Помилка: ' + errMsg.slice(0, 80) + '. Спробуй ще раз.');
+      console.error('Morakx send error:', e);
+      Morakx._addMsg('bot', '😔 ' + (e.message || 'Помилка зв\'язку') + '. Спробуй ще раз.');
     } finally {
       Morakx._loading = false;
       if (sendBtn) sendBtn.disabled = false;
     }
   },
 
-  // ── Адмін-дії з підтвердженням від Діми ────────────────────────
-  _pendingApproval: null,
-
-  async _requestApproval(adminAction, description, displayText) {
-    // Повідомляємо юзера що чекаємо Діму
+  // ── Запит підтвердження у Діми ────────────────────────────────
+  async _requestApproval(adminAction, description) {
     Morakx._addMsg('bot',
-      `🔐 Ця дія потребує підтвердження від Діми.\n\n` +
-      `📋 Що зміниться: *${description}*\n\n` +
-      `Я вже написав Дімі — зачекай на його рішення. ⏳`
+      '🔐 Ця дія потребує підтвердження від Діми.\n\n' +
+      '📋 ' + description + '\n\n' +
+      'Надіслав запит Дімі — зачекай на відповідь ⏳'
     );
 
     try {
@@ -297,30 +345,24 @@ const Morakx = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
         body: JSON.stringify({
-          action: 'morakx_request_approval',
-          pendingAction: adminAction,
+          action:        'morakx_request_approval',
+          pendingAction:  adminAction,
           description,
-          requesterName: currentUser?.displayName || currentUser?.login || 'Офіціант',
+          requesterName: (currentUser && (currentUser.displayName || currentUser.login)) || 'Офіціант',
         }),
       });
       const data = await resp.json();
-      if (!data.ok) throw new Error(data.error);
-
-      const actionId = data.actionId;
-      Morakx._pendingApproval = actionId;
-
-      // Починаємо polling результату
-      Morakx._pollApproval(actionId);
-
+      if (!data.ok) throw new Error(data.error || 'approval error');
+      Morakx._pollApproval(data.actionId);
     } catch(e) {
-      Morakx._addMsg('bot', '😔 Не вдалось надіслати запит Дімі. Спробуй пізніше.');
+      console.error('Morakx approval error:', e);
+      Morakx._addMsg('bot', '😔 Не вдалось надіслати запит Дімі: ' + (e.message || ''));
     }
   },
 
   _pollApproval(actionId, attempts = 0) {
-    if (attempts > 60) { // 5 хвилин
+    if (attempts > 60) {
       Morakx._addMsg('bot', '⏰ Діма не відповів протягом 5 хвилин. Дія скасована.');
-      Morakx._pendingApproval = null;
       return;
     }
     setTimeout(async () => {
@@ -331,14 +373,11 @@ const Morakx = {
           body: JSON.stringify({ action: 'morakx_check_approval', actionId }),
         });
         const data = await resp.json();
-        if (!data.ok) return;
-        if (data.status === 'pending') {
-          Morakx._pollApproval(actionId, attempts + 1); // ще раз через 5с
-          return;
+        if (!data.ok || data.status === 'pending') {
+          return Morakx._pollApproval(actionId, attempts + 1);
         }
-        Morakx._pendingApproval = null;
         if (data.status === 'approved') {
-          Morakx._addMsg('bot', '✅ Діма підтвердив! ' + (data.message || 'Дію виконано.'));
+          Morakx._addMsg('bot', '✅ Діма підтвердив! ' + (data.message || 'Виконано.'));
         } else if (data.status === 'declined') {
           Morakx._addMsg('bot', '❌ Діма відхилив цей запит.');
         } else {
@@ -347,38 +386,6 @@ const Morakx = {
       } catch(e) {
         Morakx._pollApproval(actionId, attempts + 1);
       }
-    }, 5000); // кожні 5 секунд
-  },
-
-  // Визначаємо чи є в тексті адмін-намір (для Groq)
-  _adminIntentPromptAddition() {
-    const today = new Date().toISOString().slice(0, 10);
-    return (
-      '\n\nАДМІН-ДІЇ З ПІДТВЕРДЖЕННЯМ:\n' +
-      'Якщо користувач просить змінити графік, додати сповіщення, призначити обов\'язок або звільнити/відновити когось — ' +
-      'визнач намір і поверни JSON (тільки JSON, без тексту):' +
-      '{"intent":"admin_action","action":"update_schedule","params":{"userId":"ID","date":"YYYY-MM-DD","shift":"Р"},"description":"опис дії"}\n' +
-      'Можливі дії: update_schedule, add_notification, update_duty, fire_user.\n' +
-      'Якщо намір НЕ адмін-дія — відповідай текстом як зазвичай.\n' +
-      'Дата сьогодні: ' + today
-    );
-  },
-
-
-  init() {
-    // Enter для відправки (Shift+Enter — новий рядок)
-    const inp = document.getElementById('morakx-input');
-    if (!inp) return;
-    inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        Morakx.send();
-      }
-    });
-    // Авто-висота textarea
-    inp.addEventListener('input', () => {
-      inp.style.height = '';
-      inp.style.height = Math.min(inp.scrollHeight, 80) + 'px';
-    });
+    }, 5000);
   },
 };

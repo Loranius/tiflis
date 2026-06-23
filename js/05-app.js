@@ -651,6 +651,9 @@ const App = {
 
     App.renderSidebarNav();
 
+    // Ініціалізуємо Моракс після логіну (коли currentUser вже є)
+    if (typeof Morakx !== 'undefined') Morakx.init();
+
     // Ранер — приховуємо нижню навігацію крім "Головна"
     if (u.role === 'runner' || u.role2 === 'runner') {
       document.querySelectorAll('.bn-btn:not(.bn-home)').forEach(b => b.style.display = 'none');

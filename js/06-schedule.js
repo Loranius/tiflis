@@ -362,9 +362,26 @@ days — тільки дні з позначками (не вихідні).`;
 
       let parsed;
       try {
-        parsed = JSON.parse((data.text || '').replace(/\`\`\`json|\`\`\`/g, '').trim());
+        // Очищаємо markdown fences і витягуємо JSON
+        let rawText = (data.text || '').trim();
+        // Видаляємо ```json ... ``` або просто ```
+        rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+        // Якщо відповідь обрізана — намагаємось знайти валідний JSON
+        if (!rawText.endsWith('}')) {
+          // Знаходимо останній валідний closing bracket
+          const lastBrace = rawText.lastIndexOf('}');
+          if (lastBrace > 0) rawText = rawText.slice(0, lastBrace + 1) + ']}';
+        }
+        parsed = JSON.parse(rawText);
       } catch(e) {
-        throw new Error('Не вдалось розпарсити відповідь: ' + (data.text || '').slice(0, 200));
+        // Спробуємо regex витягнути JSON об'єкт
+        try {
+          const m = (data.text || '').match(/\{[\s\S]*\}/);
+          if (m) parsed = JSON.parse(m[0]);
+          else throw new Error('no JSON found');
+        } catch(e2) {
+          throw new Error('Не вдалось розпарсити відповідь: ' + (data.text || '').slice(0, 200));
+        }
       }
 
       const entries = parsed.schedule || [];
