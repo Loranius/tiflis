@@ -85,16 +85,20 @@ const Morakx = {
       });
     } catch(e) {}
 
-    // Рейтинг (позиція)
+    // Рейтинг каси — DB.get('ratings') повертає об'єкт {userId: {score, comments}}
+    // Каса зберігається в DB.get('cash') як {userId_month: {cash, tips, total}}
     const month = today.slice(0, 7);
-    const ratings = DB.get('ratings', []);
-    const monthRatings = ratings.filter(r => r.month === month)
-      .sort((a, b) => b.amount - a.amount);
-    const myRatingIdx = monthRatings.findIndex(r => r.user_id === currentUser?.id);
-    const myAmount = monthRatings[myRatingIdx]?.amount || 0;
-    const topAmount = monthRatings[0]?.amount || 0;
+    const cashMap = DB.get('cash', {});
+    // Збираємо суми за поточний місяць
+    const monthEntries = Object.entries(cashMap)
+      .filter(([k]) => k.endsWith('_' + month))
+      .map(([k, v]) => ({ userId: k.replace('_' + month, ''), total: (v?.cash || 0) + (v?.tips || 0) }))
+      .sort((a, b) => b.total - a.total);
+    const myRatingIdx = monthEntries.findIndex(r => r.userId === currentUser?.id);
+    const myAmount = monthEntries[myRatingIdx]?.total || 0;
+    const topAmount = monthEntries[0]?.total || 0;
     const cashCtx = myRatingIdx >= 0
-      ? `Каса ${month}: ти на ${myRatingIdx + 1}-му місці. До 1-го: ${topAmount - myAmount > 0 ? (topAmount - myAmount) + ' грн' : 'ти лідер!'}`
+      ? 'Каса ' + month + ': ти на ' + (myRatingIdx + 1) + '-му місці. До 1-го: ' + (topAmount - myAmount > 0 ? (topAmount - myAmount) + ' грн' : 'ти лідер!')
       : '';
 
     return (
