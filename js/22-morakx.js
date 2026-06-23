@@ -241,11 +241,25 @@ const Morakx = {
       '4. Чого не знаєш — скажи чесно\n' +
       '5. Будь-яку вкладку і функцію порталу знаєш і пояснюєш\n\n' +
 
-      'АДМІН-ДІЇ (тільки якщо явно просять ЗМІНИТИ щось):\n' +
-      'Якщо просять змінити графік, сповіщення, обов\'язок або звільнити — поверни ТІЛЬКИ JSON:\n' +
+      'ДІЇ ЯКІ МОЖЕ РОБИТИ МОРАКС (поверни JSON ТІЛЬКИ якщо явно просять виконати дію):\n\n' +
+
+      '1) ОБМІН ЗМІНИ — якщо поточний юзер хоче помінятись зміною з кимось:\n' +
+      '{"intent":"swap_request","targetName":"Ім\'я","targetDate":"YYYY-MM-DD","myDate":"YYYY-MM-DD або null","comment":"текст або null"}\n' +
+      'targetDate = дата ЦІЛЬОВОЇ людини яку хочуть взяти. myDate = дата своєї зміни яку віддають (або null якщо без зустрічної).\n\n' +
+
+      '2) ЗАПРОПОНУВАТИ ОБМІН МІЖ ДВОМА ЛЮДЬМИ (тільки якщо адмін або роль sysadmin):\n' +
+      '{"intent":"propose_swap","person1":"Ім\'я1","person2":"Ім\'я2","date1":"YYYY-MM-DD","date2":"YYYY-MM-DD або null"}\n' +
+      'person1 бере date1 у person2. Якщо date2 — person2 бере date2 у person1.\n\n' +
+
+      '3) АДМІН-ДІЇ (тільки якщо роль admin/sysadmin — явно просять ЗМІНИТИ щось):\n' +
       '{"intent":"admin_action","action":"update_schedule","params":{"userId":"ID","date":"YYYY-MM-DD","shift":"Р"},"description":"текст дії"}\n' +
-      'Дії: update_schedule, add_notification, update_duty, fire_user\n' +
-      'Якщо НЕ адмін-дія — відповідай текстом. Дата сьогодні: ' + today + '\n' +
+      'Дії: update_schedule, add_notification, update_duty, fire_user\n\n' +
+
+      'ВАЖЛИВО:\n' +
+      '- Якщо НЕ дія — відповідай текстом (НЕ JSON)\n' +
+      '- Якщо не вистачає інфо (з ким, коли) — запитай уточнення текстом\n' +
+      '- swap_request і propose_swap доступні всім. admin_action — тільки адміну\n' +
+      '- Дата сьогодні: ' + today + '\n' +
 
       Morakx._getUsersContext();
   },
@@ -300,21 +314,45 @@ const Morakx = {
 
       const rawText = data.text || '🤔';
 
-      // Перевіряємо admin_action JSON
-      let adminIntent = null;
-      if (rawText.includes('"intent"') && rawText.includes('"admin_action"')) {
+      // Парсимо JSON-інтент з відповіді
+      // Покращений парсер що враховує вкладені {}
+      let parsedIntent = null;
+      if (rawText.includes('"intent"')) {
         try {
-          const m = rawText.match(/\{[\s\S]*?"intent"[\s\S]*?\}/);
-          if (m) {
-            const c = JSON.parse(m[0]);
-            if (c.intent === 'admin_action') adminIntent = c;
+          // Знаходимо перший { і знаходимо відповідну закриваючу }
+          const start = rawText.indexOf('{');
+          if (start >= 0) {
+            let depth = 0, end = -1;
+            for (let i = start; i < rawText.length; i++) {
+              if (rawText[i] === '{') depth++;
+              else if (rawText[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+            }
+            if (end > start) {
+              const candidate = JSON.parse(rawText.slice(start, end + 1));
+              if (candidate && candidate.intent) parsedIntent = candidate;
+            }
           }
         } catch(e) {}
       }
 
-      if (adminIntent && adminIntent.action) {
-        const desc = adminIntent.description || adminIntent.action;
-        await Morakx._requestApproval({ action: adminIntent.action, params: adminIntent.params || {} }, desc);
+      // ── ОБМІН ЗМІНИ (сам юзер хоче помінятись) ──────────────────
+      if (parsedIntent?.intent === 'swap_request') {
+        await Morakx._handleSwapRequest(parsedIntent);
+        Morakx._history.push({ role: 'assistant', content: 'Обробляю запит на обмін...' });
+        return;
+      }
+
+      // ── ПРОПОЗИЦІЯ ОБМІНУ МІЖ ДВОМА ЛЮДЬМИ (адмін) ─────────────
+      if (parsedIntent?.intent === 'propose_swap') {
+        await Morakx._handleProposeSwap(parsedIntent);
+        Morakx._history.push({ role: 'assistant', content: 'Пропозицію обміну надіслано.' });
+        return;
+      }
+
+      // ── АДМІН-ДІЯ (зміна графіку, сповіщення тощо) ──────────────
+      if (parsedIntent?.intent === 'admin_action' && parsedIntent.action) {
+        const desc = parsedIntent.description || parsedIntent.action;
+        await Morakx._requestApproval({ action: parsedIntent.action, params: parsedIntent.params || {} }, desc);
         Morakx._history.push({ role: 'assistant', content: 'Запит надіслано Дімі.' });
         return;
       }
@@ -329,6 +367,148 @@ const Morakx = {
     } finally {
       Morakx._loading = false;
       if (sendBtn) sendBtn.disabled = false;
+    }
+  },
+
+  // ── Обмін зміни (сам юзер) ──────────────────────────────────────
+  async _handleSwapRequest(intent) {
+    const { targetName, targetDate, myDate, comment } = intent;
+
+    // Знаходимо цільового юзера локально
+    const usersRaw = DB.get('users', []);
+    const users = Array.isArray(usersRaw) ? usersRaw : Object.values(usersRaw);
+    const tName = (targetName || '').toLowerCase().trim();
+    const targetUser = users.find(u => {
+      const dn = (u.display_name || u.displayName || u.login || '').toLowerCase();
+      return dn.includes(tName) || tName.includes(dn.split(' ')[0]);
+    });
+
+    if (!targetUser) {
+      Morakx._addMsg('bot', `😕 Не знайшов офіціанта «${targetName}» в системі. Перевір ім'я.`);
+      return;
+    }
+
+    const tUserName = targetUser.display_name || targetUser.displayName || targetUser.login;
+
+    const _dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (!_dateRe.test(targetDate || '')) {
+      Morakx._addMsg('bot', `❓ Не зрозумів дату «${targetDate}». Вкажи конкретніше, наприклад: «хочу помінятись з ${tUserName}, він/вона бере моє 25 червня».`);
+      return;
+    }
+    if (myDate && !_dateRe.test(myDate)) {
+      Morakx._addMsg('bot', `❓ Не зрозумів дату «${myDate}». Вкажи конкретніше.`);
+      return;
+    }
+    const schedMap = DB.get('schedule', {});
+    const targetShift = (schedMap[targetUser.id + '_' + targetDate] || 'Х').trim();
+    const fromShift   = myDate ? (schedMap[(currentUser && currentUser.id) + '_' + myDate] || 'Х').trim() : null;
+
+    const MONTHS = ['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'];
+    const fmtD = (d) => { if (!d) return '—'; const [,m,day] = d.split('-').map(Number); return `${day} ${MONTHS[m-1]}`; };
+
+    const _previewText =
+      `🔄 Запит на обмін\n\n` +
+      `👤 З ким: ${tUserName}\n` +
+      `📅 Ти береш: ${fmtD(targetDate)} [${targetShift}]\n` +
+      (myDate ? `🔁 ${tUserName} бере: ${fmtD(myDate)} [${fromShift}]\n` : `ℹ️ Без зустрічної зміни\n`) +
+      (comment ? `💬 ${comment}\n` : '');
+
+    try {
+      const resp = await fetch(EDGE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
+        body: JSON.stringify({
+          action:      'morakx_swap_request',
+          fromId:      (currentUser && currentUser.id) || '',
+          fromName:    (currentUser && (currentUser.displayName || currentUser.login)) || '',
+          targetId:    targetUser.id,
+          targetName:  tUserName,
+          targetDate,
+          targetShift,
+          myDate:      myDate || null,
+          fromShift:   fromShift || null,
+          comment:     comment || null,
+        }),
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || 'swap error');
+      Morakx._addMsg('bot', _previewText + `\n✅ Надіслано ${tUserName} в Telegram. Як тільки відповість — бот повідомить.`);
+    } catch(e) {
+      console.error('swap request error:', e);
+      Morakx._addMsg('bot', _previewText + '\n\n😔 Помилка: ' + (e.message || 'перевір підключення'));
+    }
+  },
+
+  // ── Пропозиція обміну між двома людьми (адмін) ───────────────────
+  async _handleProposeSwap(intent) {
+    const { person1, person2, date1, date2 } = intent;
+
+    const usersRaw = DB.get('users', []);
+    const users = Array.isArray(usersRaw) ? usersRaw : Object.values(usersRaw);
+    const findU = (name) => {
+      const n = (name || '').toLowerCase().trim();
+      return users.find(u => {
+        const dn = (u.display_name || u.displayName || u.login || '').toLowerCase();
+        return dn.includes(n) || n.includes(dn.split(' ')[0]);
+      });
+    };
+
+    const p1 = findU(person1);
+    const p2 = findU(person2);
+
+    if (!p1 || !p2) {
+      Morakx._addMsg('bot', `😕 Не знайшов: «${!p1 ? person1 : person2}». Перевір ім'я.`);
+      return;
+    }
+
+    const schedMap = DB.get('schedule', {});
+    const MONTHS = ['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'];
+    const fmtD = (d) => { if (!d) return '—'; const [,m,day] = d.split('-').map(Number); return `${day} ${MONTHS[m-1]}`; };
+
+    const p1Name = p1.display_name || p1.displayName || p1.login;
+    const p2Name = p2.display_name || p2.displayName || p2.login;
+    const sh1 = (schedMap[p2.id + '_' + date1] || 'Х').trim(); // зміна p2 яку бере p1
+    const sh2 = date2 ? (schedMap[p1.id + '_' + date2] || 'Х').trim() : null;
+
+    // Валідація дат
+    const _pDateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (!_pDateRe.test(date1 || '')) {
+      Morakx._addMsg('bot', `❓ Не зрозумів дату «${date1}». Вкажи у форматі 25 червня.`);
+      return;
+    }
+    if (date2 && !_pDateRe.test(date2)) {
+      Morakx._addMsg('bot', `❓ Не зрозумів дату «${date2}». Вкажи у форматі 25 червня.`);
+      return;
+    }
+
+    const _propPreview =
+      `🔄 Пропозиція обміну\n\n` +
+      `👤 ${p1Name} бере: ${fmtD(date1)} [${sh1}] від ${p2Name}\n` +
+      (date2 ? `🔁 ${p2Name} бере: ${fmtD(date2)} [${sh2}] від ${p1Name}\n` : `ℹ️ Без зустрічної\n`);
+
+    try {
+      const resp = await fetch(EDGE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
+        body: JSON.stringify({
+          action:    'morakx_propose_swap',
+          adminName: (currentUser && (currentUser.displayName || currentUser.login)) || '',
+          p1Id: p1.id, p1Name, p1TgId: p1.tg_id || p1.chat_id || null,
+          p2Id: p2.id, p2Name, p2TgId: p2.tg_id || p2.chat_id || null,
+          date1, shift1: sh1,
+          date2: date2 || null, shift2: sh2 || null,
+        }),
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || 'propose error');
+      Morakx._addMsg('bot',
+        _propPreview +
+        `\n✅ Запит надіслано ${p1Name} в Telegram.\n` +
+        `${p2Name} також отримає повідомлення.`
+      );
+    } catch(e) {
+      console.error('propose swap error:', e);
+      Morakx._addMsg('bot', _propPreview + '\n\n😔 Помилка: ' + (e.message || 'перевір підключення'));
     }
   },
 
@@ -360,12 +540,15 @@ const Morakx = {
     }
   },
 
+  _pollTimers: {},
+
   _pollApproval(actionId, attempts = 0) {
-    if (attempts > 60) {
+    if (Morakx._pollTimers[actionId]) clearTimeout(Morakx._pollTimers[actionId]);
+    if (attempts > 60) { delete Morakx._pollTimers[actionId];
       Morakx._addMsg('bot', '⏰ Діма не відповів протягом 5 хвилин. Дія скасована.');
       return;
     }
-    setTimeout(async () => {
+    Morakx._pollTimers[actionId] = setTimeout(async () => {
       try {
         const resp = await fetch(EDGE_URL, {
           method: 'POST',
@@ -376,6 +559,7 @@ const Morakx = {
         if (!data.ok || data.status === 'pending') {
           return Morakx._pollApproval(actionId, attempts + 1);
         }
+        delete Morakx._pollTimers[actionId];
         if (data.status === 'approved') {
           Morakx._addMsg('bot', '✅ Діма підтвердив! ' + (data.message || 'Виконано.'));
         } else if (data.status === 'declined') {
