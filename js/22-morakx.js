@@ -154,12 +154,29 @@ const Morakx = {
         }
       } catch(e) {}
 
+      // Графік всіх офіціантів на 30 днів (для аналізу обмінів)
+      const allSchedule = [];
+      for (let d = 0; d <= 30; d++) {
+        const dt = new Date(Date.now() + d * 864e5).toISOString().slice(0, 10);
+        const dayWorkers = allUsers
+          .filter(u => { const sh = (schedMap[u.id + '_' + dt] || '').trim(); return sh && !OFF.has(sh); })
+          .map(u => (u.display_name || u.displayName || u.login) + ':' + (schedMap[u.id + '_' + dt] || '').trim());
+        const dayOff = allUsers
+          .filter(u => { const sh = (schedMap[u.id + '_' + dt] || '').trim(); return !sh || OFF.has(sh); })
+          .map(u => u.display_name || u.displayName || u.login);
+        if (dayWorkers.length || dayOff.length) {
+          allSchedule.push(dt + ' | на роботі: ' + (dayWorkers.join(', ') || '—') + ' | вихідний: ' + (dayOff.join(', ') || '—'));
+        }
+      }
+
       return 'КОНТЕКСТ НА СЬОГОДНІ (' + today + '):\n' +
         '- На роботі сьогодні: ' + (workingToday.join(', ') || 'невідомо') + '\n' +
         '- Мій графік (14 днів): ' + (mySchedule.join(', ') || 'немає даних') + '\n' +
         '- Мої обов\'язки: ' + (myDuties.join(', ') || 'не призначено') + '\n' +
         '- Моя зона: ' + (myZones.join(', ') || 'не призначено') + '\n' +
-        (cashCtx ? '- ' + cashCtx + '\n' : '');
+        (cashCtx ? '- ' + cashCtx + '\n' : '') +
+        '\nГРАФІК КОМАНДИ (30 днів — використовуй для аналізу обмінів і вихідних):\n' +
+        allSchedule.join('\n') + '\n';
     } catch(e) {
       console.warn('Morakx._buildContext error:', e);
       return 'КОНТЕКСТ: недоступний\n';
