@@ -154,14 +154,31 @@ const Morakx = {
         }
       } catch(e) {}
 
-      // Графік всіх офіціантів на 30 днів (для аналізу обмінів)
+      // Графік команди на 30 днів — фільтруємо за роллю юзера
+      // (офіціант бачить офіціантів, бармен — барменів, адмін — всіх)
+      const myRole = currentUser && currentUser.role || 'waiter';
+      const isAdminCtx = myRole === 'admin' || myRole === 'sysadmin';
+      const ROLE_GROUPS = {
+        waiter:    ['waiter'],
+        barman:    ['barman'],
+        sommelier: ['sommelier'],
+        cook:      ['cook'],
+        runner:    ['runner'],
+        trainee:   ['waiter', 'trainee'],
+        hostess:   ['hostess'],
+      };
+      const relevantRoles = isAdminCtx ? null : (ROLE_GROUPS[myRole] || [myRole]);
+      const sameRoleUsers = relevantRoles
+        ? allUsers.filter(u => relevantRoles.includes(u.role) || relevantRoles.includes(u.role2))
+        : allUsers;
+
       const allSchedule = [];
       for (let d = 0; d <= 30; d++) {
         const dt = new Date(Date.now() + d * 864e5).toISOString().slice(0, 10);
-        const dayWorkers = allUsers
+        const dayWorkers = sameRoleUsers
           .filter(u => { const sh = (schedMap[u.id + '_' + dt] || '').trim(); return sh && !OFF.has(sh); })
           .map(u => (u.display_name || u.displayName || u.login) + ':' + (schedMap[u.id + '_' + dt] || '').trim());
-        const dayOff = allUsers
+        const dayOff = sameRoleUsers
           .filter(u => { const sh = (schedMap[u.id + '_' + dt] || '').trim(); return !sh || OFF.has(sh); })
           .map(u => u.display_name || u.displayName || u.login);
         if (dayWorkers.length || dayOff.length) {
@@ -256,7 +273,14 @@ const Morakx = {
       '2. Про касу — лише своя позиція і відстань до 1-го. Суми інших — ніколи\n' +
       '3. Хвали і підтримуй. Підбадьорюй при труднощах\n' +
       '4. Чого не знаєш — скажи чесно\n' +
-      '5. Будь-яку вкладку і функцію порталу знаєш і пояснюєш\n\n' +
+      '5. Будь-яку вкладку і функцію порталу знаєш і пояснюєш\n' +
+      '6. ПРАВИЛО РОЛЕЙ: поточний користувач має роль ' + (currentUser && currentUser.role || 'waiter') + '.\n' +
+      '   За замовчуванням аналізуй і пропонуй лише людей ТІЄЇ Ж РОЛІ що і користувач.\n' +
+      '   Наприклад: офіціант питає про обмін — пропонуй лише офіціантів.\n' +
+      '   Бармен питає хто вихідний — відповідай лише про барменів.\n' +
+      '   ВИНЯТОК: якщо юзер явно запитує про іншу роль ("хто з кухарів...", "серед барменів...") — відповідай про них.\n' +
+      '   Адмін і sysadmin бачать всіх без обмежень.\n' +
+      '   У контексті нижче ГРАФІК КОМАНДИ вже відфільтрований за твоєю роллю.\n\n' +
 
       'ДІЇ ЯКІ МОЖЕ РОБИТИ МОРАКС (поверни JSON ТІЛЬКИ якщо явно просять виконати дію):\n\n' +
 
