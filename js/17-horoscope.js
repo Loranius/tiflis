@@ -109,35 +109,7 @@ const Horoscope = {
     return ctx[role] || ctx.waiter;
   },
 
-  // ── Маппінг знаків на англійські назви для freehoroscopeapi.com ──────
-  _SIGN_EN: {
-    '♈ Овен':       'aries',
-    '♉ Телець':     'taurus',
-    '♊ Близнюки':   'gemini',
-    '♋ Рак':        'cancer',
-    '♌ Лев':        'leo',
-    '♍ Діва':       'virgo',
-    '♎ Терези':     'libra',
-    '♏ Скорпіон':   'scorpio',
-    '♐ Стрілець':   'sagittarius',
-    '♑ Козеріг':    'capricorn',
-    '♒ Водолій':    'aquarius',
-    '♓ Риби':       'pisces',
-  },
-
-  // ── Крок 1: отримати реальний астрологічний гороскоп дня ─────────────
-  async _fetchBaseHoroscope(zodiac) {
-    const signEn = Horoscope._SIGN_EN[zodiac];
-    if (!signEn) throw new Error('Невідомий знак: ' + zodiac);
-    const resp = await fetch('https://freehoroscopeapi.com/api/v1/get-horoscope/daily?sign=' + signEn);
-    if (!resp.ok) throw new Error('freehoroscopeapi error: ' + resp.status);
-    const json = await resp.json();
-    const text = json?.data?.horoscope;
-    if (!text) throw new Error('Порожня відповідь від horoscope API');
-    return text; // англійський текст реального гороскопу дня
-  },
-
-  // ── Крок 2: адаптація через Groq з реальною базою ────────────────────
+  // ── Виклик Edge Function з передачею знаку — база гороскопу фетчиться там ──
   async _callClaude(zodiac, role) {
     const roleCtx = Horoscope._getRoleContext(role || 'waiter');
     const today = new Date().toLocaleDateString('uk-UA', {weekday:'long', day:'numeric', month:'long'});
@@ -145,21 +117,8 @@ const Horoscope = {
       ? '"lucky": { "number": число від 1 до 99, "color": "колір", "time": "ЧЧ:ХХ", "table": число від 1 до 20 }'
       : '"lucky": { "number": число від 1 до 99, "color": "колір", "time": "ЧЧ:ХХ" }';
 
-    // Отримуємо реальний астрологічний прогноз дня
-    let baseText = '';
-    try {
-      baseText = await Horoscope._fetchBaseHoroscope(zodiac);
-    } catch(e) {
-      console.warn('freehoroscopeapi fallback (без бази):', e.message);
-    }
-
-    const baseBlock = baseText
-      ? 'РЕАЛЬНИЙ АСТРОЛОГІЧНИЙ ПРОГНОЗ ДНЯ (використай як змістовну основу — не переклад, а переосмислення):\n"' + baseText + '"\n\n'
-      : '';
-
     const prompt = 'КРИТИЧНО ВАЖЛИВО: відповідай ВИКЛЮЧНО українською мовою. Жодних англійських слів, жодного іншого алфавіту крім українського та емодзі.\n\n'
-      + baseBlock
-      + 'Ти астролог-гуморист для команди ресторану "Тифліс". На основі реального астрологічного прогнозу вище — адаптуй його для ' + roleCtx.title + ' зі знаком ' + zodiac + ' на сьогодні (' + today + ').\n\n'
+      + 'Ти астролог-гуморист для команди ресторану "Тифліс". На основі реального астрологічного прогнозу — адаптуй його для ' + roleCtx.title + ' зі знаком ' + zodiac + ' на сьогодні (' + today + ').\n\n'
       + 'ВАЖЛИВО: не перекладай дослівно — переосмисли планетарні впливи крізь призму ресторанної роботи і особистого життя ' + roleCtx.title + '. Збережи суть і настрій астрологічного прогнозу.\n\n'
       + 'Гороскоп охоплює ДВА напрямки:\n'
       + '1. РОБОТА: ' + roleCtx.workHint + '\n'
@@ -184,7 +143,7 @@ const Horoscope = {
     const resp = await fetch(EDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
-      body: JSON.stringify({ action: 'generate_horoscope', prompt })
+      body: JSON.stringify({ action: 'generate_horoscope', prompt, zodiac })
     });
     if (!resp.ok) throw new Error('Edge Function error: ' + resp.status);
     const envelope = await resp.json();
@@ -263,20 +222,8 @@ const Horoscope = {
   async _callClaudeOffDay(zodiac) {
     const today = new Date().toLocaleDateString('uk-UA', {weekday:'long', day:'numeric', month:'long'});
 
-    let baseText = '';
-    try {
-      baseText = await Horoscope._fetchBaseHoroscope(zodiac);
-    } catch(e) {
-      console.warn('freehoroscopeapi offday fallback:', e.message);
-    }
-
-    const baseBlock = baseText
-      ? 'РЕАЛЬНИЙ АСТРОЛОГІЧНИЙ ПРОГНОЗ ДНЯ (використай як змістовну основу — не переклад, а переосмислення):\n"' + baseText + '"\n\n'
-      : '';
-
     const prompt = 'КРИТИЧНО ВАЖЛИВО: відповідай ВИКЛЮЧНО українською мовою. Жодних англійських слів, жодного іншого алфавіту крім українського та емодзі.\n\n'
-      + baseBlock
-      + 'Ти астролог-гуморист. На основі реального астрологічного прогнозу вище — адаптуй його для людини зі знаком ' + zodiac + ' на сьогодні (' + today + ').\n'
+      + 'Ти астролог-гуморист. На основі реального астрологічного прогнозу — адаптуй його для людини зі знаком ' + zodiac + ' на сьогодні (' + today + ').\n'
       + 'Сьогодні у неї ВИХІДНИЙ день — жодних згадок роботи, ресторану, гостей, зміни.\n'
       + 'Тільки особисте: кохання, друзі, прогулянки, здоров\'я, хобі, фінанси, настрій, відпочинок.\n\n'
       + 'ВАЖЛИВО: не перекладай дослівно — переосмисли астрологічний настрій дня крізь призму особистого вихідного.\n\n'
@@ -296,7 +243,7 @@ const Horoscope = {
     const resp = await fetch(EDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
-      body: JSON.stringify({ action: 'generate_horoscope', prompt })
+      body: JSON.stringify({ action: 'generate_horoscope', prompt, zodiac })
     });
     if (!resp.ok) throw new Error('Edge Function error: ' + resp.status);
     const envelope = await resp.json();
