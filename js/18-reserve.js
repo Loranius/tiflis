@@ -1248,8 +1248,7 @@ const Reserve = {
         `👤 ${esc(booking.name)} · 👥 ${booking.guests} ос.`,
         ``,
         `<i>Стіл готовий до прийому нових гостей</i>`,
-      ].filter(Boolean).join('
-');
+      ].filter(Boolean).join('\n');
 
       for (const destId of destIds) await tgSendPersonal(destId, msg);
     } catch(e) { console.error('Reserve.notifyZoneWaitersFreed error:', e); }
