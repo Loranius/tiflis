@@ -428,7 +428,7 @@ const Reserve = {
     const dk = Reserve._selectedDate || todayKey();
     const tables = layout.tables.filter(t => Reserve.TYPE_INFO[t.type]?.seats > 0);
 
-    // Природне сортування за номером столика (формат "зал.стіл", напр. 5.1, 5.2 ... 5.10, 5.11)
+    // Природне сортування за номером столика
     const tableNumParts = (s) => {
       const m = String(s).match(/(\d+)\.(\d+)/);
       if (m) return [parseInt(m[1], 10), parseInt(m[2], 10)];
@@ -443,46 +443,140 @@ const Reserve = {
       return String(a.n).localeCompare(String(b.n));
     });
 
+    // ── Збираємо групи об'єднань для поточної дати ─────────────────
+    const allBk = Reserve.getAllBookings();
+    const MERGE_COLORS = ['#d4a843','#e07070','#70b8e0','#a0d070','#c080d0'];
+    const mergeGroups = [];
+    let colorIdx2 = 0;
+    for (const key in allBk) {
+      const [bHall, bTable] = key.split('::');
+      if (bHall !== hall) continue;
+      for (const b of allBk[key]) {
+        if (b.date !== dk) continue;
+        if (Array.isArray(b.mergedWith) && b.mergedWith.length) {
+          mergeGroups.push({
+            masterNum: bTable,
+            slaves: b.mergedWith,
+            allNums: [bTable, ...b.mergedWith],
+            color: MERGE_COLORS[colorIdx2 % MERGE_COLORS.length],
+          });
+          colorIdx2++;
+        }
+      }
+    }
+    const slaveSet = new Set(mergeGroups.flatMap(g => g.slaves));
+    const renderedMasters = new Set();
+
+    const renderSingleTable = (t) => {
+      const info = Reserve.TYPE_INFO[t.type];
+      const bookings = Reserve.getEffectiveBookingsFor(hall, t.n, dk);
+      const status = Reserve.getTableStatus(hall, t.n, dk);
+      const statusColor = status === 'occupied' ? 'var(--danger)' : status === 'booked' ? 'var(--warning)' : 'var(--success)';
+      const statusLabel = status === 'occupied' ? 'Зайнято' : status === 'booked' ? 'Резерв' : 'Вільний';
+      const statusBg = status === 'occupied' ? 'rgba(224,90,90,.12)' : status === 'booked' ? 'rgba(224,160,80,.12)' : 'rgba(110,200,140,.10)';
+      const bookingsSummary = bookings.length
+        ? bookings.map(b => {
+            const isMerged = Array.isArray(b.mergedWith) && b.mergedWith.includes(t.n);
+            const tag = isMerged ? ` <span style="opacity:.6;font-weight:400">(об'єднано)</span>` : '';
+            return `<div style="font-weight:700;font-size:15px;margin-bottom:2px">${esc(b.time || '—')} · ${esc(b.name)}${tag}</div>
+                    <div style="font-size:12px;color:var(--text-dim)">👥 ${b.guests} ос.${b.phone ? ' · 📞 ' + esc(b.phone) : ''}${b.menu ? ' · 🍽️ ' + esc(b.menu) : ''}</div>`;
+          }).join('<div style="height:6px"></div>')
+        : '';
+      return `
+        <div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:14px;cursor:pointer;
+          border-left:4px solid ${statusColor};background:${statusBg}"
+          onclick="Reserve.onTableClick('${esc(hall)}','${esc(t.n)}','${t.type}')">
+          <div style="min-width:54px;text-align:center">
+            <div style="font-size:24px;font-weight:800;line-height:1">${esc(t.n)}</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-top:2px">${info?.seats || '?'} ос.</div>
+          </div>
+          <div style="width:1px;align-self:stretch;background:rgba(255,255,255,.08)"></div>
+          <div style="flex:1;min-width:0">
+            ${bookingsSummary || `<div style="font-size:14px;color:var(--text-muted)">Немає бронювань</div>`}
+          </div>
+          <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+            color:${statusColor};white-space:nowrap;margin-right:2px">${statusLabel}</div>
+          ${status === 'free'
+            ? `<button class="btn btn-gold" style="padding:8px 16px;font-size:18px;line-height:1;font-weight:800"
+                 onclick="event.stopPropagation();Reserve.onTableClick('${esc(hall)}','${esc(t.n)}','${t.type}')">+</button>`
+            : ''}
+        </div>`;
+    };
+
+    const renderMergeGroup = (g) => {
+      const color = g.color;
+      const tableRows = g.allNums.map(num => {
+        const tObj = sorted.find(x => x.n === num);
+        if (!tObj) return '';
+        const info = Reserve.TYPE_INFO[tObj.type];
+        const bookings = Reserve.getEffectiveBookingsFor(hall, num, dk);
+        const status = Reserve.getTableStatus(hall, num, dk);
+        const statusColor = status === 'occupied' ? 'var(--danger)' : status === 'booked' ? 'var(--warning)' : 'var(--success)';
+        const statusLabel = status === 'occupied' ? 'Зайнято' : status === 'booked' ? 'Резерв' : 'Вільний';
+        const isMaster = num === g.masterNum;
+        const bookingsSummary = bookings.length
+          ? bookings.map(b => {
+              const tag = !isMaster ? ` <span style="opacity:.6;font-weight:400">(об'єднано)</span>` : '';
+              return `<div style="font-weight:700;font-size:14px;margin-bottom:2px">${esc(b.time || '—')} · ${esc(b.name)}${tag}</div>
+                      <div style="font-size:11px;color:var(--text-dim)">👥 ${b.guests} ос.${b.phone ? ' · 📞 ' + esc(b.phone) : ''}${b.menu ? ' · 🍽️ ' + esc(b.menu) : ''}</div>`;
+            }).join('')
+          : `<div style="font-size:13px;color:var(--text-muted)">Немає бронювань</div>`;
+        return `
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;
+            border-radius:8px;background:rgba(255,255,255,.03);
+            border-left:3px solid ${isMaster ? color : color + '66'};cursor:pointer"
+            onclick="Reserve.onTableClick('${esc(hall)}','${esc(num)}','${tObj.type}')">
+            <div style="min-width:46px;text-align:center">
+              <div style="font-size:20px;font-weight:800;line-height:1;color:${color}">${esc(num)}</div>
+              <div style="font-size:9px;color:var(--text-dim);margin-top:1px">${info?.seats || '?'} ос.</div>
+            </div>
+            <div style="width:1px;align-self:stretch;background:rgba(255,255,255,.08)"></div>
+            <div style="flex:1;min-width:0">${bookingsSummary}</div>
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:${statusColor};white-space:nowrap">${statusLabel}</div>
+          </div>`;
+      }).join(`<div style="text-align:center;font-size:14px;line-height:1;color:${color};opacity:.45;margin:2px 4px">⋮</div>`);
+
+      const totalSeats = g.allNums.reduce((sum, num) => {
+        const tObj = sorted.find(x => x.n === num);
+        return sum + (Reserve.TYPE_INFO[tObj?.type]?.seats || 0);
+      }, 0);
+
+      return `
+        <div style="border:2px solid ${color};border-radius:12px;overflow:hidden;
+          background:${color}0d;box-shadow:0 0 12px ${color}33">
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;
+            background:${color}22;border-bottom:1px solid ${color}33">
+            <span style="font-size:14px">🔗</span>
+            <span style="font-size:12px;font-weight:800;color:${color};letter-spacing:.04em">
+              ОБ'ЄДНАНІ СТОЛИ · ${g.allNums.map(esc).join(' + ')}
+            </span>
+            <span style="margin-left:auto;font-size:11px;color:var(--text-dim)">
+              разом ${totalSeats} ос.
+            </span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;padding:8px">
+            ${tableRows}
+          </div>
+        </div>`;
+    };
+
+    // ── Рендер списку ───────────────────────────────────────────────
+    let listHtml = '';
+    for (const t of sorted) {
+      if (slaveSet.has(t.n)) continue;
+      const g = mergeGroups.find(g2 => g2.masterNum === t.n);
+      if (g && !renderedMasters.has(t.n)) {
+        listHtml += renderMergeGroup(g);
+        renderedMasters.add(t.n);
+      } else {
+        listHtml += renderSingleTable(t);
+      }
+    }
+
     el.innerHTML = `
       <div class="card-title">Столи залу «${esc(hall)}»</div>
       <div style="display:flex;flex-direction:column;gap:8px">
-        ${sorted.map(t => {
-          const info = Reserve.TYPE_INFO[t.type];
-          const bookings = Reserve.getEffectiveBookingsFor(hall, t.n, dk);
-          const status = Reserve.getTableStatus(hall, t.n, dk);
-          const statusColor = status === 'occupied' ? 'var(--danger)' : status === 'booked' ? 'var(--warning)' : 'var(--success)';
-          const statusLabel = status === 'occupied' ? 'Зайнято' : status === 'booked' ? 'Резерв' : 'Вільний';
-          const statusBg = status === 'occupied' ? 'rgba(224,90,90,.12)' : status === 'booked' ? 'rgba(224,160,80,.12)' : 'rgba(110,200,140,.10)';
-
-          const bookingsSummary = bookings.length
-            ? bookings.map(b => {
-                const isMerged = Array.isArray(b.mergedWith) && b.mergedWith.includes(t.n);
-                const tag = isMerged ? ` <span style="opacity:.6;font-weight:400">(об'єднано)</span>` : '';
-                return `<div style="font-weight:700;font-size:15px;margin-bottom:2px">${esc(b.time || '—')} · ${esc(b.name)}${tag}</div>
-                        <div style="font-size:12px;color:var(--text-dim)">👥 ${b.guests} ос.${b.phone ? ' · 📞 ' + esc(b.phone) : ''}${b.menu ? ' · 🍽️ ' + esc(b.menu) : ''}</div>`;
-              }).join('<div style="height:6px"></div>')
-            : '';
-
-          return `
-            <div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:14px;cursor:pointer;
-              border-left:4px solid ${statusColor};background:${statusBg}"
-              onclick="Reserve.onTableClick('${esc(hall)}','${esc(t.n)}','${t.type}')">
-              <div style="min-width:54px;text-align:center">
-                <div style="font-size:24px;font-weight:800;line-height:1">${esc(t.n)}</div>
-                <div style="font-size:10px;color:var(--text-dim);margin-top:2px">${info?.seats || '?'} ос.</div>
-              </div>
-              <div style="width:1px;align-self:stretch;background:rgba(255,255,255,.08)"></div>
-              <div style="flex:1;min-width:0">
-                ${bookingsSummary || `<div style="font-size:14px;color:var(--text-muted)">Немає бронювань</div>`}
-              </div>
-              <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
-                color:${statusColor};white-space:nowrap;margin-right:2px">${statusLabel}</div>
-              ${status === 'free'
-                ? `<button class="btn btn-gold" style="padding:8px 16px;font-size:18px;line-height:1;font-weight:800"
-                     onclick="event.stopPropagation();Reserve.onTableClick('${esc(hall)}','${esc(t.n)}','${t.type}')">+</button>`
-                : ''}
-            </div>`;
-        }).join('')}
+        ${listHtml}
       </div>`;
   },
 
@@ -526,6 +620,91 @@ const Reserve = {
     const CELL = BASE_CELL * scale;
     const CELL_Y = CELL * (layout.cellH || 1);
 
+    // ── Збираємо інфо про об'єднані столи для поточної дати ───────────
+    const dk2 = Reserve._selectedDate || todayKey();
+    const allBk = Reserve.getAllBookings();
+    // mergeGroups: масив { masterNum, slaves:[], booking, color }
+    const mergeGroups = [];
+    const MERGE_COLORS = ['#d4a843','#e07070','#70b8e0','#a0d070','#c080d0'];
+    let colorIdx = 0;
+    for (const key in allBk) {
+      const [bHall, bTable] = key.split('::');
+      if (bHall !== hall) continue;
+      for (const b of allBk[key]) {
+        if (b.date !== dk2) continue;
+        if (Array.isArray(b.mergedWith) && b.mergedWith.length) {
+          mergeGroups.push({
+            masterNum: bTable,
+            slaves: b.mergedWith,
+            booking: b,
+            color: MERGE_COLORS[colorIdx % MERGE_COLORS.length],
+          });
+          colorIdx++;
+        }
+      }
+    }
+    // Функція: чи входить стіл в яку-небудь групу об'єднання
+    const getMergeGroup = (tableNum) => {
+      for (const g of mergeGroups) {
+        if (g.masterNum === tableNum || g.slaves.includes(tableNum)) return g;
+      }
+      return null;
+    };
+
+    // Допоміжна функція: координати центру/меж столика на полотні
+    const getTableRect = (tableNum) => {
+      const tObj = layout.tables.find(x => x.n === tableNum);
+      if (!tObj) return null;
+      const tInfo = Reserve.TYPE_INFO[tObj.type] || Reserve.TYPE_INFO['small'];
+      const tw = tInfo.w * scale;
+      const th = tInfo.h * scale;
+      const tl = tObj.x * CELL + (CELL - tw) / 2;
+      const tt = tObj.y * CELL_Y + (CELL_Y - th) / 2;
+      return { l: tl, t: tt, w: tw, h: th, r: tl + tw, b: tt + th };
+    };
+
+    // Будуємо SVG оверлей з групами об'єднань
+    let svgOverlay = '';
+    if (mergeGroups.length) {
+      const totalW = layout.cols * CELL;
+      const totalH = layout.rows * CELL_Y;
+      let svgPaths = '';
+      for (const g of mergeGroups) {
+        const allNums = [g.masterNum, ...g.slaves];
+        const rects = allNums.map(n => getTableRect(n)).filter(Boolean);
+        if (rects.length < 2) continue;
+        // Bounding box усіх столів групи
+        const PAD = 8 * scale;
+        const bx1 = Math.min(...rects.map(r => r.l)) - PAD;
+        const by1 = Math.min(...rects.map(r => r.t)) - PAD;
+        const bx2 = Math.max(...rects.map(r => r.r)) + PAD;
+        const by2 = Math.max(...rects.map(r => r.b)) + PAD;
+        const bw = bx2 - bx1;
+        const bh = by2 - by1;
+        const br = 14 * scale;
+        // Заливка-бокс між столами
+        svgPaths += `<rect x="${bx1}" y="${by1}" width="${bw}" height="${bh}" rx="${br}" ry="${br}"
+          fill="${g.color}22" stroke="${g.color}" stroke-width="${Math.max(1.5, 2*scale)}"
+          stroke-dasharray="${Math.max(4,6*scale)} ${Math.max(3,4*scale)}" opacity="0.85"/>`;
+        // Лінія-з'єднувач між столами
+        for (let i = 0; i < rects.length - 1; i++) {
+          const ra = rects[i], rb = rects[i+1];
+          const cx1 = ra.l + ra.w/2, cy1 = ra.t + ra.h/2;
+          const cx2 = rb.l + rb.w/2, cy2 = rb.t + rb.h/2;
+          svgPaths += `<line x1="${cx1}" y1="${cy1}" x2="${cx2}" y2="${cy2}"
+            stroke="${g.color}" stroke-width="${Math.max(2, 3*scale)}" opacity="0.45" stroke-linecap="round"/>`;
+        }
+        // Підпис групи
+        const labelX = bx1 + bw / 2;
+        const labelY = by1 - 4 * scale;
+        const fsize = Math.max(8, 9 * scale);
+        svgPaths += `<text x="${labelX}" y="${labelY}" text-anchor="middle"
+          fill="${g.color}" font-size="${fsize}" font-weight="700" font-family="sans-serif"
+          opacity="0.9">🔗 об'єднані столи</text>`;
+      }
+      svgOverlay = `<svg style="position:absolute;inset:0;width:${totalW}px;height:${totalH}px;pointer-events:none;overflow:visible" viewBox="0 0 ${totalW} ${totalH}">${svgPaths}</svg>`;
+    }
+
     const tablesHtml = layout.tables.map(t => {
       // ── Роздільник / підпис зони ───────────────────────────────────
       if (t.type === 'divider') {
@@ -563,15 +742,22 @@ const Reserve = {
       const statusDot = statusColor
         ? `<div style="position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;border:2px solid var(--eden-dark);background:${statusColor}"></div>`
         : '';
-      const ring = status === 'occupied' ? '0 0 0 2px var(--danger), 0 2px 8px rgba(0,0,0,.25)'
-                 : status === 'booked'   ? '0 0 0 2px var(--warning), 0 2px 8px rgba(0,0,0,.25)'
-                 : '0 2px 8px rgba(0,0,0,.25)';
+
+      // ── Стиль рамки: якщо стіл у групі об'єднання — кольорова рамка ──
+      const mg = isFireplace ? null : getMergeGroup(t.n);
+      const ring = mg
+        ? `0 0 0 3px ${mg.color}, 0 0 14px ${mg.color}55, 0 2px 8px rgba(0,0,0,.25)`
+        : status === 'occupied' ? '0 0 0 2px var(--danger), 0 2px 8px rgba(0,0,0,.25)'
+        : status === 'booked'   ? '0 0 0 2px var(--warning), 0 2px 8px rgba(0,0,0,.25)'
+        : '0 2px 8px rgba(0,0,0,.25)';
+      const extraBorder = mg ? `border:2px solid ${mg.color}88;` : 'border:1px solid rgba(255,255,255,.08);';
+
       return `
         <div class="reserve-table" data-table="${esc(t.n)}" data-hall="${esc(hall)}"
           onclick="${isFireplace ? '' : `Reserve.onTableClick('${esc(hall)}','${esc(t.n)}','${t.type}')`}"
           style="position:absolute; left:${left}px; top:${top}px; width:${w}px; height:${h}px;
                  background:${info.bg}; border-radius:${info.radius};
-                 border:1px solid rgba(255,255,255,.08);
+                 ${extraBorder}
                  display:flex; flex-direction:column; align-items:center; justify-content:center;
                  color:${info.textColor || 'var(--text)'};
                  font-size:${fontSize}px; font-weight:700; text-align:center;
@@ -597,6 +783,7 @@ const Reserve = {
 
       <div class="card" style="padding:16px${needsScroll ? ';overflow-x:auto' : ''}">
         <div style="position:relative; width:${width}px; height:${height}px; ${needsScroll ? '' : 'margin:0 auto'}">
+          ${svgOverlay}
           ${tablesHtml}
         </div>
       </div>
@@ -622,6 +809,10 @@ const Reserve = {
         <div style="display:flex;align-items:center;gap:6px">
           <div style="width:10px;height:10px;border-radius:50%;background:var(--danger)"></div> Зайнятий
         </div>
+        ${mergeGroups.length ? `
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="width:14px;height:14px;border-radius:3px;border:2px dashed #d4a843;background:#d4a84322"></div> Об'єднані столи
+        </div>` : ''}
       </div>
     `;
   },
