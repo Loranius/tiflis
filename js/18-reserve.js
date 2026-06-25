@@ -839,31 +839,20 @@ const Reserve = {
     }
 
     if (masterTable) {
-      // Клік на slave → переключаємось на master і одразу редагування
+      // Клік на slave → показуємо модалку master-столу
       Reserve._modalHall  = masterHall;
       Reserve._modalTable = masterTable;
       Reserve._lastType   = masterType;
       const masterInfo = Reserve.TYPE_INFO[masterType] || Reserve.TYPE_INFO['small'];
       Reserve._renderModal(masterInfo);
-      Reserve.editBooking(0);
       return;
     }
 
-    // Власне бронювання цього столу
+    // Власне бронювання або вільний стіл
     const info = Reserve.TYPE_INFO[type];
     Reserve._modalHall  = hall;
     Reserve._modalTable = tableNum;
     Reserve._lastType   = type;
-
-    const ownBookings = Reserve.getBookingsFor(hall, tableNum, dk);
-    if (ownBookings.length) {
-      // Master або звичайний заброньований → одразу редагування
-      Reserve._renderModal(info);
-      Reserve.editBooking(0);
-      return;
-    }
-
-    // Вільний стіл — модалка нового бронювання
     Reserve._renderModal(info);
   },
 
@@ -955,33 +944,110 @@ const Reserve = {
     const hasBookings = bookings.length > 0;
 
     const bookingsHtml = bookings.length
-      ? bookings.map((b, i) => `
-          <div class="booking-row" style="display:flex;align-items:center;gap:10px;padding:10px 12px;
-            background:var(--surface);border:1px solid rgba(255,255,255,.06);border-radius:8px;
-            margin-bottom:8px;font-size:12px">
-            <div style="font-weight:700;color:var(--gold);min-width:48px">${esc(b.time || '—')}</div>
-            <div style="flex:1">
-              <div style="font-weight:600">${esc(b.name)}</div>
-              <div style="color:var(--text-dim);font-size:11px;margin-top:2px">
-                ${b.guests} ос.${b.phone ? ' · ' + esc(b.phone) : ''}${b.menu ? ' · 🍽️ ' + esc(b.menu) : ''}
+      ? bookings.map((b, i) => {
+          const statusColor = b.status === 'occupied' ? 'var(--danger)' : 'var(--warning)';
+          const statusLabel = b.status === 'occupied' ? 'Зайнято' : 'Резерв';
+          return `
+          <div id="bview-${i}" style="border-radius:12px;overflow:hidden;margin-bottom:10px;
+            border:1px solid rgba(255,255,255,.08);background:var(--surface)">
+
+            <!-- Режим перегляду -->
+            <div id="bview-view-${i}">
+              ${b.photo ? `
+              <div onclick="Reserve._viewPhoto('${b.photo}')" style="cursor:zoom-in;position:relative">
+                <img src="${b.photo}" style="width:100%;height:140px;object-fit:cover;display:block">
+                <div style="position:absolute;bottom:0;left:0;right:0;height:60px;
+                  background:linear-gradient(transparent,rgba(0,0,0,.7))"></div>
+              </div>` : ''}
+              <div style="padding:12px 14px">
+                <div style="display:flex;align-items:flex-start;gap:10px">
+                  <div style="flex:1">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                      <span style="font-size:20px;font-weight:800;color:var(--gold)">${esc(b.time || '—')}</span>
+                      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+                        color:${statusColor};border:1px solid ${statusColor};
+                        border-radius:4px;padding:1px 6px">${statusLabel}</span>
+                    </div>
+                    <div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(b.name)}</div>
+                    <div style="font-size:12px;color:var(--text-dim);line-height:1.6">
+                      👥 ${b.guests} ос.
+                      ${b.phone ? `<br>📞 ${esc(b.phone)}` : ''}
+                      ${b.menu ? `<br>🍽️ ${esc(b.menu)}` : ''}
+                      ${Array.isArray(b.mergedWith) && b.mergedWith.length
+                        ? `<br><span style="color:var(--gold)">🔗 + столи: ${b.mergedWith.map(esc).join(', ')}</span>` : ''}
+                    </div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:12px">
+                  <button class="btn btn-ghost" style="flex:1;padding:10px;font-size:13px"
+                    onclick="Reserve._switchToEdit(${i})">✏️ Редагувати</button>
+                  <button class="btn btn-ghost" style="padding:10px 14px;color:var(--danger)"
+                    onclick="Reserve.deleteBooking(${i})">🗑</button>
+                </div>
               </div>
-              ${Array.isArray(b.mergedWith) && b.mergedWith.length
-                ? `<div style="color:var(--gold);font-size:10px;margin-top:2px">+ столи: ${b.mergedWith.map(esc).join(', ')}</div>`
-                : ''}
             </div>
-            ${b.photo ? `<img src="${b.photo}" onclick="Reserve._viewPhoto('${b.photo}')"
-              style="width:48px;height:48px;object-fit:cover;border-radius:6px;
-                border:1px solid var(--gold-border);cursor:zoom-in;flex-shrink:0">` : ''}
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
-              color:${b.status==='occupied' ? 'var(--danger)' : 'var(--warning)'}">
-              ${b.status==='occupied' ? 'Зайнято' : 'Резерв'}
+
+            <!-- Режим редагування (прихований) -->
+            <div id="bview-edit-${i}" style="display:none;padding:14px">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
+                color:var(--gold);margin-bottom:12px">✏️ Редагування</div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                <div class="form-group">
+                  <label class="lbl">Час</label>
+                  <input type="time" class="field" id="re-time-${i}" value="${esc(b.time || '19:00')}">
+                </div>
+                <div class="form-group">
+                  <label class="lbl">Гостей</label>
+                  <input type="number" class="field" id="re-guests-${i}" value="${b.guests || 1}" min="1" max="30">
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom:10px">
+                <label class="lbl">Ім'я замовника</label>
+                <input type="text" class="field" id="re-name-${i}" value="${esc(b.name || '')}">
+              </div>
+              <div class="form-group" style="margin-bottom:10px">
+                <label class="lbl">Телефон</label>
+                <input type="tel" class="field" id="re-phone-${i}" value="${esc(b.phone || '')}">
+              </div>
+              <div class="form-group" style="margin-bottom:10px">
+                <label class="lbl">Меню</label>
+                <input type="text" class="field" id="re-menu-${i}" value="${esc(b.menu || '')}">
+              </div>
+              <div class="form-group" style="margin-bottom:10px">
+                <label class="lbl">Статус</label>
+                <select class="field" id="re-status-${i}">
+                  <option value="booked" ${b.status === 'booked' ? 'selected' : ''}>Резерв</option>
+                  <option value="occupied" ${b.status === 'occupied' ? 'selected' : ''}>Зайнято</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:14px">
+                <label class="lbl">Фото</label>
+                <input type="file" id="re-photo-file-${i}" accept="image/*" style="display:none"
+                  onchange="Reserve._onPhotoSelectedFor(this, ${i})">
+                <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+                  <button type="button" class="btn btn-ghost" style="padding:8px 14px;font-size:12px;border:1px dashed rgba(255,255,255,.2)"
+                    onclick="document.getElementById('re-photo-file-${i}').click()">
+                    📷 ${b.photo ? 'Змінити' : 'Додати фото'}
+                  </button>
+                  <div id="re-photo-preview-${i}" style="${b.photo ? '' : 'display:none;'}position:relative">
+                    <img id="re-photo-img-${i}" src="${b.photo || ''}"
+                      style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--gold-border)">
+                    <button type="button" onclick="Reserve._clearPhotoFor(${i})"
+                      style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;
+                        background:var(--danger);border:none;color:#fff;font-size:9px;cursor:pointer;padding:0;line-height:1">✕</button>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-gold" style="flex:1;padding:12px"
+                  onclick="Reserve.saveEditBookingInline(${i})">💾 Зберегти</button>
+                <button class="btn btn-ghost" style="padding:12px"
+                  onclick="Reserve._switchToView(${i})">Скасувати</button>
+              </div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:4px">
-              <button class="btn btn-ghost btn-sm" onclick="Reserve.editBooking(${i})" style="padding:4px 8px;font-size:13px">✏️</button>
-              <button class="btn btn-ghost btn-sm" onclick="Reserve.deleteBooking(${i})" style="padding:4px 8px">✕</button>
-            </div>
-          </div>
-        `).join('')
+          </div>`;
+        }).join('')
       : `<div style="text-align:center;padding:16px;color:var(--text-dim);font-size:12px">
            Немає бронювань на цю дату
          </div>`;
@@ -1248,119 +1314,84 @@ const Reserve = {
     `);
   },
 
-  editBooking(idx) {
+  // ── Перемикання view/edit inline ────────────────────────────────────
+  _switchToEdit(i) {
+    const view = document.getElementById('bview-view-' + i);
+    const edit = document.getElementById('bview-edit-' + i);
+    if (view) view.style.display = 'none';
+    if (edit) { edit.style.display = 'block'; edit.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+  },
+
+  _switchToView(i) {
+    const view = document.getElementById('bview-view-' + i);
+    const edit = document.getElementById('bview-edit-' + i);
+    if (edit) edit.style.display = 'none';
+    if (view) view.style.display = 'block';
+    Reserve._pendingPhotoFor = {};
+  },
+
+  _pendingPhotoFor: {},
+
+  _onPhotoSelectedFor(input, i) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 800;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.72);
+        Reserve._pendingPhotoFor[i] = compressed;
+        const imgEl = document.getElementById('re-photo-img-' + i);
+        const preview = document.getElementById('re-photo-preview-' + i);
+        if (imgEl) imgEl.src = compressed;
+        if (preview) preview.style.display = 'block';
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  _clearPhotoFor(i) {
+    Reserve._pendingPhotoFor[i] = null; // null = видалити
+    const inp = document.getElementById('re-photo-file-' + i);
+    const preview = document.getElementById('re-photo-preview-' + i);
+    if (inp) inp.value = '';
+    if (preview) preview.style.display = 'none';
+  },
+
+  async saveEditBookingInline(idx) {
     const hall = Reserve._modalHall;
     const tableNum = Reserve._modalTable;
-    const dk = Reserve._selectedDate || todayKey();
-    const all = Reserve.getAllBookings();
     const key = `${hall}::${tableNum}`;
-    if (!all[key]) return;
+    const dk = Reserve._selectedDate || todayKey();
 
-    // Знаходимо реальний індекс
+    // Знаходимо realIdx
+    const all = Reserve.getAllBookings();
+    if (!all[key]) return;
     let seen = -1, realIdx = -1;
     for (let i = 0; i < all[key].length; i++) {
       if (all[key][i].date === dk) { seen++; if (seen === idx) { realIdx = i; break; } }
     }
     if (realIdx === -1) return;
 
-    const b = all[key][realIdx];
-    Reserve._editingRealIdx = realIdx;
-    Reserve._pendingPhoto = b.photo || '';
-
-    showModal(`
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div style="font-family:'Cormorant Garamond',serif;font-size:19px;color:var(--gold);font-weight:700">
-          ✏️ Редагувати резерв
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:6px 10px">✕</button>
-      </div>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:14px">
-        Стіл ${esc(tableNum)} · ${esc(hall)}
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div class="form-group">
-          <label class="lbl">Час</label>
-          <input type="time" class="field" id="re-time" value="${esc(b.time || '19:00')}">
-        </div>
-        <div class="form-group">
-          <label class="lbl">Кількість гостей</label>
-          <input type="number" class="field" id="re-guests" value="${b.guests || 1}" min="1" max="30">
-        </div>
-      </div>
-
-      <div class="form-group" style="margin-bottom:10px">
-        <label class="lbl">Ім'я замовника</label>
-        <input type="text" class="field" id="re-name" value="${esc(b.name || '')}">
-      </div>
-      <div class="form-group" style="margin-bottom:10px">
-        <label class="lbl">Телефон</label>
-        <input type="tel" class="field" id="re-phone" value="${esc(b.phone || '')}">
-      </div>
-      <div class="form-group" style="margin-bottom:10px">
-        <label class="lbl">Меню</label>
-        <input type="text" class="field" id="re-menu" value="${esc(b.menu || '')}">
-      </div>
-
-      <div class="form-group" style="margin-bottom:10px">
-        <label class="lbl">Статус</label>
-        <select class="field" id="re-status">
-          <option value="booked" ${b.status === 'booked' ? 'selected' : ''}>Резерв</option>
-          <option value="occupied" ${b.status === 'occupied' ? 'selected' : ''}>Зайнято</option>
-        </select>
-      </div>
-
-      <div class="form-group" style="margin-bottom:16px">
-        <label class="lbl">Фото</label>
-        <input type="file" id="re-photo-input" accept="image/*" style="display:none"
-          onchange="Reserve._onPhotoSelected(this)">
-        <div id="rb-photo-wrap" style="display:flex;align-items:center;gap:10px;margin-top:6px">
-          <button type="button" class="btn btn-ghost" style="padding:10px 16px;font-size:13px;border:1px dashed rgba(255,255,255,.2)"
-            onclick="document.getElementById('re-photo-input').click()">
-            📷 ${b.photo ? 'Змінити фото' : 'Додати фото'}
-          </button>
-          <div id="rb-photo-preview" style="${b.photo ? '' : 'display:none;'}position:relative">
-            <img id="rb-photo-img" src="${b.photo || ''}"
-              style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--gold-border)">
-            <button type="button" onclick="Reserve._clearPhoto()"
-              style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
-                background:var(--danger);border:none;color:#fff;font-size:10px;cursor:pointer;
-                display:flex;align-items:center;justify-content:center;padding:0;line-height:1">✕</button>
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-gold" style="flex:1" onclick="Reserve.saveEditBooking()">
-          💾 Зберегти зміни
-        </button>
-        <button class="btn btn-ghost" onclick="Reserve._renderModal(Reserve.TYPE_INFO[Reserve._lastType]||{})">
-          Скасувати
-        </button>
-      </div>
-    `);
-  },
-
-  async saveEditBooking() {
-    const hall = Reserve._modalHall;
-    const tableNum = Reserve._modalTable;
-    const key = `${hall}::${tableNum}`;
-    const realIdx = Reserve._editingRealIdx;
-
-    const time   = $('re-time')?.value || '';
-    const guests = Number($('re-guests')?.value) || 1;
-    const name   = $('re-name')?.value.trim() || '';
-    const phone  = $('re-phone')?.value.trim() || '';
-    const menu   = $('re-menu')?.value.trim() || '';
-    const status = $('re-status')?.value || 'booked';
-    const photo  = Reserve._pendingPhoto;
+    const time   = document.getElementById('re-time-' + idx)?.value || '';
+    const guests = Number(document.getElementById('re-guests-' + idx)?.value) || 1;
+    const name   = document.getElementById('re-name-' + idx)?.value.trim() || '';
+    const phone  = document.getElementById('re-phone-' + idx)?.value.trim() || '';
+    const menu   = document.getElementById('re-menu-' + idx)?.value.trim() || '';
+    const status = document.getElementById('re-status-' + idx)?.value || 'booked';
 
     if (!name) { toast("Вкажіть ім'я замовника", 'error-t'); return; }
 
-    const all = Reserve.getAllBookings();
-    if (!all[key] || !all[key][realIdx]) { toast('Бронювання не знайдено', 'error-t'); return; }
-
-    // Оновлюємо поля, зберігаємо незмінні
     const existing = all[key][realIdx];
     all[key][realIdx] = {
       ...existing,
@@ -1368,24 +1399,32 @@ const Reserve = {
       updatedBy: currentUser?.displayName || currentUser?.login || '',
       updatedAt: new Date().toISOString(),
     };
-    if (photo) all[key][realIdx].photo = photo;
-    else if (!photo && existing.photo) delete all[key][realIdx].photo;
+
+    // Фото
+    const pendingPhoto = Reserve._pendingPhotoFor[idx];
+    if (pendingPhoto === null) {
+      delete all[key][realIdx].photo; // видалено
+    } else if (pendingPhoto) {
+      all[key][realIdx].photo = pendingPhoto;
+    }
 
     await Reserve.saveAllBookings(all);
-    Reserve._pendingPhoto = '';
-    Reserve._editingRealIdx = null;
+    Reserve._pendingPhotoFor = {};
 
     toast('✅ Резерв оновлено', 'success-t');
     Reserve.renderContent();
     Reserve.renderTablesList();
     Reserve.renderStrip();
 
-    // Повертаємось до перегляду модалки
+    // Перерендер модалки
     const info = Reserve.TYPE_INFO[Reserve._lastType] || {};
     Reserve._renderModal(info);
   },
 
-  async saveBooking() {
+  // Залишаємо editBooking тільки як аліас (для сумісності)
+  editBooking(idx) { Reserve._switchToEdit(idx); },
+
+    async saveBooking() {
     const time   = $('rb-time').value;
     const guests = Number($('rb-guests').value) || 1;
     const name   = $('rb-name').value.trim();
