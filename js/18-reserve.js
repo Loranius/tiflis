@@ -822,11 +822,41 @@ const Reserve = {
     Reserve._modalHall  = hall;
     Reserve._modalTable = tableNum;
     Reserve._lastType   = type;
+
+    // Якщо є бронювання — одразу відкриваємо редагування першого
+    const dk = Reserve._selectedDate || todayKey();
+    const bookings = Reserve.getEffectiveBookingsFor(hall, tableNum, dk);
+    if (bookings.length) {
+      // Знаходимо власне бронювання цього столу (не через mergedWith)
+      const ownBookings = Reserve.getBookingsFor(hall, tableNum, dk);
+      if (ownBookings.length) {
+        // Відкриваємо модалку перегляду і одразу editBooking(0)
+        Reserve._renderModal(info);
+        Reserve.editBooking(0);
+        return;
+      }
+      // Стіл об'єднаний (slave) — показуємо інфо про master бронювання
+      Reserve._renderModal(info);
+      return;
+    }
+
+    // Вільний стіл — звичайна модалка нового бронювання
     Reserve._renderModal(info);
   },
 
   // Зали де дозволено об'єднання столиків
   MERGE_HALLS: ['Загальний зал', 'Літня тераса'],
+
+  _showNewBookingForm() {
+    const el = document.getElementById('rb-new-form');
+    if (!el) return;
+    el.style.display = 'block';
+    // Ховаємо кнопку
+    const btn = el.previousElementSibling;
+    if (btn) btn.style.display = 'none';
+    // Скролимо до форми
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  },
 
   _toggleMergeBtn(lblId, inputId) {
     const lbl = document.getElementById(lblId);
@@ -898,6 +928,8 @@ const Reserve = {
     const hall = Reserve._modalHall;
     const tableNum = Reserve._modalTable;
     const bookings = Reserve.getBookingsFor(hall, tableNum);
+    const dk = Reserve._selectedDate || todayKey();
+    const hasBookings = bookings.length > 0;
 
     const bookingsHtml = bookings.length
       ? bookings.map((b, i) => `
@@ -950,9 +982,17 @@ const Reserve = {
         ${bookingsHtml}
       </div>
 
-      <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:16px">
+      ${hasBookings ? `
+      <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:14px;text-align:center">
+        <button class="btn btn-ghost" style="width:100%;padding:12px;font-size:13px;border:1px dashed rgba(255,255,255,.15)"
+          onclick="Reserve._showNewBookingForm()">
+          ＋ Додати ще бронювання на цей стіл
+        </button>
+      </div>
+      <div id="rb-new-form" style="display:none;border-top:1px solid rgba(255,255,255,.08);padding-top:16px;margin-top:12px">` : `
+      <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:16px">`}
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
-          color:var(--text-dim);margin-bottom:10px">Нове бронювання</div>
+          color:var(--text-dim);margin-bottom:10px">${hasBookings ? 'Нове бронювання' : 'Нове бронювання'}</div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div class="form-group">
