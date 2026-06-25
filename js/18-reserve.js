@@ -828,6 +828,25 @@ const Reserve = {
   // Зали де дозволено об'єднання столиків
   MERGE_HALLS: ['Загальний зал', 'Літня тераса'],
 
+  _toggleMergeBtn(lblId, inputId) {
+    const lbl = document.getElementById(lblId);
+    const inp = document.getElementById(inputId);
+    if (!lbl || !inp) return;
+    inp.checked = !inp.checked;
+    const tag = lbl.querySelector('.merge-tag');
+    if (inp.checked) {
+      lbl.style.border = '2px solid var(--gold)';
+      lbl.style.background = 'rgba(212,175,55,.18)';
+      lbl.style.boxShadow = '0 0 12px rgba(212,175,55,.35)';
+      if (tag) { tag.textContent = '✓ ДОДАНО'; tag.style.color = 'var(--gold)'; }
+    } else {
+      lbl.style.border = '2px solid rgba(212,175,55,.25)';
+      lbl.style.background = 'rgba(212,175,55,.05)';
+      lbl.style.boxShadow = '';
+      if (tag) { tag.textContent = '＋ ДОДАТИ'; tag.style.color = 'rgba(212,175,55,.45)'; }
+    }
+  },
+
   _renderMergeOptions(hall, tableNum) {
     if (!Reserve.MERGE_HALLS.includes(hall)) return '';
 
@@ -848,16 +867,27 @@ const Reserve = {
     if (!others.length) return '';
 
     return `
-      <div class="form-group" style="margin-bottom:16px">
-        <label class="lbl">Об'єднати з іншими столами (якщо потрібно більше місць)</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:15px">🔗</span>
+          <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--gold)">Об'єднати столи</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">
           ${others.map(t => {
             const seats = Reserve.TYPE_INFO[t.type]?.seats || 0;
+            const typeLabel = (t.type === 'big' || t.type === 'big-8') ? 'великий' : (t.type === 'round' || t.type === 'round-big') ? 'круглий' : 'малий';
+            const btnId = 'merge-' + String(t.n).replace(/[^a-z0-9]/gi,'-');
             return `
-              <label style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;
-                border:1px solid var(--gold-border);border-radius:20px;font-size:12px;cursor:pointer">
-                <input type="checkbox" class="rb-merge" value="${esc(t.n)}" style="margin:0">
-                Стіл ${esc(t.n)} <span style="opacity:.6">(${seats} ос.)</span>
+              <label id="lbl-${btnId}" for="${btnId}"
+                style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                  gap:4px;padding:12px 8px;border-radius:12px;cursor:pointer;user-select:none;
+                  border:2px solid rgba(212,175,55,.25);background:rgba(212,175,55,.05);
+                  transition:all .15s;min-height:72px"
+                onclick="Reserve._toggleMergeBtn('lbl-${btnId}','${btnId}')">
+                <input type="checkbox" class="rb-merge" id="${btnId}" value="${esc(t.n)}" style="display:none">
+                <span style="font-size:22px;font-weight:800;color:var(--gold);line-height:1">${esc(t.n)}</span>
+                <span style="font-size:10px;color:var(--text-dim);margin-top:2px">${typeLabel} · ${seats} ос.</span>
+                <span class="merge-tag" style="font-size:10px;font-weight:700;color:rgba(212,175,55,.45);letter-spacing:.04em;margin-top:2px">＋ ДОДАТИ</span>
               </label>`;
           }).join('')}
         </div>
@@ -884,6 +914,9 @@ const Reserve = {
                 ? `<div style="color:var(--gold);font-size:10px;margin-top:2px">+ столи: ${b.mergedWith.map(esc).join(', ')}</div>`
                 : ''}
             </div>
+            ${b.photo ? `<img src="${b.photo}" onclick="Reserve._viewPhoto('${b.photo}')"
+              style="width:48px;height:48px;object-fit:cover;border-radius:6px;
+                border:1px solid var(--gold-border);cursor:zoom-in;flex-shrink:0">` : ''}
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
               color:${b.status==='occupied' ? 'var(--danger)' : 'var(--warning)'}">
               ${b.status==='occupied' ? 'Зайнято' : 'Резерв'}
@@ -942,6 +975,25 @@ const Reserve = {
         <div class="form-group" style="margin-bottom:16px">
           <label class="lbl">Меню (якщо замовлено заздалегідь)</label>
           <input type="text" class="field" id="rb-menu" placeholder="Напр.: банкетне меню №2 — залиште пустим якщо немає">
+        </div>
+
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="lbl">Фото (підтвердження, побажання гостя)</label>
+          <input type="file" id="rb-photo-input" accept="image/*" capture="environment" style="display:none"
+            onchange="Reserve._onPhotoSelected(this)">
+          <div id="rb-photo-wrap" style="display:flex;align-items:center;gap:10px;margin-top:6px">
+            <button type="button" class="btn btn-ghost" style="padding:10px 16px;font-size:13px;border:1px dashed rgba(255,255,255,.2)"
+              onclick="document.getElementById('rb-photo-input').click()">
+              📷 Додати фото
+            </button>
+            <div id="rb-photo-preview" style="display:none;position:relative">
+              <img id="rb-photo-img" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--gold-border)">
+              <button type="button" onclick="Reserve._clearPhoto()"
+                style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
+                  background:var(--danger);border:none;color:#fff;font-size:10px;cursor:pointer;
+                  display:flex;align-items:center;justify-content:center;padding:0;line-height:1">✕</button>
+            </div>
+          </div>
         </div>
 
         ${Reserve._renderMergeOptions(hall, tableNum)}
@@ -1026,7 +1078,28 @@ const Reserve = {
         booking.status === 'occupied' ? `⚠️ <b>Зал/стіл закрито для гостей</b>` : '',
       ].filter(Boolean).join('\n');
 
-      for (const destId of destIds) await tgSendPersonal(destId, msg);
+      for (const destId of destIds) {
+        if (booking.photo) {
+          // Відправляємо фото з підписом через Edge Function
+          try {
+            await fetch(EDGE_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
+              body: JSON.stringify({
+                action: 'send_photo_personal',
+                chat_id: destId,
+                photoBase64: booking.photo,
+                caption: msg,
+              })
+            });
+          } catch(e) {
+            // Fallback — текст без фото
+            await tgSendPersonal(destId, msg + '\n📷 <i>Фото є в порталі</i>');
+          }
+        } else {
+          await tgSendPersonal(destId, msg);
+        }
+      }
     } catch(e) { console.error('Reserve.notifyZoneWaiters error:', e); }
   },
 
@@ -1054,6 +1127,61 @@ const Reserve = {
     } catch(e) { console.error('Reserve.notifyZoneWaitersCancel error:', e); }
   },
 
+  _pendingPhoto: '',
+
+  _onPhotoSelected(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      // Стискаємо через canvas до макс 800px і якість 0.7
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 800;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.72);
+        Reserve._pendingPhoto = compressed;
+        const imgEl = document.getElementById('rb-photo-img');
+        const preview = document.getElementById('rb-photo-preview');
+        const wrap = document.getElementById('rb-photo-wrap');
+        if (imgEl) imgEl.src = compressed;
+        if (preview) preview.style.display = 'block';
+        // Міняємо кнопку
+        const btn = wrap?.querySelector('button:first-child');
+        if (btn) btn.textContent = '📷 Змінити фото';
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  _clearPhoto() {
+    Reserve._pendingPhoto = '';
+    const inp = document.getElementById('rb-photo-input');
+    const preview = document.getElementById('rb-photo-preview');
+    const wrap = document.getElementById('rb-photo-wrap');
+    if (inp) inp.value = '';
+    if (preview) preview.style.display = 'none';
+    const btn = wrap?.querySelector('button:first-child');
+    if (btn) btn.textContent = '📷 Додати фото';
+  },
+
+  _viewPhoto(src) {
+    showModal(`
+      <div style="text-align:right;margin-bottom:8px">
+        <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 10px">✕</button>
+      </div>
+      <img src="${src}" style="width:100%;border-radius:10px;object-fit:contain;max-height:70vh">
+    `);
+  },
+
   async saveBooking() {
     const time   = $('rb-time').value;
     const guests = Number($('rb-guests').value) || 1;
@@ -1061,6 +1189,7 @@ const Reserve = {
     const phone  = $('rb-phone').value.trim();
     const menu   = $('rb-menu').value.trim();
     const mergedWith = Array.from(document.querySelectorAll('.rb-merge:checked')).map(el => el.value);
+    const photo = Reserve._pendingPhoto || '';
 
     if (!name) { toast("Вкажіть ім'я замовника", 'error-t'); return; }
 
@@ -1078,6 +1207,8 @@ const Reserve = {
       createdAt: new Date().toISOString(),
     };
     if (mergedWith.length) newBooking.mergedWith = mergedWith;
+    if (photo) newBooking.photo = photo;
+    Reserve._pendingPhoto = '';
     all[key].push(newBooking);
 
     await Reserve.saveAllBookings(all);
