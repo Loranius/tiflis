@@ -818,29 +818,52 @@ const Reserve = {
   },
 
   onTableClick(hall, tableNum, type) {
+    const dk = Reserve._selectedDate || todayKey();
+    const all = Reserve.getAllBookings();
+
+    // Перевіряємо чи цей стіл є slave в чужому бронюванні (об'єднаний)
+    let masterHall = null, masterTable = null, masterType = null;
+    for (const key in all) {
+      const [bHall, bTable] = key.split('::');
+      if (bHall !== hall) continue;
+      for (const b of all[key]) {
+        if (b.date === dk && Array.isArray(b.mergedWith) && b.mergedWith.includes(tableNum)) {
+          masterHall  = bHall;
+          masterTable = bTable;
+          const tObj  = Reserve.LAYOUTS[bHall]?.tables.find(t => t.n === bTable);
+          masterType  = tObj?.type || 'small';
+          break;
+        }
+      }
+      if (masterTable) break;
+    }
+
+    if (masterTable) {
+      // Клік на slave → переключаємось на master і одразу редагування
+      Reserve._modalHall  = masterHall;
+      Reserve._modalTable = masterTable;
+      Reserve._lastType   = masterType;
+      const masterInfo = Reserve.TYPE_INFO[masterType] || Reserve.TYPE_INFO['small'];
+      Reserve._renderModal(masterInfo);
+      Reserve.editBooking(0);
+      return;
+    }
+
+    // Власне бронювання цього столу
     const info = Reserve.TYPE_INFO[type];
     Reserve._modalHall  = hall;
     Reserve._modalTable = tableNum;
     Reserve._lastType   = type;
 
-    // Якщо є бронювання — одразу відкриваємо редагування першого
-    const dk = Reserve._selectedDate || todayKey();
-    const bookings = Reserve.getEffectiveBookingsFor(hall, tableNum, dk);
-    if (bookings.length) {
-      // Знаходимо власне бронювання цього столу (не через mergedWith)
-      const ownBookings = Reserve.getBookingsFor(hall, tableNum, dk);
-      if (ownBookings.length) {
-        // Відкриваємо модалку перегляду і одразу editBooking(0)
-        Reserve._renderModal(info);
-        Reserve.editBooking(0);
-        return;
-      }
-      // Стіл об'єднаний (slave) — показуємо інфо про master бронювання
+    const ownBookings = Reserve.getBookingsFor(hall, tableNum, dk);
+    if (ownBookings.length) {
+      // Master або звичайний заброньований → одразу редагування
       Reserve._renderModal(info);
+      Reserve.editBooking(0);
       return;
     }
 
-    // Вільний стіл — звичайна модалка нового бронювання
+    // Вільний стіл — модалка нового бронювання
     Reserve._renderModal(info);
   },
 
