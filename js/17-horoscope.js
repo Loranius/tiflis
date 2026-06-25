@@ -148,21 +148,10 @@ const Horoscope = {
     if (!resp.ok) throw new Error('Edge Function error: ' + resp.status);
     const envelope = await resp.json();
     if (!envelope.ok) throw new Error(envelope.error || 'generate_horoscope failed');
-    const text = (envelope.data?.content||[]).map(c=>c.text||'').join('');
-    const clean = text.replace(/```json|```/g,'').trim();
-    const sanitized = clean.replace(/[⺀-⿿　-鿿가-퟿切-﫿︰-﹏]/g, '');
+    const text = (envelope.text || '').replace(/```json|```/g,'').trim();
+    const sanitized = text.replace(/[⺀-⿿　-鿿가-퟿切-﫿︰-﹏]/g, '');
     try {
-      const parsed = JSON.parse(sanitized);
-      const checkLatin = (obj) => {
-        for (const [k, v] of Object.entries(obj)) {
-          if (typeof v === 'string' && /[a-zA-Z]{3,}/.test(v))
-            console.warn('Horoscope: латинські символи у полі "' + k + '":', v);
-          else if (v && typeof v === 'object' && !Array.isArray(v))
-            checkLatin(v);
-        }
-      };
-      checkLatin(parsed);
-      return parsed;
+      return JSON.parse(sanitized);
     } catch(e) {
       console.error('Horoscope JSON parse error. Raw:', sanitized);
       throw new Error('Не вдалося розпарсити відповідь від AI');
@@ -248,9 +237,8 @@ const Horoscope = {
     if (!resp.ok) throw new Error('Edge Function error: ' + resp.status);
     const envelope = await resp.json();
     if (!envelope.ok) throw new Error(envelope.error || 'generate_horoscope failed');
-    const text = (envelope.data?.content||[]).map(c=>c.text||'').join('');
-    const clean = text.replace(/```json|```/g,'').trim();
-    const sanitized = clean.replace(/[⺀-⿿　-鿿가-퟿切-﫿︰-﹏]/g, '');
+    const text = (envelope.text || '').replace(/```json|```/g,'').trim();
+    const sanitized = text.replace(/[⺀-⿿　-鿿가-퟿切-﫿︰-﹏]/g, '');
     try {
       return JSON.parse(sanitized);
     } catch(e) {
