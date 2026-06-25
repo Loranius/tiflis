@@ -954,10 +954,12 @@ const Reserve = {
             <!-- Режим перегляду -->
             <div id="bview-view-${i}">
               ${b.photo ? `
-              <div onclick="Reserve._viewPhoto('${b.photo}')" style="cursor:zoom-in;position:relative">
-                <img src="${b.photo}" style="width:100%;height:140px;object-fit:cover;display:block">
-                <div style="position:absolute;bottom:0;left:0;right:0;height:60px;
-                  background:linear-gradient(transparent,rgba(0,0,0,.7))"></div>
+              <div id="photo-wrap-${i}" style="overflow:hidden;position:relative;border-radius:12px 12px 0 0;
+                background:#000;touch-action:pinch-zoom">
+                <img src="${b.photo}" id="photo-img-${i}"
+                  style="width:100%;max-height:60vh;object-fit:contain;display:block;
+                    transform-origin:center center;transition:transform .1s;user-select:none"
+                  onload="Reserve._initPhotoZoom('photo-wrap-${i}','photo-img-${i}')">
               </div>` : ''}
               <div style="padding:12px 14px">
                 <div style="display:flex;align-items:flex-start;gap:10px">
@@ -1305,13 +1307,55 @@ const Reserve = {
     if (btn) btn.textContent = '📷 Додати фото';
   },
 
-  _viewPhoto(src) {
-    showModal(`
-      <div style="text-align:right;margin-bottom:8px">
-        <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 10px">✕</button>
-      </div>
-      <img src="${src}" style="width:100%;border-radius:10px;object-fit:contain;max-height:70vh">
-    `);
+  _initPhotoZoom(wrapId, imgId) {
+    const wrap = document.getElementById(wrapId);
+    const img  = document.getElementById(imgId);
+    if (!wrap || !img) return;
+    let scale = 1, lastScale = 1;
+    let originX = 0, originY = 0;
+    let startDist = 0;
+
+    const clamp = (v, mn, mx) => Math.min(mx, Math.max(mn, v));
+    const apply = () => { img.style.transform = `scale(${scale})`; };
+
+    // Pinch zoom
+    wrap.addEventListener('touchstart', e => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        startDist = Math.hypot(dx, dy);
+        lastScale = scale;
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    wrap.addEventListener('touchmove', e => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        scale = clamp(lastScale * (dist / startDist), 1, 4);
+        apply();
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    // Подвійний тап — скидання
+    let lastTap = 0;
+    wrap.addEventListener('touchend', e => {
+      if (e.touches.length === 0) {
+        const now = Date.now();
+        if (now - lastTap < 280) { scale = scale > 1 ? 1 : 2.5; apply(); }
+        lastTap = now;
+      }
+    });
+
+    // Мишка (desktop)
+    wrap.addEventListener('wheel', e => {
+      scale = clamp(scale + (e.deltaY < 0 ? 0.2 : -0.2), 1, 4);
+      apply();
+      e.preventDefault();
+    }, { passive: false });
   },
 
   // ── Перемикання view/edit inline ────────────────────────────────────
