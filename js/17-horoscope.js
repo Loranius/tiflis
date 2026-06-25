@@ -109,62 +109,95 @@ const Horoscope = {
     return ctx[role] || ctx.waiter;
   },
 
+  // ── Маппінг знаків на англійські назви для freehoroscopeapi.com ──────
+  _SIGN_EN: {
+    '♈ Овен':       'aries',
+    '♉ Телець':     'taurus',
+    '♊ Близнюки':   'gemini',
+    '♋ Рак':        'cancer',
+    '♌ Лев':        'leo',
+    '♍ Діва':       'virgo',
+    '♎ Терези':     'libra',
+    '♏ Скорпіон':   'scorpio',
+    '♐ Стрілець':   'sagittarius',
+    '♑ Козеріг':    'capricorn',
+    '♒ Водолій':    'aquarius',
+    '♓ Риби':       'pisces',
+  },
+
+  // ── Крок 1: отримати реальний астрологічний гороскоп дня ─────────────
+  async _fetchBaseHoroscope(zodiac) {
+    const signEn = Horoscope._SIGN_EN[zodiac];
+    if (!signEn) throw new Error('Невідомий знак: ' + zodiac);
+    const resp = await fetch('https://freehoroscopeapi.com/api/v1/get-horoscope/daily?sign=' + signEn);
+    if (!resp.ok) throw new Error('freehoroscopeapi error: ' + resp.status);
+    const json = await resp.json();
+    const text = json?.data?.horoscope;
+    if (!text) throw new Error('Порожня відповідь від horoscope API');
+    return text; // англійський текст реального гороскопу дня
+  },
+
+  // ── Крок 2: адаптація через Groq з реальною базою ────────────────────
   async _callClaude(zodiac, role) {
     const roleCtx = Horoscope._getRoleContext(role || 'waiter');
     const today = new Date().toLocaleDateString('uk-UA', {weekday:'long', day:'numeric', month:'long'});
     const tableFieldLine = roleCtx.tableField
-      ? `"lucky": { "number": число від 1 до 99, "color": "колір", "time": "ЧЧ:ХХ", "table": число від 1 до 20 }`
-      : `"lucky": { "number": число від 1 до 99, "color": "колір", "time": "ЧЧ:ХХ" }`;
-    const prompt = `КРИТИЧНО ВАЖЛИВО: відповідай ВИКЛЮЧНО українською мовою. ЗАБОРОНЕНО використовувати будь-які англійські слова, фрази або вирази. Якщо є спокуса написати англійське слово — знайди українській відповідник. Наприклад: НЕ "energy" — а "енергія", НЕ "vibe" — а "настрій", НЕ "tip" — а "порада". Жодних китайських, японських, арабських чи інших не-українських символів. Лише українська мова та емодзі — більше нічого.
+      ? '"lucky": { "number": число від 1 до 99, "color": "колір", "time": "ЧЧ:ХХ", "table": число від 1 до 20 }'
+      : '"lucky": { "number": число від 1 до 99, "color": "колір", "time": "ЧЧ:ХХ" }';
 
-Ти астролог-гуморист для команди ресторану "Тифліс". Напиши гороскоп на сьогодні (${today}) для ${roleCtx.title} зі знаком ${zodiac}.
+    // Отримуємо реальний астрологічний прогноз дня
+    let baseText = '';
+    try {
+      baseText = await Horoscope._fetchBaseHoroscope(zodiac);
+    } catch(e) {
+      console.warn('freehoroscopeapi fallback (без бази):', e.message);
+    }
 
-Гороскоп ПЕРСОНАЛІЗОВАНИЙ під роль «${roleCtx.title}» — всі згадки роботи, гостей, ситуацій мають стосуватись саме цієї посади.
-Гороскоп має охоплювати ДВА напрямки:
-1. РОБОТА (${roleCtx.workHint})
-2. ЦИВІЛЬНЕ ЖИТТЯ — прогноз для особистого/приватного життя поза роботою (стосунки, здоров'я, фінанси, хобі, настрій вдома)
+    const baseBlock = baseText
+      ? 'РЕАЛЬНИЙ АСТРОЛОГІЧНИЙ ПРОГНОЗ ДНЯ (використай як змістовну основу — не переклад, а переосмислення):\n"' + baseText + '"\n\n'
+      : '';
 
-Стиль:
-- Позитивний та мотивуючий, але реалістичний
-- 100% українська мова — жодного англійського слова, жодного іншого алфавіту крім українського та емодзі
-- Легкий та з гумором де доречно
-
-Відповідь ЛИШЕ у форматі JSON (без markdown, без пояснень, без коментарів):
-{
-  "sign": "${zodiac}",
-  "role": "${roleCtx.title}",
-  "date": "${today}",
-  "energy": ["одне або два емодзі настрою"],
-  "general": "загальний текст гороскопу 2-3 речення",
-  "work": "${roleCtx.workHint} — 1-2 речення",
-  "civil": "прогноз для особистого/цивільного життя поза роботою 1-2 речення (стосунки, здоров'я, фінанси, хобі)",
-  "tip": "${roleCtx.tipHint}",
-  "guest_type": "${roleCtx.guestHint}",
-  "shift_prediction": "${roleCtx.shiftHint}",
-  "civil_prediction": "містичне передбачення для особистого вечора після роботи — 1 речення",
-  ${tableFieldLine}
-}`;
-
+    const prompt = 'КРИТИЧНО ВАЖЛИВО: відповідай ВИКЛЮЧНО українською мовою. Жодних англійських слів, жодного іншого алфавіту крім українського та емодзі.\n\n'
+      + baseBlock
+      + 'Ти астролог-гуморист для команди ресторану "Тифліс". На основі реального астрологічного прогнозу вище — адаптуй його для ' + roleCtx.title + ' зі знаком ' + zodiac + ' на сьогодні (' + today + ').\n\n'
+      + 'ВАЖЛИВО: не перекладай дослівно — переосмисли планетарні впливи крізь призму ресторанної роботи і особистого життя ' + roleCtx.title + '. Збережи суть і настрій астрологічного прогнозу.\n\n'
+      + 'Гороскоп охоплює ДВА напрямки:\n'
+      + '1. РОБОТА: ' + roleCtx.workHint + '\n'
+      + '2. ЦИВІЛЬНЕ ЖИТТЯ: стосунки, здоров\'я, фінанси, хобі поза роботою\n\n'
+      + 'Стиль: з теплом і легким гумором, але не банально — реальний астрологічний настрій дня має відчуватись.\n\n'
+      + 'Відповідь ЛИШЕ у форматі JSON (без markdown, без пояснень):\n'
+      + '{\n'
+      + '  "sign": "' + zodiac + '",\n'
+      + '  "role": "' + roleCtx.title + '",\n'
+      + '  "date": "' + today + '",\n'
+      + '  "energy": ["одне або два емодзі що відображають астрологічний настрій дня"],\n'
+      + '  "general": "суть астрологічного дня адаптована для ' + roleCtx.title + ' — 2-3 речення",\n'
+      + '  "work": "планетарні впливи у контексті роботи: ' + roleCtx.workHint + ' — 1-2 речення",\n'
+      + '  "civil": "планетарні впливи у особистому житті поза роботою — 1-2 речення",\n'
+      + '  "tip": "' + roleCtx.tipHint + ' — спирайся на астрологічний настрій дня",\n'
+      + '  "guest_type": "' + roleCtx.guestHint + '",\n'
+      + '  "shift_prediction": "' + roleCtx.shiftHint + '",\n'
+      + '  "civil_prediction": "містичне передбачення для вечора — 1 речення",\n'
+      + '  ' + tableFieldLine + '\n'
+      + '}';
 
     const resp = await fetch(EDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
       body: JSON.stringify({ action: 'generate_horoscope', prompt })
     });
-    if (!resp.ok) throw new Error(`Edge Function error: ${resp.status}`);
+    if (!resp.ok) throw new Error('Edge Function error: ' + resp.status);
     const envelope = await resp.json();
     if (!envelope.ok) throw new Error(envelope.error || 'generate_horoscope failed');
     const text = (envelope.data?.content||[]).map(c=>c.text||'').join('');
     const clean = text.replace(/```json|```/g,'').trim();
-    // Sanitize: remove stray CJK / Arabic / other non-Ukrainian unicode blocks
-    const sanitized = clean.replace(/[⺀-⿿　-鿿가-퟿切-﫿︰-﹏]/g, '');
+    const sanitized = clean.replace(/[⺀-⿿　-鿿가-퟿切-﫿︰-﹏]/g, '');
     try {
       const parsed = JSON.parse(sanitized);
-      // Логуємо латинські слова у значеннях для дебагу
       const checkLatin = (obj) => {
         for (const [k, v] of Object.entries(obj)) {
           if (typeof v === 'string' && /[a-zA-Z]{3,}/.test(v))
-            console.warn(`Horoscope: латинські символи у полі "${k}":`, v);
+            console.warn('Horoscope: латинські символи у полі "' + k + '":', v);
           else if (v && typeof v === 'object' && !Array.isArray(v))
             checkLatin(v);
         }
@@ -187,7 +220,6 @@ const Horoscope = {
 
   async generateFor(zodiac) {
     if (Horoscope._loading) return;
-    // Show result in modal
     const role = currentUser?.role || 'waiter';
     const cacheKey = 'horoscope_cache_' + new Date().toISOString().slice(0,10) + '_' + zodiac + '_' + role;
     const cached = (() => { try { return JSON.parse(localStorage.getItem(cacheKey)||'null'); } catch(e) { return null; } })();
@@ -227,36 +259,46 @@ const Horoscope = {
     } finally { Horoscope._loading = false; }
   },
 
-
-  // Промпт для вихідного дня — без згадок роботи
+  // ── Гороскоп для вихідного дня ────────────────────────────────────────
   async _callClaudeOffDay(zodiac) {
     const today = new Date().toLocaleDateString('uk-UA', {weekday:'long', day:'numeric', month:'long'});
-    const prompt = `КРИТИЧНО ВАЖЛИВО: відповідай ВИКЛЮЧНО українською мовою. ЗАБОРОНЕНО використовувати будь-які англійські слова, фрази або вирази. Жодних китайських, японських, арабських чи інших не-українських символів. Лише українська мова та емодзі.
 
-Ти астролог-гуморист. Напиши гороскоп на сьогодні (${today}) для людини зі знаком ${zodiac}.
-Сьогодні у неї вихідний день — ЖОДНИХ згадок роботи, ресторану, гостей, зміни, чайових.
-Тільки особисте: кохання, друзі, прогулянки, здоров'я, хобі, фінанси поза роботою, настрій, відпочинок.
+    let baseText = '';
+    try {
+      baseText = await Horoscope._fetchBaseHoroscope(zodiac);
+    } catch(e) {
+      console.warn('freehoroscopeapi offday fallback:', e.message);
+    }
 
-Стиль: позитивний, легкий, з теплом і гумором. 100% українська мова.
+    const baseBlock = baseText
+      ? 'РЕАЛЬНИЙ АСТРОЛОГІЧНИЙ ПРОГНОЗ ДНЯ (використай як змістовну основу — не переклад, а переосмислення):\n"' + baseText + '"\n\n'
+      : '';
 
-Відповідь ЛИШЕ у форматі JSON (без markdown, без пояснень):
-{
-  "sign": "${zodiac}",
-  "date": "${today}",
-  "energy": ["одне або два емодзі настрою"],
-  "general": "загальний текст гороскопу 2-3 речення",
-  "civil": "прогноз для особистого дня — стосунки, друзі, прогулянки 1-2 речення",
-  "tip": "порада дня для приємного вихідного — 1 речення",
-  "civil_prediction": "містичне передбачення для вечора вихідного — 1 речення",
-  "lucky": { "number": число від 1 до 99, "color": "колір", "time": "ЧЧ:ХХ" }
-}`;
+    const prompt = 'КРИТИЧНО ВАЖЛИВО: відповідай ВИКЛЮЧНО українською мовою. Жодних англійських слів, жодного іншого алфавіту крім українського та емодзі.\n\n'
+      + baseBlock
+      + 'Ти астролог-гуморист. На основі реального астрологічного прогнозу вище — адаптуй його для людини зі знаком ' + zodiac + ' на сьогодні (' + today + ').\n'
+      + 'Сьогодні у неї ВИХІДНИЙ день — жодних згадок роботи, ресторану, гостей, зміни.\n'
+      + 'Тільки особисте: кохання, друзі, прогулянки, здоров\'я, хобі, фінанси, настрій, відпочинок.\n\n'
+      + 'ВАЖЛИВО: не перекладай дослівно — переосмисли астрологічний настрій дня крізь призму особистого вихідного.\n\n'
+      + 'Стиль: з теплом і легким гумором, реальний астрологічний настрій має відчуватись.\n\n'
+      + 'Відповідь ЛИШЕ у форматі JSON (без markdown, без пояснень):\n'
+      + '{\n'
+      + '  "sign": "' + zodiac + '",\n'
+      + '  "date": "' + today + '",\n'
+      + '  "energy": ["одне або два емодзі астрологічного настрою дня"],\n'
+      + '  "general": "суть астрологічного дня для вихідного — 2-3 речення",\n'
+      + '  "civil": "планетарні впливи у особистому дні — стосунки, друзі, прогулянки 1-2 речення",\n'
+      + '  "tip": "порада для приємного вихідного спираючись на астрологічний настрій — 1 речення",\n'
+      + '  "civil_prediction": "містичне передбачення для вечора вихідного — 1 речення",\n'
+      + '  "lucky": { "number": число від 1 до 99, "color": "колір", "time": "ЧЧ:ХХ" }\n'
+      + '}';
 
     const resp = await fetch(EDGE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-portal-key': PORTAL_KEY },
       body: JSON.stringify({ action: 'generate_horoscope', prompt })
     });
-    if (!resp.ok) throw new Error(`Edge Function error: ${resp.status}`);
+    if (!resp.ok) throw new Error('Edge Function error: ' + resp.status);
     const envelope = await resp.json();
     if (!envelope.ok) throw new Error(envelope.error || 'generate_horoscope failed');
     const text = (envelope.data?.content||[]).map(c=>c.text||'').join('');
@@ -270,7 +312,7 @@ const Horoscope = {
     }
   },
 
-  // Щоранковий розсил о 11:00
+  // ── Щоранковий розсил о 11:00 ─────────────────────────────────────────
   async sendMorningHoroscopes() {
     const users = getUsers().filter(u => !u.fired && (u.chat_id || u.tg_id) && u.zodiac);
     if (!users.length) return;
@@ -279,7 +321,6 @@ const Horoscope = {
     const scheduleMap = DB.get('schedule', {});
     const WORKING_SHIFTS = ['Р', 'СН', 'Б', 'С', 'Р/Б', 'СН/Б'];
 
-    // Розділяємо користувачів на робочих і вихідних
     const workingUsers = [];
     const offUsers     = [];
     for (const u of users) {
@@ -359,4 +400,3 @@ const Horoscope = {
     }
   },
 };
-
