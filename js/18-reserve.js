@@ -980,9 +980,12 @@ const Reserve = {
                     </div>
                   </div>
                 </div>
-                <div style="display:flex;gap:8px;margin-top:12px">
-                  <button class="btn btn-ghost" style="flex:1;padding:10px;font-size:13px"
+                <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+                  <button class="btn btn-ghost" style="flex:1;padding:10px;font-size:13px;min-width:120px"
                     onclick="Reserve._switchToEdit(${i})">✏️ Редагувати</button>
+                  <button class="btn btn-ghost" style="flex:1;padding:10px;font-size:13px;min-width:120px;
+                    color:var(--success);border-color:rgba(90,175,122,.4)"
+                    onclick="Reserve.tableFreed(${i})">✅ Стіл вільний</button>
                   <button class="btn btn-ghost" style="padding:10px 14px;color:var(--danger)"
                     onclick="Reserve.deleteBooking(${i})">🗑</button>
                 </div>
@@ -1186,6 +1189,70 @@ const Reserve = {
       .filter(Boolean)
       .map(u => u.chat_id || u.tg_id)
       .filter(Boolean);
+  },
+
+  async tableFreed(idx) {
+    const hall = Reserve._modalHall;
+    const tableNum = Reserve._modalTable;
+    const dk = Reserve._selectedDate || todayKey();
+    const all = Reserve.getAllBookings();
+    const key = `${hall}::${tableNum}`;
+    if (!all[key]) return;
+
+    // Знаходимо realIdx
+    let seen = -1, realIdx = -1;
+    for (let i = 0; i < all[key].length; i++) {
+      if (all[key][i].date === dk) { seen++; if (seen === idx) { realIdx = i; break; } }
+    }
+    if (realIdx === -1) return;
+    const booking = all[key][realIdx];
+
+    showConfirm(
+      `Позначити стіл ${esc(tableNum)} як вільний і повідомити офіціантів?`,
+      async () => {
+        // Видаляємо бронювання
+        const [removed] = all[key].splice(realIdx, 1);
+        await Reserve.saveAllBookings(all);
+
+        toast('✅ Стіл звільнено', 'success-t');
+        Reserve.renderContent();
+        Reserve.renderTablesList();
+        Reserve.renderStrip();
+
+        // Повідомлення офіціантам зони
+        await Reserve.notifyZoneWaitersFreed(removed, hall, tableNum);
+
+        closeModal();
+      },
+      { okLabel: '✅ Стіл вільний', okClass: 'btn-gold', cancelLabel: 'Скасувати' }
+    );
+  },
+
+  async notifyZoneWaitersFreed(booking, hall, tableNum) {
+    try {
+      const destIds = await Reserve._getZoneWaiterDestIds(hall, booking.date);
+      if (!destIds.length) return;
+
+      const MONTHS_UA = ["січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"];
+      const [yy, mm, dd] = booking.date.split('-').map(Number);
+      const dateLabel = `${dd} ${MONTHS_UA[mm-1]}`;
+
+      const tablesLabel = Array.isArray(booking.mergedWith) && booking.mergedWith.length
+        ? `${esc(tableNum)} + ${booking.mergedWith.map(esc).join(', ')}`
+        : esc(tableNum);
+
+      const msg = [
+        `🟢 <b>Стіл звільнився</b>`,
+        `📍 ${esc(hall)} · стіл ${tablesLabel}`,
+        `📅 ${dateLabel} · 🕐 ${esc(booking.time || '—')}`,
+        `👤 ${esc(booking.name)} · 👥 ${booking.guests} ос.`,
+        ``,
+        `<i>Стіл готовий до прийому нових гостей</i>`,
+      ].filter(Boolean).join('
+');
+
+      for (const destId of destIds) await tgSendPersonal(destId, msg);
+    } catch(e) { console.error('Reserve.notifyZoneWaitersFreed error:', e); }
   },
 
   async notifyZoneWaiters(booking, hall, tableNum) {
