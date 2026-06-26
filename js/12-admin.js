@@ -330,7 +330,7 @@ const Admin = {
       logEvent('admin', 'Видалено роль'); toast('Роль видалено', 'success-t');
       Admin.renderCustomRoles();
     } catch(e) { toast('Помилка', 'error'); console.error(e); }
-  }
+  },
   // ══════════════════════════════════════════════════════════════
   // ДОСТУП ДО ВКЛАДОК — видимість сторінок для конкретного юзера
   // ══════════════════════════════════════════════════════════════
@@ -405,7 +405,11 @@ const Admin = {
           '</label>';
       }).join('') +
       '</div>' +
-      '<button class="btn btn-gold" onclick="Admin.savePageVisibility('' + userId + '')">💾 Зберегти доступ</button>';
+      '<button class="btn btn-gold" data-vis-uid="' + userId + '" id="save-page-vis-btn">💾 Зберегти доступ</button>';
+
+    // Прив'язуємо кнопку через addEventListener (уникаємо проблем з лапками в onclick)
+    const saveBtn = document.getElementById('save-page-vis-btn');
+    if (saveBtn) saveBtn.addEventListener('click', () => Admin.savePageVisibility(userId));
   },
 
   async savePageVisibility(userId) {
