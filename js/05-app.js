@@ -837,6 +837,7 @@ const App = {
       { page:'daily',     icon:'📋', label:"Щоденні обов'язки", section:'Основне' },
       { page:'notifications', icon:'🔔', label:'Сповіщення', section:'Основне' },
       { page:'interactive',   icon:'🎮', label:'Інтерактив',        section:'Основне' },
+      { page:'proiob',    icon:'💸', label:'Пройоб',             section:'Основне', proiobOnly:true },
       { page:'admin',     icon:'⚙️', label:'Управління',        section:'Адміністрування', adminOnly:true },
     ];
   },
@@ -916,6 +917,7 @@ const App = {
     if (page==='notifications') Notify.init();
     if (page==='interactive') Interactive.init();
     if (page==='journal')     EventLog.init();
+    if (page==='proiob')      Proiob.init();
 
     // Lazy poll: одразу підтягуємо свіжі дані для сторінок що не в постійному циклі
     const lazyPages = { schedule: '_pollSchedule', rating: '_pollRatings', cash: '_pollCash', handover: '_pollDuties', daily: '_pollDuties', reserve: '_pollReserve' };
@@ -964,7 +966,7 @@ const App = {
     if (u.role === 'runner' || u.role2 === 'runner') { grid.innerHTML = ''; return; }
     // Усі сторінки крім тих що вже в bottom nav + адмін окремо
     const BN_MAIN = ['schedule','cash','menu','home'];
-    const _bnCookPages = ['schedule','staff','menu','interactive','reserve'];
+    const _bnCookPages = ['schedule','staff','menu','interactive','reserve','proiob'];
     const items = App.getNavItems().filter(item => {
       if (BN_MAIN.includes(item.page)) return false;
       if (item.page === 'cash' && u.role !== 'waiter' && !isSysadmin(u)) return false;
