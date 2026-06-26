@@ -36,6 +36,8 @@ const Home = {
     const visible = sorted.filter(item => {
       if (item.page === 'cash' && u.role !== 'waiter' && !isSysadmin(u)) return false;
       if (item.adminOnly && !isAdmin(u)) return false;
+      if (item.proiobOnly && !canAccessProiob(u)) return false;
+      if (!isSysadmin(u) && !App.isPageVisible(item.page, u.id)) return false;
       return true;
     });
 

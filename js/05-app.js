@@ -358,6 +358,7 @@ const App = {
   // Перебудовує nav і при потребі робить редирект.
   _applyPageVisibility() {
     App.renderSidebarNav();
+    App._applyBottomNavVisibility();
     // Якщо поточна активна сторінка стала прихованою — перейти на першу доступну
     const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
     if (activePage && activePage !== 'home' && !App.isPageVisible(activePage)) {
@@ -368,6 +369,18 @@ const App = {
       );
       App.navigate(fallback ? fallback.page : 'home');
     }
+  },
+
+  // Приховує/показує статичні кнопки bottom nav відповідно до visibility
+  _applyBottomNavVisibility() {
+    const u = currentUser;
+    if (!u || isSysadmin(u)) return;
+    document.querySelectorAll('.bn-btn[data-bnpage]').forEach(btn => {
+      const page = btn.getAttribute('data-bnpage');
+      if (!page || page === 'home') return; // home завжди видима
+      const hidden = !App.isPageVisible(page, u.id);
+      btn.style.display = hidden ? 'none' : '';
+    });
   },
 
   _updateOfflineQueueBadge(count) {
@@ -688,6 +701,7 @@ const App = {
       </div>`;
 
     App.renderSidebarNav();
+    App._applyBottomNavVisibility();
 
     // Ранер — приховуємо нижню навігацію крім "Головна"
     if (u.role === 'runner' || u.role2 === 'runner') {
