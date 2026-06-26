@@ -490,7 +490,10 @@ const App = {
       }
 
       const changed = JSON.stringify(DB.get(s.key)) !== JSON.stringify(parsed);
-      if (!changed) return { menuChanged: false };
+      // Для page_visibility ключів — завжди записуємо, навіть якщо "не змінилось"
+      // (уникаємо проблеми з default [] === [] порівнянням)
+      const isVisKey = s.key.startsWith(LS_KEYS.PAGE_VIS_PREFIX);
+      if (!changed && !isVisKey) return { menuChanged: false };
 
       DB.set(s.key, parsed);
 
@@ -527,10 +530,11 @@ const App = {
     if (menuChanged && $('page-menu')?.classList.contains('active')) {
       Menu.renderSection(menuActiveSection);
     }
-    // Якщо прийшли оновлення видимості для поточного юзера — перебудувати nav
+    // Visibility: якщо є ключ для поточного юзера — завжди перебудовуємо nav
+    // (не тільки при зміні — бо перша синхронізація може збігатись з default [])
     const myVisKey = LS_KEYS.PAGE_VIS_PREFIX + (currentUser?.id || '');
-    const visChanged = settings.some(s => s.key === myVisKey);
-    if (visChanged) App._applyPageVisibility();
+    const hasVisKey = settings.some(s => s.key === myVisKey);
+    if (hasVisKey) App._applyPageVisibility();
     if (reserveChanged && $('page-reserve')?.classList.contains('active')) {
       Reserve.renderContent();
       Reserve.renderTablesList();

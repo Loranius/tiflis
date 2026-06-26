@@ -373,10 +373,17 @@ const Admin = {
     });
   },
 
-  _renderPageCheckboxes(userId) {
+  async _renderPageCheckboxes(userId) {
     const container = $('page-vis-pages');
     if (!container) return;
-    const hiddenPages = DB.get(LS_KEYS.PAGE_VIS_PREFIX + userId, []);
+    // Завантажуємо актуальний стан напряму з Supabase (не з локального DB)
+    let hiddenPages = [];
+    try {
+      const rows = await sb.query('settings', { filter: { key: LS_KEYS.PAGE_VIS_PREFIX + userId } });
+      if (rows && rows[0]) hiddenPages = JSON.parse(rows[0].value || '[]');
+      // Синхронізуємо з локальним DB
+      DB.set(LS_KEYS.PAGE_VIS_PREFIX + userId, hiddenPages);
+    } catch(e) { console.warn('page vis load error:', e); }
     const user = getUsers(false).find(u => u.id === userId);
     const pages = Admin._allPages();
 
@@ -413,7 +420,7 @@ const Admin = {
   },
 
   async savePageVisibility(userId) {
-    const btn = document.querySelector('[onclick*="savePageVisibility"]');
+    const btn = document.getElementById('save-page-vis-btn');
     if (btn) btnLock(btn);
     const checkboxes = document.querySelectorAll('[data-vis-page]');
     const hidden = [];
