@@ -93,5 +93,6 @@ const LS_KEYS = {
   TG_TEMPLATES:     'tiflis_tg_templates',
   RESERVE_HALLS_ORDER: 'tiflis_reserve_halls_order',
   RESERVE_BOOKINGS: 'tiflis_reserve_bookings',
+  PAGE_VIS_PREFIX: 'page_visibility_',  // + userId → JSON array of hidden pages
 };
 

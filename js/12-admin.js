@@ -10,6 +10,7 @@ const Admin = {
     Admin.renderTgManual();
     Admin.loadRegistrations();
     Admin.renderNavOrder();
+    Admin.renderPageVisibility();
   },
 
   async loadRegistrations() {
@@ -63,28 +64,6 @@ const Admin = {
         DB.set('users', users);
         toast(`${login} прийнятий в команду! 🎉`, 'success-t');
         Admin.loadRegistrations();
-        // ── TG: повідомлення адмінам і сисадміну ──
-        try {
-          const allRoles = DB.get('roles', []);
-          const roleLabel = (allRoles.find(r => r.key === role) || {}).label || role;
-          const approver = currentUser.displayName || currentUser.login || 'Адмін';
-          const tgMsg = [
-            `╔══════════════════╗`,
-            `  ✅ <b>ЗАЯВКУ ПРИЙНЯТО</b>`,
-            `╚══════════════════╝`,
-            ``,
-            `🙋 <b>${esc(login)}</b> — ${esc(roleLabel)}`,
-            ``,
-            `✔️ Прийнято: <b>${esc(approver)}</b>`,
-            ``,
-            `<i>Портал персоналу · Тифліс</i>`,
-          ].join('\n');
-          const admins = DB.get('users', []).filter(u => !u.fired && (isAdmin(u) || isSysadmin(u)));
-          for (const adm of admins) {
-            const chatId = adm.chat_id || adm.tg_id;
-            if (chatId) await tgSendPersonal(chatId, tgMsg);
-          }
-        } catch(tgErr) { console.warn('TG approve notify:', tgErr); }
       } catch(e) { toast('Помилка', 'error'); console.error(e); }
     }, { okLabel: '✅ Прийняти', okClass: 'btn-gold' });
   },
@@ -95,26 +74,6 @@ const Admin = {
         await sb.delete('registration_requests', { id });
         toast('Заявку відхилено', 'success-t');
         Admin.loadRegistrations();
-        // ── TG: повідомлення адмінам і сисадміну про відхилення ──
-        try {
-          const approver = currentUser.displayName || currentUser.login || 'Адмін';
-          const tgMsg = [
-            `╔══════════════════╗`,
-            `  ❌ <b>ЗАЯВКУ ВІДХИЛЕНО</b>`,
-            `╚══════════════════╝`,
-            ``,
-            `🙋 <b>${esc(login)}</b>`,
-            ``,
-            `✖️ Відхилив(ла): <b>${esc(approver)}</b>`,
-            ``,
-            `<i>Портал персоналу · Тифліс</i>`,
-          ].join('\n');
-          const admins = DB.get('users', []).filter(u => !u.fired && (isAdmin(u) || isSysadmin(u)));
-          for (const adm of admins) {
-            const chatId = adm.chat_id || adm.tg_id;
-            if (chatId) await tgSendPersonal(chatId, tgMsg);
-          }
-        } catch(tgErr) { console.warn('TG reject notify:', tgErr); }
       } catch(e) { toast('Помилка', 'error'); console.error(e); }
     }, { okLabel: '❌ Відхилити' });
   },
@@ -372,5 +331,104 @@ const Admin = {
       Admin.renderCustomRoles();
     } catch(e) { toast('Помилка', 'error'); console.error(e); }
   }
+  // ══════════════════════════════════════════════════════════════
+  // ДОСТУП ДО ВКЛАДОК — видимість сторінок для конкретного юзера
+  // ══════════════════════════════════════════════════════════════
+
+  // Повний список сторінок з мітками (і для яких ролей доступна)
+  _allPages() {
+    return App.getNavItems().filter(i => !i.adminOnly).map(i => ({
+      page: i.page, icon: i.icon, label: i.label,
+      proiobOnly: !!i.proiobOnly,
+    }));
+  },
+
+  renderPageVisibility() {
+    const el = $('page-vis-block');
+    if (!el) return;
+    const users = getUsers(false).filter(u => !isSysadmin(u));
+    if (!users.length) {
+      el.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">Немає користувачів</p>';
+      return;
+    }
+    const selVal = $('page-vis-user-select')?.value || '';
+    el.innerHTML = '<div class="form-group" style="margin-bottom:14px">' +
+      '<label class="lbl">Користувач</label>' +
+      '<select id="page-vis-user-select" class="field" onchange="Admin.renderPageVisibility()">' +
+      '<option value="">— Оберіть користувача —</option>' +
+      users.map(u => '<option value="' + u.id + '"' + (u.id === selVal ? ' selected' : '') + '>' +
+        esc(u.displayName || u.login) + ' · ' + getRoleLabel(u.role) + '</option>').join('') +
+      '</select></div>' +
+      '<div id="page-vis-pages"></div>';
+
+    // Якщо юзер вибраний — одразу рендеримо чекбокси
+    const uid = $('page-vis-user-select')?.value;
+    if (uid) Admin._renderPageCheckboxes(uid);
+    // Підвішуємо listener
+    const sel = $('page-vis-user-select');
+    if (sel) sel.addEventListener('change', () => {
+      const id = sel.value;
+      if (id) Admin._renderPageCheckboxes(id);
+      else { const pp = $('page-vis-pages'); if (pp) pp.innerHTML = ''; }
+    });
+  },
+
+  _renderPageCheckboxes(userId) {
+    const container = $('page-vis-pages');
+    if (!container) return;
+    const hiddenPages = DB.get(LS_KEYS.PAGE_VIS_PREFIX + userId, []);
+    const user = getUsers(false).find(u => u.id === userId);
+    const pages = Admin._allPages();
+
+    // Визначаємо які сторінки взагалі доступні цьому юзеру за роллю
+    const roleVisible = (p) => {
+      if (p.proiobOnly) return canAccessProiob(user || {});
+      return true;
+    };
+
+    container.innerHTML = '<div style="margin-bottom:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)">Оберіть вкладки які бачить ' + esc((user?.displayName || user?.login) || 'юзер') + '</div>' +
+      '<div id="page-vis-checkboxes" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">' +
+      pages.map(p => {
+        const roleOk = roleVisible(p);
+        const checked = roleOk && !hiddenPages.includes(p.page);
+        const disabled = !roleOk;
+        return '<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;' +
+          'background:rgba(255,255,255,' + (disabled ? '.02' : '.04') + ');' +
+          'border:1px solid rgba(255,255,255,' + (disabled ? '.04' : '.08') + ');' +
+          'border-radius:8px;cursor:' + (disabled ? 'default' : 'pointer') + ';opacity:' + (disabled ? '.35' : '1') + '">' +
+          '<input type="checkbox" data-vis-page="' + p.page + '"' +
+            (checked ? ' checked' : '') + (disabled ? ' disabled' : '') +
+            ' style="accent-color:var(--gold);width:15px;height:15px;flex-shrink:0">' +
+          '<span style="font-size:13px">' + p.icon + '</span>' +
+          '<span style="font-size:12px;font-weight:600;color:' + (disabled ? 'var(--text-muted)' : 'var(--text)') + '">' + p.label + '</span>' +
+          (disabled ? '<span style="font-size:10px;color:var(--text-muted);margin-left:auto">недоступно для ролі</span>' : '') +
+          '</label>';
+      }).join('') +
+      '</div>' +
+      '<button class="btn btn-gold" onclick="Admin.savePageVisibility('' + userId + '')">💾 Зберегти доступ</button>';
+  },
+
+  async savePageVisibility(userId) {
+    const btn = document.querySelector('[onclick*="savePageVisibility"]');
+    if (btn) btnLock(btn);
+    const checkboxes = document.querySelectorAll('[data-vis-page]');
+    const hidden = [];
+    checkboxes.forEach(cb => {
+      if (!cb.checked && !cb.disabled) hidden.push(cb.dataset.visPage);
+    });
+    const key = LS_KEYS.PAGE_VIS_PREFIX + userId;
+    try {
+      await sb.upsert('settings', { key, value: JSON.stringify(hidden) }, 'key');
+      DB.set(key, hidden);
+      const user = getUsers(false).find(u => u.id === userId);
+      const name = user?.displayName || user?.login || userId;
+      logEvent('admin', 'Оновлено доступ до вкладок', name);
+      toast('Доступ збережено для ' + esc(name), 'success-t');
+    } catch(e) {
+      toast('Помилка збереження', 'error');
+      console.error(e);
+    }
+    if (btn) btnUnlock(btn);
+  },
 };
 

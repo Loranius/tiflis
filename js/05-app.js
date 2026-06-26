@@ -342,6 +342,34 @@ const App = {
     if (App._pollInterval) { clearInterval(App._pollInterval); App._pollInterval = null; }
   },
 
+  // ── Видимість сторінок для поточного юзера ──────────────────────
+  getHiddenPages(userId) {
+    const key = LS_KEYS.PAGE_VIS_PREFIX + (userId || currentUser?.id || '');
+    return DB.get(key, []);
+  },
+
+  isPageVisible(page, userId) {
+    // home, admin, journal — завжди видимі
+    if (['home','admin','journal'].includes(page)) return true;
+    return !App.getHiddenPages(userId).includes(page);
+  },
+
+  // Застосовується коли settings оновились і містять visibility для поточного юзера.
+  // Перебудовує nav і при потребі робить редирект.
+  _applyPageVisibility() {
+    App.renderSidebarNav();
+    // Якщо поточна активна сторінка стала прихованою — перейти на першу доступну
+    const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
+    if (activePage && activePage !== 'home' && !App.isPageVisible(activePage)) {
+      // Знайти першу дозволену сторінку
+      const fallback = App.getNavItems().find(i =>
+        !i.adminOnly && !i.proiobOnly &&
+        App.isPageVisible(i.page)
+      );
+      App.navigate(fallback ? fallback.page : 'home');
+    }
+  },
+
   _updateOfflineQueueBadge(count) {
     let badge = document.getElementById('offline-queue-badge');
     if (!count) {
@@ -499,6 +527,10 @@ const App = {
     if (menuChanged && $('page-menu')?.classList.contains('active')) {
       Menu.renderSection(menuActiveSection);
     }
+    // Якщо прийшли оновлення видимості для поточного юзера — перебудувати nav
+    const myVisKey = LS_KEYS.PAGE_VIS_PREFIX + (currentUser?.id || '');
+    const visChanged = settings.some(s => s.key === myVisKey);
+    if (visChanged) App._applyPageVisibility();
     if (reserveChanged && $('page-reserve')?.classList.contains('active')) {
       Reserve.renderContent();
       Reserve.renderTablesList();
@@ -711,6 +743,7 @@ const App = {
       if (item.page === 'cash' && u.role !== 'waiter' && !isSysadmin(u)) return false;
       if (item.adminOnly) return false; // адмін окремо нижче
       if (item.proiobOnly && !canAccessProiob(u)) return false;
+      if (!isSysadmin(u) && !App.isPageVisible(item.page, u.id)) return false;
       return true;
     });
 
@@ -786,7 +819,6 @@ const App = {
       { page:'daily',     icon:'📋', label:"Щоденні обов'язки", section:'Основне' },
       { page:'notifications', icon:'🔔', label:'Сповіщення', section:'Основне' },
       { page:'interactive',   icon:'🎮', label:'Інтерактив',        section:'Основне' },
-      { page:'proiob',    icon:'💸', label:'Пройоб',             section:'Основне', proiobOnly:true },
       { page:'admin',     icon:'⚙️', label:'Управління',        section:'Адміністрування', adminOnly:true },
     ];
   },
@@ -866,7 +898,6 @@ const App = {
     if (page==='notifications') Notify.init();
     if (page==='interactive') Interactive.init();
     if (page==='journal')     EventLog.init();
-    if (page==='proiob')      Proiob.init();
 
     // Lazy poll: одразу підтягуємо свіжі дані для сторінок що не в постійному циклі
     const lazyPages = { schedule: '_pollSchedule', rating: '_pollRatings', cash: '_pollCash', handover: '_pollDuties', daily: '_pollDuties', reserve: '_pollReserve' };
@@ -915,12 +946,13 @@ const App = {
     if (u.role === 'runner' || u.role2 === 'runner') { grid.innerHTML = ''; return; }
     // Усі сторінки крім тих що вже в bottom nav + адмін окремо
     const BN_MAIN = ['schedule','cash','menu','home'];
-    const _bnCookPages = ['schedule','staff','menu','interactive','reserve','proiob'];
+    const _bnCookPages = ['schedule','staff','menu','interactive','reserve'];
     const items = App.getNavItems().filter(item => {
       if (BN_MAIN.includes(item.page)) return false;
       if (item.page === 'cash' && u.role !== 'waiter' && !isSysadmin(u)) return false;
       if (item.adminOnly) return false;
       if (item.proiobOnly && !canAccessProiob(u)) return false;
+      if (!isSysadmin(u) && !App.isPageVisible(item.page, u.id)) return false;
       if ((u.role === 'cook' || u.role2 === 'cook') && !isAdmin(u) && !_bnCookPages.includes(item.page)) return false;
       return true;
     });
