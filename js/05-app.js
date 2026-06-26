@@ -154,6 +154,28 @@ const App = {
       if (existingReq.length) { errEl.textContent='Заявка з таким іменем вже існує'; errEl.classList.remove('hidden'); btn.textContent='Подати заявку'; btn.disabled=false; return; }
       await sb.insert('registration_requests', { login, password: pass, role, status: 'pending', created_at: new Date().toISOString() });
       okEl.textContent = '✅ Заявку подано! Очікуйте підтвердження від адміністратора.';
+      // ── TG сповіщення адмінам і сисадміну про нову реєстрацію ──
+      try {
+        const allRoles = DB.get('roles', []);
+        const roleLabel = (allRoles.find(r => r.key === role) || {}).label || role;
+        const tgMsg = [
+          `╔══════════════════╗`,
+          `  👤 <b>НОВА ЗАЯВКА НА РЕЄСТРАЦІЮ</b>`,
+          `╚══════════════════╝`,
+          ``,
+          `🙋 <b>${esc(login)}</b>`,
+          `💼 Роль: ${esc(roleLabel)}`,
+          ``,
+          `ℹ️ Підтвердіть або відхиліть заявку в розділі <b>Адмін → Реєстрація</b>`,
+          ``,
+          `<i>Портал персоналу · Тифліс</i>`,
+        ].join('\n');
+        const admins = DB.get('users', []).filter(u => !u.fired && (isAdmin(u) || isSysadmin(u)));
+        for (const adm of admins) {
+          const chatId = adm.chat_id || adm.tg_id;
+          if (chatId) await tgSendPersonal(chatId, tgMsg);
+        }
+      } catch(tgErr) { console.warn('TG reg notify error:', tgErr); }
       okEl.classList.remove('hidden');
       $('reg-login').value=''; $('reg-pass').value=''; $('reg-pass2').value='';
     } catch(e) { errEl.textContent='Помилка сервера. Спробуйте ще раз.'; errEl.classList.remove('hidden'); console.error(e); }

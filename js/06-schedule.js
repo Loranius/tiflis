@@ -507,6 +507,30 @@ days — тільки дні з позначками (не вихідні).`;
     Schedule.renderTable(scheduleActiveRole, Schedule.calYear, Schedule.calMonth);
     toast(`✅ Імпортовано ${saved} записів графіку`, 'success-t');
     logEvent('schedule', `Імпорт графіку з фото: ${saved} записів`);
+
+    // ── TG: сповіщення про оновлення графіку через фото ──
+    try {
+      const importer = currentUser.displayName || currentUser.login || 'Адмін';
+      const MONTHS_UA_S = ['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'];
+      const monthLabel = month && year ? `${MONTHS_UA_S[(month - 1) % 12]} ${year}` : '';
+      const now = new Date();
+      const timeStr = `${now.getDate()} ${MONTHS_UA_S[now.getMonth()]}, ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      const tgMsg = [
+        `╔══════════════════╗`,
+        `  📅 <b>ГРАФІК ОНОВЛЕНО</b>`,
+        `╚══════════════════╝`,
+        ``,
+        `📷 Імпортовано з фото`,
+        monthLabel ? `📆 Місяць: <b>${monthLabel}</b>` : '',
+        `✏️ Виконав(ла): <b>${esc(importer)}</b>`,
+        `📊 Записів: <b>${saved}</b>`,
+        `🕐 ${timeStr}`,
+        ``,
+        `<i>Портал персоналу · Тифліс</i>`,
+      ].filter(Boolean).join('\n');
+      // Надсилаємо всім (всі ролі)
+      await tgBroadcast(tgMsg);
+    } catch(tgErr) { console.warn('TG schedule photo notify:', tgErr); }
   },
 
   _pendingSchedulePhoto: null,

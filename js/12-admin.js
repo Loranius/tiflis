@@ -63,6 +63,28 @@ const Admin = {
         DB.set('users', users);
         toast(`${login} прийнятий в команду! 🎉`, 'success-t');
         Admin.loadRegistrations();
+        // ── TG: повідомлення адмінам і сисадміну ──
+        try {
+          const allRoles = DB.get('roles', []);
+          const roleLabel = (allRoles.find(r => r.key === role) || {}).label || role;
+          const approver = currentUser.displayName || currentUser.login || 'Адмін';
+          const tgMsg = [
+            `╔══════════════════╗`,
+            `  ✅ <b>ЗАЯВКУ ПРИЙНЯТО</b>`,
+            `╚══════════════════╝`,
+            ``,
+            `🙋 <b>${esc(login)}</b> — ${esc(roleLabel)}`,
+            ``,
+            `✔️ Прийнято: <b>${esc(approver)}</b>`,
+            ``,
+            `<i>Портал персоналу · Тифліс</i>`,
+          ].join('\n');
+          const admins = DB.get('users', []).filter(u => !u.fired && (isAdmin(u) || isSysadmin(u)));
+          for (const adm of admins) {
+            const chatId = adm.chat_id || adm.tg_id;
+            if (chatId) await tgSendPersonal(chatId, tgMsg);
+          }
+        } catch(tgErr) { console.warn('TG approve notify:', tgErr); }
       } catch(e) { toast('Помилка', 'error'); console.error(e); }
     }, { okLabel: '✅ Прийняти', okClass: 'btn-gold' });
   },
@@ -73,6 +95,26 @@ const Admin = {
         await sb.delete('registration_requests', { id });
         toast('Заявку відхилено', 'success-t');
         Admin.loadRegistrations();
+        // ── TG: повідомлення адмінам і сисадміну про відхилення ──
+        try {
+          const approver = currentUser.displayName || currentUser.login || 'Адмін';
+          const tgMsg = [
+            `╔══════════════════╗`,
+            `  ❌ <b>ЗАЯВКУ ВІДХИЛЕНО</b>`,
+            `╚══════════════════╝`,
+            ``,
+            `🙋 <b>${esc(login)}</b>`,
+            ``,
+            `✖️ Відхилив(ла): <b>${esc(approver)}</b>`,
+            ``,
+            `<i>Портал персоналу · Тифліс</i>`,
+          ].join('\n');
+          const admins = DB.get('users', []).filter(u => !u.fired && (isAdmin(u) || isSysadmin(u)));
+          for (const adm of admins) {
+            const chatId = adm.chat_id || adm.tg_id;
+            if (chatId) await tgSendPersonal(chatId, tgMsg);
+          }
+        } catch(tgErr) { console.warn('TG reject notify:', tgErr); }
       } catch(e) { toast('Помилка', 'error'); console.error(e); }
     }, { okLabel: '❌ Відхилити' });
   },
