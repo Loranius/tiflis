@@ -262,6 +262,7 @@
         <button class="rating-tab active" id="cash-tab-main"    onclick="Cash.switchTab('main')">💰 Каса</button>
         <button class="rating-tab"        id="cash-tab-extra"   onclick="Cash.switchTab('extra')">➕ Додаткова ставка</button>
         <button class="rating-tab"        id="cash-tab-stats"   onclick="Cash.switchTab('stats')">📊 Статистика</button>
+        <button class="rating-tab"        id="cash-tab-cashtop" onclick="Cash.switchTab('cashtop')">🏆 Топ каси</button>
       </div>
 
       <!-- ВКЛАДКА: КАСА -->
@@ -392,53 +393,39 @@
           <div id="cash-total-rows"></div>
         </div>
 
-      </div>
-
-    </div>
-
-    <!-- ┌─ СТОРІНКА: Рейтинг ──────────────────── -->
-    <div id="page-rating" class="page">
-      <div class="page-header">
-        <div class="page-title">Рейтинг</div>
-      </div>
-      <div class="rating-tabs">
-        <button class="rating-tab active" onclick="Rating.showTab('top')">🏆 Топ персоналу</button>
-        <button class="rating-tab" onclick="Rating.showTab('cashTop')">💰 Топ каси</button>
-      </div>
-      <div id="rating-top">
-        <div id="rating-list" style="display:flex;flex-direction:column;gap:12px"></div>
-      </div>
-      <div id="rating-cashTop" class="hidden">
+      <!-- ВКЛАДКА: ТОП КАСИ -->
+      <div id="cash-panel-cashtop" class="hidden">
 
         <!-- Підвкладки 1-14 / 15-кін / місяць / рік -->
         <div class="rating-tabs" style="margin-bottom:14px" id="cash-top-period-tabs">
-          <button class="rating-tab active" onclick="Rating.setCashPeriod('h1')">1–14</button>
-          <button class="rating-tab" onclick="Rating.setCashPeriod('h2')">15–кін</button>
-          <button class="rating-tab" onclick="Rating.setCashPeriod('month')">Місяць</button>
-          <button class="rating-tab" onclick="Rating.setCashPeriod('year')">Рік</button>
+          <button class="rating-tab active" onclick="CashTop.setPeriod('h1')">1–14</button>
+          <button class="rating-tab" onclick="CashTop.setPeriod('h2')">15–кін</button>
+          <button class="rating-tab" onclick="CashTop.setPeriod('month')">Місяць</button>
+          <button class="rating-tab" onclick="CashTop.setPeriod('year')">Рік</button>
         </div>
 
-        <!-- Місячний календар (для h1 / h2 / month) -->
+        <!-- Місячний навігатор -->
         <div id="cash-top-month-nav" style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:14px">
-          <button onclick="Rating.shiftMonth(-1)" style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:4px 10px">‹</button>
+          <button onclick="CashTop.shiftMonth(-1)" style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:4px 10px">‹</button>
           <span id="cash-top-month-label" style="font-size:13px;font-weight:700;color:var(--gold);min-width:130px;text-align:center"></span>
-          <button onclick="Rating.shiftMonth(1)"  style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:4px 10px">›</button>
+          <button onclick="CashTop.shiftMonth(1)"  style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:4px 10px">›</button>
         </div>
 
-        <!-- Річний календар (для year) -->
+        <!-- Річний навігатор -->
         <div id="cash-top-year-nav" class="hidden" style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:14px">
-          <button onclick="Rating.shiftYear(-1)" style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:4px 10px">‹</button>
+          <button onclick="CashTop.shiftYear(-1)" style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:4px 10px">‹</button>
           <span id="cash-top-year-label" style="font-size:13px;font-weight:700;color:var(--gold);min-width:80px;text-align:center"></span>
-          <button onclick="Rating.shiftYear(1)"  style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:4px 10px">›</button>
+          <button onclick="CashTop.shiftYear(1)"  style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:4px 10px">›</button>
         </div>
 
-        <!-- Таблиця рейтингу -->
+        <!-- Список топу -->
         <div class="card">
           <div class="card-title" id="cash-top-card-title">Топ офіціантів за касою</div>
           <div id="cash-top-list" style="display:flex;flex-direction:column;gap:10px"></div>
         </div>
 
       </div>
+
     </div>
 
     <!-- ┌─ СТОРІНКА: Персонал ─────────────────── -->
@@ -770,7 +757,6 @@
 <script src="./js/05-app.js"></script>
 <script src="./js/06-schedule.js"></script>
 <script src="./js/07-cash.js"></script>
-<script src="./js/08-rating.js"></script>
 <script src="./js/09-staff.js"></script>
 <script src="./js/10-duties.js"></script>
 <script src="./js/11-telegram.js"></script>
@@ -781,7 +767,6 @@
 <script src="./js/16-interactive.js"></script>
 <script src="./js/17-horoscope.js"></script>
 <script src="./js/18-reserve.js"></script>
-<script src="./js/19-shiftswap.js"></script>
 <script src="./js/20-eventlog.js"></script>
 <script src="./js/21-bootstrap.js"></script>
   <script src="./js/22-morakx.js"></script>

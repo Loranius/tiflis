@@ -189,7 +189,7 @@ const App = {
 
     // ── Все паралельно в одному запиті ─────────────────────────────
     const [
-      users, roles, schedule, ratings, ratingComments,
+      users, roles, schedule,
       notifications, duties, settings, cash, extraWages
     ] = await Promise.all([
       sb.query('users',            { order: 'created_at' }).catch(() => []),
@@ -201,8 +201,6 @@ const App = {
         const _t=new Date(_n.getFullYear(),_n.getMonth()+3,0).toISOString().slice(0,10);
         return `date=gte.${_f}&date=lte.${_t}`;
       })() }),
-      sb.query('ratings').catch(() => []),
-      sb.query('rating_comments',  { order: 'created_at' }).catch(() => []),
       sb.query('notifications',    { order: 'created_at.desc' }).catch(() => []),
       sb.query('duties').catch(() => []),
       sb.query('settings').catch(() => []),
@@ -220,9 +218,6 @@ const App = {
     const scheduleMap = {};
     schedule.forEach(s => { scheduleMap[`${s.user_id}_${s.date}`] = s.shift; });
     DB.set('schedule', scheduleMap);
-
-    // ── Рейтинги ───────────────────────────────────────────────────
-    DB.set('ratings', App._buildRatingsMap(ratings, ratingComments));
 
     // ── Сповіщення (фільтруємо протерміновані одразу при завантаженні) ──
     const _freshNotifs = notifications.filter(n => App._isNotifFresh(n));
@@ -312,20 +307,6 @@ const App = {
       ? new Date(n.expires_at).getTime()
       : new Date(n.created_at).getTime() + 3 * 24 * 60 * 60 * 1000;
     return exp > Date.now();
-  },
-
-  // Будує ratingsMap з масивів ratings + comments (єдине місце логіки)
-  _buildRatingsMap(ratings, comments) {
-    const map = {};
-    ratings.forEach(r => { map[r.user_id] = { score: r.score, comments: [] }; });
-    comments.forEach(c => {
-      if (map[c.user_id]) map[c.user_id].comments.push({
-        date: new Date(c.created_at).toLocaleDateString('uk'),
-        by: c.author, delta: c.delta, text: c.comment,
-        ts: new Date(c.created_at).getTime(),
-      });
-    });
-    return map;
   },
 
   _pollInterval: null,
@@ -439,7 +420,6 @@ const App = {
       // ── Lazy: залежно від активної сторінки ───────────────────────
       const needsSchedule = active === 'page-schedule' || active === 'page-handover' || active === 'page-daily';
       if (needsSchedule)         alwaysPolls.push(App._pollSchedule().catch(_noop));
-      if (active === 'page-rating') alwaysPolls.push(App._pollRatings().catch(_noop));
       if (active === 'page-cash')   alwaysPolls.push(App._pollCash().catch(_noop));
       if (active === 'page-handover' || active === 'page-daily')
                                     alwaysPolls.push(App._pollDuties().catch(_noop));
@@ -531,14 +511,6 @@ const App = {
       const result = App._applyOneSetting(s);
       if (result.menuChanged)     menuChanged     = true;
       if (s.key === LS_KEYS.RESERVE_BOOKINGS) reserveChanged = true;
-      // Sync shift_swaps
-      if (s.key === SWAPS_KEY) {
-        try {
-          const parsed = JSON.parse(s.value || '[]');
-          DB.set(SWAPS_KEY, parsed);
-          ShiftSwap._updateMySwapsBtn();
-        } catch(e) { console.warn('SwapKey parse error:', e); }
-      }
     });
     if (menuChanged && $('page-menu')?.classList.contains('active')) {
       Menu.renderSection(menuActiveSection);
@@ -622,20 +594,6 @@ const App = {
     }
   },
 
-  async _pollRatings() {
-    const [ratings, ratingComments] = await Promise.all([
-      sb.query('ratings'),
-      sb.query('rating_comments', { order: 'created_at' }),
-    ]);
-    const ratingsMap = App._buildRatingsMap(ratings, ratingComments);
-    const old = JSON.stringify(DB.get('ratings', {}));
-    const fresh = JSON.stringify(ratingsMap);
-    if (old !== fresh) {
-      DB.set('ratings', ratingsMap);
-      if ($('page-rating')?.classList.contains('active')) Rating.init();
-    }
-  },
-
   async _pollCash() {
     // Завантажуємо касу для всіх офіціантів та користувачів з role2=waiter
     const waiters = getUsers().filter(u => u.role === 'waiter' || u.role2 === 'waiter');
@@ -679,10 +637,6 @@ const App = {
     if (cashChanged) {
       DB.set('cash', cashDB);
       DB.set('cash_ts', cacheTs);
-      // Оновити рейтинг каси якщо відкритий
-      if ($('page-rating')?.classList.contains('active') && ratingTab === 'cashTop') {
-        Rating.renderCashTop();
-      }
       // Оновити сторінку каси якщо відкрита (для всіх хто на сторінці каси)
       if ($('page-cash')?.classList.contains('active')) {
         Cash.renderCalendar();
@@ -748,7 +702,7 @@ const App = {
       },
       {
         id: 'grp-team', label: 'Команда',
-        pages: ['staff','rating'],
+        pages: ['staff'],
       },
       {
         id: 'grp-content', label: 'Контент',
@@ -829,7 +783,6 @@ const App = {
     return [
       { page:'schedule',  icon:'📅', label:'Графік змін',       section:'Основне' },
       { page:'cash',      icon:'💰', label:'Каса',               section:'Основне' },
-      { page:'rating',    icon:'🏆', label:'Рейтинг',            section:'Основне' },
       { page:'staff',     icon:'👥', label:'Персонал',           section:'Основне' },
       { page:'menu',      icon:'🍽️', label:'Меню',               section:'Основне' },
       { page:'reserve',   icon:'🗓️', label:'Резерв',             section:'Основне' },
@@ -847,7 +800,7 @@ const App = {
       const saved = localStorage.getItem(LS_KEYS.NAV_ORDER);
       if (saved) return JSON.parse(saved);
     } catch(e) {}
-    return ['schedule','cash','rating','staff','menu','reserve','handover','daily','notifications'];
+    return ['schedule','cash','staff','menu','reserve','handover','daily','notifications'];
   },
 
   setNavOrder(order) {
@@ -860,14 +813,14 @@ const App = {
       page = 'home';
     }
 
-    // Якщо офіціант покидає графік з незбереженими змінами — попереджаємо
-    if (page !== 'schedule' && !isAdmin(currentUser) &&
+    // Якщо є незбережені зміни в графіку (для ролей без прямого збереження) — попереджаємо
+    if (page !== 'schedule' && !canEditSchedule(currentUser) &&
         Object.keys(Schedule._pendingChanges).length > 0) {
       showConfirm('У вас є незбережені зміни в графіку. Покинути без збереження?', () => {
         Schedule._pendingChanges = {};
         App.navigate(page);
       }, { okLabel: '⚠️ Покинути', okClass: 'btn-danger', cancelLabel: 'Залишитись' });
-      return; // showConfirm асинхронний — навігація відбудеться в callback
+      return;
     }
 
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -907,7 +860,6 @@ const App = {
     if (page==='home')     { Home.init(); }
     if (page==='schedule') Schedule.init();
     if (page==='cash')     { Cash.init(); }
-    if (page==='rating')   Rating.init();
     if (page==='staff')    Staff.init();
     if (page==='admin')    Admin.init();
     if (page==='handover') Duties.init('handover');
@@ -920,7 +872,7 @@ const App = {
     if (page==='proiob')      Proiob.init();
 
     // Lazy poll: одразу підтягуємо свіжі дані для сторінок що не в постійному циклі
-    const lazyPages = { schedule: '_pollSchedule', rating: '_pollRatings', cash: '_pollCash', handover: '_pollDuties', daily: '_pollDuties', reserve: '_pollReserve' };
+    const lazyPages = { schedule: '_pollSchedule', cash: '_pollCash', handover: '_pollDuties', daily: '_pollDuties', reserve: '_pollReserve' };
     if (lazyPages[page]) App[lazyPages[page]]().catch(() => {});
   },
   toggleSidebar() {

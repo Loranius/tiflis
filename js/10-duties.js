@@ -210,7 +210,7 @@ const Duties = {
       _hPhoto.textContent = '📷 Фото';
       _hPhoto.addEventListener('click', () => Duties.readPhoto('handover', storageKey));
       sa.appendChild(_hPhoto);
-      if (isAdmin(currentUser)) {
+      if (canEditSchedule(currentUser)) {
         const _hSend = document.createElement('button');
         _hSend.className = 'btn btn-gold btn-sm';
         _hSend.textContent = '📨 Надіслати';
@@ -240,7 +240,7 @@ const Duties = {
       _dPhoto.textContent = '📷 Фото';
       _dPhoto.addEventListener('click', () => Duties.readPhoto('daily', storageKey));
       sa.appendChild(_dPhoto);
-      if (isAdmin(currentUser)) {
+      if (canEditSchedule(currentUser)) {
         const _dSend = document.createElement('button');
         _dSend.className = 'btn btn-gold btn-sm';
         _dSend.textContent = '📨 Надіслати';
@@ -273,7 +273,7 @@ const Duties = {
       const shift = schedule[`${u.id}_${schedDateKey}`];
       return shift && shift.trim() !== '' && !OFF_SHIFTS.has(shift);
     });
-    const canEdit = isAdmin(currentUser);
+    const canEdit = canEditSchedule(currentUser);
     const workingIds = new Set(waiters.map(w => w.id));
     const MAX_SLOTS = type === 'handover' ? 16 : 2;
 
@@ -363,7 +363,7 @@ const Duties = {
       return shift && shift.trim() !== '' && !OFF_SHIFTS.has(shift);
     });
     const workingIds = new Set(waiters.map(w => w.id));
-    const canEdit = isAdmin(currentUser);
+    const canEdit = canEditSchedule(currentUser);
     const MAX_SLOTS = 4;
 
     const chipRow = (assignedIds, idx) => {

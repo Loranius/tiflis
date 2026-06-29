@@ -75,6 +75,10 @@ function avatarHTML(user, size=48, fontSize=18) {
 }
 // Адмін = сисадмін (за ID) або роль admin
 const isAdmin = (u) => u && (isSysadmin(u) || u._isSysadmin || u.role==='admin');
+// Офіціант (основна або додаткова роль)
+const isWaiter = (u) => u && (u.role === 'waiter' || u.role2 === 'waiter');
+// Повні права редагування графіку/обов'язків/зон: адміни + офіціанти
+const canEditSchedule = (u) => isAdmin(u) || isWaiter(u);
 // Може надсилати сповіщення: адміни, сисадмін, або користувач з can_notify=true
 // (поле can_notify у таблиці users — встановлює адмін через профіль персоналу)
 const canSendNotify = (u) => {

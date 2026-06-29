@@ -175,12 +175,15 @@ const Cash = {
   },
 
   switchTab(tab) {
-    ['main','extra','stats'].forEach(t => {
-      $(`cash-panel-${t}`).classList.toggle('hidden', t !== tab);
-      $(`cash-tab-${t}`).classList.toggle('active', t === tab);
+    ['main','extra','stats','cashtop'].forEach(t => {
+      const panel = $(`cash-panel-${t}`);
+      if (panel) panel.classList.toggle('hidden', t !== tab);
+      const tabBtn = $(`cash-tab-${t}`);
+      if (tabBtn) tabBtn.classList.toggle('active', t === tab);
     });
-    if (tab === 'extra')  Cash.renderExtraList();
-    if (tab === 'stats')  { Cash.renderMonthStats(); Cash.renderDetailedStats(); Cash.renderExtraStats(); }
+    if (tab === 'extra')   Cash.renderExtraList();
+    if (tab === 'stats')   { Cash.renderMonthStats(); Cash.renderDetailedStats(); Cash.renderExtraStats(); }
+    if (tab === 'cashtop') CashTop.load();
   },
 
   async saveExtra() {
@@ -378,8 +381,8 @@ const Cash = {
       await sb.upsert('cash', { user_id: uid, date: Cash.selectedDate, cash: cashVal, tips, first_cash: firstCash }, 'user_id,date');
       toast('Збережено!', 'success-t');
       // Оновити рейтинг каси якщо він зараз відкритий
-      if ($('page-rating')?.classList.contains('active') && ratingTab === 'cashTop') {
-        Rating.renderCashTop();
+      if (document.getElementById('cash-top-panel')?.style.display !== 'none') {
+        CashTop.render();
       }
     } catch(e) {
       toast('Помилка збереження', 'error');
@@ -591,4 +594,127 @@ const Cash = {
   },
 
 }; // ── end Cash ──
+
+// ╔═══════════════════════════════════════════════════════════════╗
+// ║  ТОП КАСИ (перенесено з рейтингу)                             ║
+// ╚═══════════════════════════════════════════════════════════════╝
+const CashTopState = {
+  period: 'h1',
+  month:  new Date().getMonth(),
+  year:   new Date().getFullYear(),
+};
+
+const CashTop = {
+  async init() {
+    CashTop.setPeriod(CashTopState.period);
+  },
+
+  setPeriod(period) {
+    CashTopState.period = period;
+    document.querySelectorAll('#cash-top-period-tabs .rating-tab').forEach((b,i)=>{
+      b.classList.toggle('active', ['h1','h2','month','year'][i] === period);
+    });
+    const isYear = period === 'year';
+    const monthNav = $('cash-top-month-nav');
+    const yearNav  = $('cash-top-year-nav');
+    if (monthNav) { monthNav.classList.remove('hidden'); monthNav.style.display = isYear ? 'none' : 'flex'; }
+    if (yearNav)  { yearNav.classList.remove('hidden');  yearNav.style.display  = isYear ? 'flex' : 'none'; }
+    CashTop.render();
+  },
+
+  shiftMonth(delta) {
+    CashTopState.month += delta;
+    if (CashTopState.month < 0)  { CashTopState.month = 11; CashTopState.year--; }
+    if (CashTopState.month > 11) { CashTopState.month = 0;  CashTopState.year++; }
+    CashTop.render();
+  },
+
+  shiftYear(delta) {
+    CashTopState.year += delta;
+    CashTop.render();
+  },
+
+  async load() {
+    const waiters = getUsers().filter(u => u.role === 'waiter' || u.role2 === 'waiter');
+    const listEl = $('cash-top-list');
+    if (listEl) listEl.innerHTML = `<p class="muted" style="text-align:center;padding:20px">⏳ Завантаження...</p>`;
+    await Promise.all(waiters.map(u => Cash.loadUserCash(u.id, true)));
+    CashTop.render();
+  },
+
+  render() {
+    const { period, month: m, year: y } = CashTopState;
+    const cashDB = DB.get('cash', {});
+    const waiters = getUsers().filter(u => u.role === 'waiter' || u.role2 === 'waiter');
+
+    let from, to, periodLabel, cardTitle;
+    if (period === 'h1') {
+      from = new Date(y, m, 1);
+      to   = new Date(y, m, 14, 23, 59, 59);
+      periodLabel = `${MONTHS_UA[m]} ${y}`;
+      cardTitle   = `Топ каси · 1–14 ${MONTHS_UA[m]}`;
+    } else if (period === 'h2') {
+      from = new Date(y, m, 15);
+      to   = new Date(y, m + 1, 0, 23, 59, 59);
+      periodLabel = `${MONTHS_UA[m]} ${y}`;
+      cardTitle   = `Топ каси · 15–${new Date(y, m+1, 0).getDate()} ${MONTHS_UA[m]}`;
+    } else if (period === 'month') {
+      from = new Date(y, m, 1);
+      to   = new Date(y, m + 1, 0, 23, 59, 59);
+      periodLabel = `${MONTHS_UA[m]} ${y}`;
+      cardTitle   = `Топ каси · ${MONTHS_UA[m]} ${y}`;
+    } else {
+      from = new Date(y, 0, 1);
+      to   = new Date(y, 11, 31, 23, 59, 59);
+      cardTitle = `Топ каси · ${y} рік`;
+    }
+
+    const monthLabel = $('cash-top-month-label');
+    const yearLabel  = $('cash-top-year-label');
+    if (monthLabel) monthLabel.textContent = periodLabel || '';
+    if (yearLabel)  yearLabel.textContent  = String(y);
+
+    const titleEl = $('cash-top-card-title');
+    if (titleEl) titleEl.textContent = cardTitle;
+
+    const ranked = waiters.map(u => {
+      const entries = cashDB[u.id] || {};
+      const total = Object.entries(entries)
+        .filter(([dk]) => { const d = parseDateKey(dk); return d >= from && d <= to; })
+        .reduce((sum, [, v]) => {
+          const val = (v.firstCash != null) ? v.firstCash : (parseFloat(v.cash) || 0);
+          return sum + val;
+        }, 0);
+      return { u, total };
+    }).sort((a, b) => b.total - a.total);
+
+    const maxTotal = ranked[0]?.total || 1;
+    const medals = ['🥇','🥈','🥉'];
+    const list = $('cash-top-list');
+    if (!list) return;
+
+    if (!ranked.length || ranked.every(r => r.total === 0)) {
+      list.innerHTML = `<p class="muted" style="text-align:center;padding:20px">Немає даних за цей період</p>`;
+      return;
+    }
+
+    list.innerHTML = ranked.map(({ u, total }, i) => {
+      const barW = maxTotal > 0 ? (total / maxTotal * 100).toFixed(1) : 0;
+      const medal = medals[i] || `<span style="font-size:12px;color:var(--text-dim)">#${i+1}</span>`;
+      const isLeader = i === 0 && total > 0;
+      return `<div style="padding:12px;background:rgba(0,0,0,${isLeader?'.3':'.15'});border:1px solid ${isLeader?'var(--gold-border)':'rgba(255,255,255,.06)'};border-radius:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:${i<3?'20':'13'}px;width:24px;text-align:center;flex-shrink:0">${medal}</span>
+          ${avatarHTML(u, 36, 13)}
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:13px">${u.displayName||u.login}${u.nick?` <span style="font-size:11px;color:var(--text-dim)">(${u.nick})</span>`:''}</div>
+            <div style="height:5px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:6px;overflow:hidden">
+              <div style="height:100%;width:${barW}%;background:${isLeader?'var(--gold)':'rgba(255,255,255,.25)'};border-radius:3px;transition:width .4s"></div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  },
+};
 
