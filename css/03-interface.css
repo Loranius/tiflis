@@ -9,7 +9,7 @@
 #sidebar {
   width: var(--sidebar-w);
   background:
-    linear-gradient(180deg, rgba(14,36,32,.98) 0%, rgba(10,28,24,.99) 100%);
+    linear-gradient(180deg, rgba(0,0,0,.25) 0%, rgba(0,0,0,.35) 100%);
   border-right: 1px solid var(--gold-border);
   display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 50;
   transition: transform .3s;
@@ -17,9 +17,9 @@
   background-image:
     repeating-linear-gradient(
       0deg, transparent, transparent 32px,
-      rgba(212,175,55,.025) 32px, rgba(212,175,55,.025) 33px
+      var(--gold-dim) 32px, var(--gold-dim) 33px
     ),
-    linear-gradient(180deg, rgba(14,36,32,.98) 0%, rgba(10,28,24,.99) 100%);
+    linear-gradient(180deg, rgba(0,0,0,.25) 0%, rgba(0,0,0,.35) 100%);
 }
 
 /* Логін екран завжди зверху поки видимий */
@@ -29,7 +29,7 @@
   border-bottom: 1px solid var(--gold-border);
   text-align: center;
   position: relative;
-  background: linear-gradient(180deg, rgba(212,175,55,.06) 0%, transparent 100%);
+  background: linear-gradient(180deg, var(--gold-dim) 0%, transparent 100%);
 }
 /* Декоративна золота лінія під логотипом */
 .sidebar-logo::after {

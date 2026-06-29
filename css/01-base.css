@@ -55,6 +55,54 @@
   --gold-border:rgba(201,151,90,0.3);
 }
 
+/* ── Тема: Сапфір (темно-індиго + неоновий бірюзовий) ──────────── */
+:root[data-theme="sapphire"] {
+  --eden:          #0d1b2e;
+  --eden-dark:     #080f1c;
+  --eden-light:    #132440;
+  --gold:          #38e8d0;
+  --gold-light:    #6cf3e2;
+  --gold-dim:      rgba(56,232,208,0.12);
+  --gold-border:   rgba(56,232,208,0.28);
+  --text:          #e8f4f8;
+  --text-dim:      rgba(232,244,248,0.55);
+  --text-muted:    rgba(232,244,248,0.28);
+  --surface:       rgba(56,232,208,0.05);
+  --surface-hover: rgba(56,232,208,0.09);
+}
+
+/* ── Тема: Аметист (сливово-аметистовий + лавандовий) ─────────── */
+:root[data-theme="amethyst"] {
+  --eden:          #1a0f2e;
+  --eden-dark:     #10091e;
+  --eden-light:    #26163f;
+  --gold:          #c084fc;
+  --gold-light:    #d8a4ff;
+  --gold-dim:      rgba(192,132,252,0.12);
+  --gold-border:   rgba(192,132,252,0.28);
+  --text:          #f0eaff;
+  --text-dim:      rgba(240,234,255,0.55);
+  --text-muted:    rgba(240,234,255,0.28);
+  --surface:       rgba(192,132,252,0.05);
+  --surface-hover: rgba(192,132,252,0.09);
+}
+
+/* ── Тема: Жар (вугільно-чорний + розжарений жовтогарячий) ──── */
+:root[data-theme="ember"] {
+  --eden:          #1a1008;
+  --eden-dark:     #0e0904;
+  --eden-light:    #2a1a0c;
+  --gold:          #ff7c2a;
+  --gold-light:    #ff9d56;
+  --gold-dim:      rgba(255,124,42,0.12);
+  --gold-border:   rgba(255,124,42,0.28);
+  --text:          #fef3e8;
+  --text-dim:      rgba(254,243,232,0.55);
+  --text-muted:    rgba(254,243,232,0.28);
+  --surface:       rgba(255,124,42,0.05);
+  --surface-hover: rgba(255,124,42,0.09);
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -70,13 +118,13 @@ body {
       -45deg,
       transparent,
       transparent 40px,
-      rgba(212,175,55,.018) 40px,
+      var(--gold-dim) 40px,
       rgba(212,175,55,.018) 41px
     ),
     /* Радіальне м'яке світіння зверху-зліва */
-    radial-gradient(ellipse 80% 60% at 15% 0%, rgba(30,77,68,.55) 0%, transparent 70%),
+    radial-gradient(ellipse 80% 60% at 15% 0%, var(--eden-light) 0%, transparent 70%),
     /* Радіальне м'яке світіння знизу-справа */
-    radial-gradient(ellipse 60% 50% at 90% 100%, rgba(22,56,50,.4) 0%, transparent 65%);
+    radial-gradient(ellipse 60% 50% at 90% 100%, var(--eden) 0%, transparent 65%);
 }
 
 /* ── Скролбар ── */
@@ -178,7 +226,7 @@ label.lbl { display: block; font-size: 10px; font-weight: 700; text-transform: u
 
 /* Профіль — hero секція */
 .profile-hero {
-  background: linear-gradient(135deg, #1a2820 0%, rgba(139,90,20,.25) 50%, #111a14 100%);
+  background: linear-gradient(135deg, var(--eden) 0%, var(--gold-dim) 50%, var(--eden-dark) 100%);
   padding: 20px 20px 72px; position: relative; overflow: visible;
   margin: -24px -24px 0; border-radius: 28px 28px 0 0;
   clip-path: none;
@@ -266,7 +314,7 @@ label.lbl { display: block; font-size: 10px; font-weight: 700; text-transform: u
 #morakx-fab {
   position: fixed; bottom: 76px; right: 14px; z-index: 9990;
   width: 54px; height: 54px; border-radius: 50%;
-  background: #1B4D35;
+  background: var(--eden-light);
   border: 2px solid var(--gold);
   box-shadow: 0 4px 20px rgba(0,0,0,.6), 0 0 0 3px rgba(212,175,55,.15);
   display: flex; align-items: center; justify-content: center;
@@ -285,7 +333,7 @@ label.lbl { display: block; font-size: 10px; font-weight: 700; text-transform: u
 #morakx-panel {
   position: fixed; bottom: 136px; right: 14px; z-index: 9989;
   width: calc(100vw - 28px); max-width: 380px;
-  background: #162B1F; border: 1px solid var(--gold-border);
+  background: var(--eden); border: 1px solid var(--gold-border);
   border-radius: 18px; box-shadow: 0 8px 40px rgba(0,0,0,.85);
   display: flex; flex-direction: column;
   max-height: 60vh; overflow: hidden;
@@ -299,8 +347,8 @@ label.lbl { display: block; font-size: 10px; font-weight: 700; text-transform: u
 }
 #morakx-header {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px; border-bottom: 1px solid rgba(212,175,55,.3);
-  flex-shrink: 0; background: #111F17; border-radius: 18px 18px 0 0;
+  padding: 12px 16px; border-bottom: 1px solid var(--gold-border);
+  flex-shrink: 0; background: var(--eden-dark); border-radius: 18px 18px 0 0;
 }
 #morakx-header .mhdr-ico {
   width: 34px; height: 34px; border-radius: 50%;
@@ -319,7 +367,7 @@ label.lbl { display: block; font-size: 10px; font-weight: 700; text-transform: u
   flex: 1; overflow-y: auto; padding: 12px 14px;
   display: flex; flex-direction: column; gap: 8px;
   scrollbar-width: thin; scrollbar-color: rgba(212,175,55,.2) transparent;
-  background: #162B1F;
+  background: var(--eden);
 }
 #morakx-messages::-webkit-scrollbar { width: 4px; }
 #morakx-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
@@ -328,8 +376,8 @@ label.lbl { display: block; font-size: 10px; font-weight: 700; text-transform: u
   font-size: 12.5px; line-height: 1.5; word-break: break-word;
 }
 .m-msg.bot {
-  background: #1E3D2A; border: 1px solid rgba(212,175,55,.3);
-  color: #F0E8D0; border-bottom-left-radius: 4px; align-self: flex-start;
+  background: var(--eden-light); border: 1px solid var(--gold-border);
+  color: var(--text); border-bottom-left-radius: 4px; align-self: flex-start;
   box-shadow: 0 1px 4px rgba(0,0,0,.4);
 }
 .m-msg.user {
@@ -337,17 +385,17 @@ label.lbl { display: block; font-size: 10px; font-weight: 700; text-transform: u
   border-bottom-right-radius: 4px; align-self: flex-end; font-weight: 600;
 }
 .m-msg.typing {
-  background: #1E3D2A; border: 1px solid rgba(212,175,55,.25);
-  align-self: flex-start; color: rgba(240,232,208,.5); font-style: italic;
+  background: var(--eden-light); border: 1px solid var(--gold-border);
+  align-self: flex-start; color: var(--text-muted); font-style: italic;
 }
 #morakx-input-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 10px 14px; border-top: 1px solid rgba(212,175,55,.25); flex-shrink: 0;
-  background: #111F17; border-radius: 0 0 18px 18px;
+  padding: 10px 14px; border-top: 1px solid var(--gold-border); flex-shrink: 0;
+  background: var(--eden-dark); border-radius: 0 0 18px 18px;
 }
 #morakx-input {
-  flex: 1; background: #0F2018; border: 1px solid rgba(212,175,55,.25);
-  border-radius: 20px; padding: 8px 14px; color: #F0E8D0; font-size: 13px;
+  flex: 1; background: var(--eden-dark); border: 1px solid var(--gold-border);
+  border-radius: 20px; padding: 8px 14px; color: var(--text); font-size: 13px;
   font-family: 'Montserrat', sans-serif; outline: none; resize: none;
   max-height: 80px; overflow-y: auto; line-height: 1.4;
 }
