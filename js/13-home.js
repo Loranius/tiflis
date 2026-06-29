@@ -113,7 +113,9 @@ const Home = {
         }).join('')}
       </div>` : '';
 
+    // Для не-адмінів: замінюємо плитку "Управління" на "Налаштування"
     const wideHTML = wideItems.map(item => {
+      // Якщо це admin-плитка — вона вже відфільтрована через adminOnly для не-адмінів
       return `
       <div onclick="App.navigate('${item.page}')" class="home-wide-tile">
         <div class="home-icon-tile-icon" style="width:28px;height:28px">${HOME_ICONS[item.page] || '<span style="font-size:20px">'+item.icon+'</span>'}</div>
@@ -121,7 +123,14 @@ const Home = {
       </div>`;
     }).join('');
 
-    $('home-tiles').innerHTML = heroHTML + gridHTML + wideHTML;
+    // Не-адміни: плитка "Налаштування" замість "Управління"
+    const settingsHTML = !isAdmin(currentUser) ? `
+      <div onclick="App.navigate('admin')" class="home-wide-tile">
+        <div class="home-icon-tile-icon" style="width:28px;height:28px">${HOME_ICONS['admin']}</div>
+        <span class="home-icon-tile-label" style="font-size:11px;letter-spacing:.15em">НАЛАШТУВАННЯ</span>
+      </div>` : '';
+
+    $('home-tiles').innerHTML = heroHTML + gridHTML + wideHTML + settingsHTML;
 
     // Вітання за київським часом
     const kyivHour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Kiev' })).getHours();

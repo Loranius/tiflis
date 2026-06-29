@@ -775,21 +775,6 @@ const App = {
       nav.appendChild(btnJ);
     }
 
-    // ── Налаштування теми (для не-адмінів) ──────────────────────
-    if (!isAdmin(u)) {
-      const settingsTitle = document.createElement('div');
-      settingsTitle.className = 'nav-section-title';
-      settingsTitle.textContent = 'Персоналізація';
-      nav.appendChild(settingsTitle);
-
-      const btnSettings = document.createElement('button');
-      btnSettings.className = 'nav-btn';
-      btnSettings.setAttribute('data-page', 'admin');
-      btnSettings.innerHTML = '<span class="icon">🎨</span>Тема оформлення';
-      btnSettings.addEventListener('click', () => { App.navigate('admin'); App.closeSidebar(); });
-      nav.appendChild(btnSettings);
-    }
-
     // ── Синхронізувати bottom nav drawer ──────────────────────────
     App.renderBnDrawer(u);
   },
@@ -955,8 +940,7 @@ const App = {
       items.push({ page:'admin',   icon:'⚙️', label:'Управління' });
       items.push({ page:'journal', icon:'📋', label:'Журнал подій' });
     }
-    // Тема — тільки для не-адмінів (адміни вже мають Управління)
-    if (!isAdmin(u)) items.push({ page:'admin', icon:'🎨', label:'Тема' });
+
 
     grid.innerHTML = items.map(item => `
       <button class="bn-drawer-item" data-bnpage="${item.page}"
