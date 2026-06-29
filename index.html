@@ -517,12 +517,18 @@
 
     <!-- ┌─ СТОРІНКА: Адмін панель ─────────────── -->
     <div id="page-admin" class="page">
-      <div class="page-header">
+      <!-- Заголовок — тільки для адміна -->
+      <div class="page-header" data-admin-only>
         <div class="page-title">Управління системою</div>
       </div>
 
-      <!-- Заявки на реєстрацію — повна ширина зверху -->
-      <div class="card" style="margin-bottom:16px">
+      <!-- Тема оформлення — видно всім -->
+      <div id="theme-picker-wrap">
+        <div id="theme-picker"></div>
+      </div>
+
+      <!-- Заявки на реєстрацію — тільки адмін -->
+      <div class="card" style="margin-bottom:16px" data-admin-only>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <div class="card-title" style="margin-bottom:0">📋 Заявки на реєстрацію</div>
           <button class="btn btn-ghost btn-sm" onclick="Admin.loadRegistrations()">🔄 Оновити</button>
@@ -530,7 +536,7 @@
         <div id="reg-requests-list"><p style="font-size:11px;color:var(--text-muted)">Завантаження...</p></div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px" data-admin-only>
         <!-- Додати користувача -->
         <div class="card">
           <div class="card-title">➕ Новий користувач</div>
@@ -611,6 +617,7 @@
             <button class="btn btn-gold btn-sm" onclick="Admin.saveBg()">💾</button>
           </div>
         </div>
+
       </div>
     </div>
 
@@ -739,15 +746,6 @@
     <div id="page-proiob" class="page">
       <div id="proiob-content"></div>
     </div>
-
-    <!-- ┌─ СТОРІНКА: Налаштування ──────────────── -->
-    <div id="page-settings" class="page">
-      <div class="page-header">
-        <div class="page-title">Налаштування</div>
-      </div>
-      <div id="theme-picker"></div>
-    </div>
-
   </main>
 </div>
 

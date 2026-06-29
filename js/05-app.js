@@ -331,7 +331,7 @@ const App = {
 
   isPageVisible(page, userId) {
     // home, admin, journal — завжди видимі
-    if (['home','admin','journal','settings'].includes(page)) return true;
+    if (['home','admin','journal'].includes(page)) return true;
     return !App.getHiddenPages(userId).includes(page);
   },
 
@@ -775,18 +775,20 @@ const App = {
       nav.appendChild(btnJ);
     }
 
-    // ── Налаштування (для всіх, крім runner) ────────────────────
-    const settingsTitle = document.createElement('div');
-    settingsTitle.className = 'nav-section-title';
-    settingsTitle.textContent = 'Персоналізація';
-    nav.appendChild(settingsTitle);
+    // ── Налаштування теми (для не-адмінів) ──────────────────────
+    if (!isAdmin(u)) {
+      const settingsTitle = document.createElement('div');
+      settingsTitle.className = 'nav-section-title';
+      settingsTitle.textContent = 'Персоналізація';
+      nav.appendChild(settingsTitle);
 
-    const btnSettings = document.createElement('button');
-    btnSettings.className = 'nav-btn';
-    btnSettings.setAttribute('data-page', 'settings');
-    btnSettings.innerHTML = '<span class="icon">🎨</span>Налаштування';
-    btnSettings.addEventListener('click', () => { App.navigate('settings'); App.closeSidebar(); });
-    nav.appendChild(btnSettings);
+      const btnSettings = document.createElement('button');
+      btnSettings.className = 'nav-btn';
+      btnSettings.setAttribute('data-page', 'admin');
+      btnSettings.innerHTML = '<span class="icon">🎨</span>Тема оформлення';
+      btnSettings.addEventListener('click', () => { App.navigate('admin'); App.closeSidebar(); });
+      nav.appendChild(btnSettings);
+    }
 
     // ── Синхронізувати bottom nav drawer ──────────────────────────
     App.renderBnDrawer(u);
@@ -805,7 +807,6 @@ const App = {
       { page:'interactive',   icon:'🎮', label:'Інтерактив',        section:'Основне' },
       { page:'proiob',    icon:'💸', label:'Пройоб',             section:'Основне', proiobOnly:true },
       { page:'admin',     icon:'⚙️', label:'Управління',        section:'Адміністрування', adminOnly:true },
-      { page:'settings',  icon:'🎨', label:'Налаштування',      section:'Основне', settingsOnly:true },
     ];
   },
 
@@ -882,9 +883,16 @@ const App = {
     if (page==='reserve')  Reserve.init();
     if (page==='notifications') Notify.init();
     if (page==='interactive') Interactive.init();
+    if (page==='admin') {
+      // Адмін-only блоки ховаємо для звичайних юзерів
+      const isAdm = isAdmin(currentUser);
+      document.querySelectorAll('#page-admin [data-admin-only]').forEach(el => {
+        el.style.display = isAdm ? '' : 'none';
+      });
+      Theme.render();
+    }
     if (page==='journal')     EventLog.init();
     if (page==='proiob')      Proiob.init();
-    if (page==='settings')    Theme.render();
 
     // Lazy poll: одразу підтягуємо свіжі дані для сторінок що не в постійному циклі
     const lazyPages = { schedule: '_pollSchedule', cash: '_pollCash', handover: '_pollDuties', daily: '_pollDuties', reserve: '_pollReserve' };
@@ -938,7 +946,6 @@ const App = {
       if (BN_MAIN.includes(item.page)) return false;
       if (item.page === 'cash' && u.role !== 'waiter' && !isSysadmin(u)) return false;
       if (item.adminOnly) return false;
-      if (item.settingsOnly) return false;
       if (item.proiobOnly && !canAccessProiob(u)) return false;
       if (!isSysadmin(u) && !App.isPageVisible(item.page, u.id)) return false;
       if ((u.role === 'cook' || u.role2 === 'cook') && !isAdmin(u) && !_bnCookPages.includes(item.page)) return false;
@@ -948,7 +955,8 @@ const App = {
       items.push({ page:'admin',   icon:'⚙️', label:'Управління' });
       items.push({ page:'journal', icon:'📋', label:'Журнал подій' });
     }
-    items.push({ page:'settings', icon:'🎨', label:'Налаштування' });
+    // Тема — тільки для не-адмінів (адміни вже мають Управління)
+    if (!isAdmin(u)) items.push({ page:'admin', icon:'🎨', label:'Тема' });
 
     grid.innerHTML = items.map(item => `
       <button class="bn-drawer-item" data-bnpage="${item.page}"

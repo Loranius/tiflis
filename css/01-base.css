@@ -22,85 +22,85 @@
   --sidebar-w:  260px;
 }
 
-/* ── Тема: Бордо (темно-бордовий + мідь/золото) ──────────────── */
+/* ── Тема: Бордо (Pantone 19-1624 Burgundy + 16-1343 Copper) ──── */
 :root[data-theme="bordeaux"] {
-  --eden:       #3a1620;
-  --eden-dark:  #270e16;
-  --eden-light: #4f1f2c;
-  --gold:       #d9a05b;
-  --gold-light: #ecbd80;
-  --gold-dim:   rgba(217,160,91,0.15);
-  --gold-border:rgba(217,160,91,0.3);
+  --eden:       #3B1219;
+  --eden-dark:  #270A10;
+  --eden-light: #521A24;
+  --gold:       #C17F4A;
+  --gold-light: #D99A68;
+  --gold-dim:   rgba(193,127,74,0.13);
+  --gold-border:rgba(193,127,74,0.28);
 }
 
-/* ── Тема: Опівніч (темно-синій графіт + срібло) ─────────────── */
+/* ── Тема: Опівніч (Pantone 19-3939 Navy + 13-0002 Silver) ─────── */
 :root[data-theme="midnight"] {
-  --eden:       #16232e;
-  --eden-dark:  #0d151c;
-  --eden-light: #1e3242;
-  --gold:       #9fc7e0;
-  --gold-light: #c2dcee;
-  --gold-dim:   rgba(159,199,224,0.15);
-  --gold-border:rgba(159,199,224,0.3);
+  --eden:       #141E2E;
+  --eden-dark:  #0C1420;
+  --eden-light: #1E2E44;
+  --gold:       #B0C4D8;
+  --gold-light: #CCDAEB;
+  --gold-dim:   rgba(176,196,216,0.13);
+  --gold-border:rgba(176,196,216,0.28);
 }
 
-/* ── Тема: Онікс (майже чорний + бронза) ─────────────────────── */
+/* ── Тема: Онікс (Pantone 19-0303 Jet Black + 12-0712 Vanilla) ── */
 :root[data-theme="onyx"] {
-  --eden:       #1c1c1c;
-  --eden-dark:  #111111;
-  --eden-light: #2a2a2a;
-  --gold:       #c9975a;
-  --gold-light: #e0b87e;
-  --gold-dim:   rgba(201,151,90,0.15);
-  --gold-border:rgba(201,151,90,0.3);
+  --eden:       #1A1A1A;
+  --eden-dark:  #0F0F0F;
+  --eden-light: #282828;
+  --gold:       #E8D5B0;
+  --gold-light: #F2E4C8;
+  --gold-dim:   rgba(232,213,176,0.12);
+  --gold-border:rgba(232,213,176,0.28);
 }
 
-/* ── Тема: Сапфір (темно-індиго + неоновий бірюзовий) ──────────── */
-:root[data-theme="sapphire"] {
-  --eden:          #0d1b2e;
-  --eden-dark:     #080f1c;
-  --eden-light:    #132440;
-  --gold:          #38e8d0;
-  --gold-light:    #6cf3e2;
-  --gold-dim:      rgba(56,232,208,0.12);
-  --gold-border:   rgba(56,232,208,0.28);
-  --text:          #e8f4f8;
-  --text-dim:      rgba(232,244,248,0.55);
-  --text-muted:    rgba(232,244,248,0.28);
-  --surface:       rgba(56,232,208,0.05);
-  --surface-hover: rgba(56,232,208,0.09);
+/* ── Тема: Індиго (Pantone 19-3748 Indigo + 15-1520 Peach) ─────── */
+:root[data-theme="indigo"] {
+  --eden:          #1C1040;
+  --eden-dark:     #120A2C;
+  --eden-light:    #271856;
+  --gold:          #F4A882;
+  --gold-light:    #F8C4A8;
+  --gold-dim:      rgba(244,168,130,0.12);
+  --gold-border:   rgba(244,168,130,0.28);
+  --text:          #F5EEE8;
+  --text-dim:      rgba(245,238,232,0.55);
+  --text-muted:    rgba(245,238,232,0.28);
+  --surface:       rgba(244,168,130,0.05);
+  --surface-hover: rgba(244,168,130,0.09);
 }
 
-/* ── Тема: Аметист (сливово-аметистовий + лавандовий) ─────────── */
-:root[data-theme="amethyst"] {
-  --eden:          #1a0f2e;
-  --eden-dark:     #10091e;
-  --eden-light:    #26163f;
-  --gold:          #c084fc;
-  --gold-light:    #d8a4ff;
-  --gold-dim:      rgba(192,132,252,0.12);
-  --gold-border:   rgba(192,132,252,0.28);
-  --text:          #f0eaff;
-  --text-dim:      rgba(240,234,255,0.55);
-  --text-muted:    rgba(240,234,255,0.28);
-  --surface:       rgba(192,132,252,0.05);
-  --surface-hover: rgba(192,132,252,0.09);
+/* ── Тема: Ліс (Pantone 17-0145 Foliage + 15-1516 Apricot) ────── */
+:root[data-theme="forest"] {
+  --eden:          #1A3028;
+  --eden-dark:     #102018;
+  --eden-light:    #254238;
+  --gold:          #DFA878;
+  --gold-light:    #EFBF98;
+  --gold-dim:      rgba(223,168,120,0.12);
+  --gold-border:   rgba(223,168,120,0.28);
+  --text:          #F2EDE6;
+  --text-dim:      rgba(242,237,230,0.55);
+  --text-muted:    rgba(242,237,230,0.28);
+  --surface:       rgba(223,168,120,0.05);
+  --surface-hover: rgba(223,168,120,0.09);
 }
 
-/* ── Тема: Жар (вугільно-чорний + розжарений жовтогарячий) ──── */
-:root[data-theme="ember"] {
-  --eden:          #1a1008;
-  --eden-dark:     #0e0904;
-  --eden-light:    #2a1a0c;
-  --gold:          #ff7c2a;
-  --gold-light:    #ff9d56;
-  --gold-dim:      rgba(255,124,42,0.12);
-  --gold-border:   rgba(255,124,42,0.28);
-  --text:          #fef3e8;
-  --text-dim:      rgba(254,243,232,0.55);
-  --text-muted:    rgba(254,243,232,0.28);
-  --surface:       rgba(255,124,42,0.05);
-  --surface-hover: rgba(255,124,42,0.09);
+/* ── Тема: Сутінки (Pantone 19-3220 Plum + 15-3817 Lavender) ─── */
+:root[data-theme="dusk"] {
+  --eden:          #261530;
+  --eden-dark:     #180C20;
+  --eden-light:    #341E42;
+  --gold:          #B8A4CC;
+  --gold-light:    #D0C0E4;
+  --gold-dim:      rgba(184,164,204,0.12);
+  --gold-border:   rgba(184,164,204,0.28);
+  --text:          #F0EAF8;
+  --text-dim:      rgba(240,234,248,0.55);
+  --text-muted:    rgba(240,234,248,0.28);
+  --surface:       rgba(184,164,204,0.05);
+  --surface-hover: rgba(184,164,204,0.09);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
