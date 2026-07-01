@@ -116,37 +116,35 @@ const Cash = {
   },
 
   renderPeriodBar() {
-    const barEl = $('cash-period-bar');
-    if (!barEl) return;
-    const n = NOW();
-    const y = n.getFullYear(), mo = n.getMonth(), day = n.getDate();
+    if (!$('cash-period-bar-h1')) return;
+    // Показуємо періоди для місяця, який зараз обрано в календарі (а не завжди поточного)
+    const y = Cash.calYear, mo = Cash.calMonth;
     const uid = (isAdmin(currentUser) && Cash.viewUserId) ? Cash.viewUserId : currentUser.id;
     const entries = Cash.getUserEntries(uid);
-    // Поточний виплатний період: 1–14 або 15–кінець
-    let from, to, label;
-    if (day <= 14) {
-      from = new Date(y, mo, 1);
-      to   = new Date(y, mo, 14, 23, 59, 59);
-      label = `Каса 1–14 ${MONTHS_UA[mo]}`;
-    } else {
-      const lastDay = new Date(y, mo + 1, 0).getDate();
-      from = new Date(y, mo, 15);
-      to   = new Date(y, mo, lastDay, 23, 59, 59);
-      label = `Каса 15–${lastDay} ${MONTHS_UA[mo]}`;
-    }
-    // Сума каси і підрахунок ставки за поточний період
-    let cashSum = 0, workDays = 0;
-    Object.entries(entries).forEach(([dk, v]) => {
-      const d = parseDateKey(dk);
-      if (d >= from && d <= to) {
-        cashSum += (v.cash || 0);
-        if ((v.cash || 0) > 0 || (v.tips || 0) > 0) workDays++;
-      }
+    const lastDay = new Date(y, mo + 1, 0).getDate();
+
+    const periods = [
+      { key: 'h1', from: new Date(y, mo, 1),      to: new Date(y, mo, 14, 23, 59, 59),      label: `Каса 1–14 ${MONTHS_UA[mo]}` },
+      { key: 'h2', from: new Date(y, mo, 15),     to: new Date(y, mo, lastDay, 23, 59, 59), label: `Каса 15–${lastDay} ${MONTHS_UA[mo]}` },
+    ];
+
+    periods.forEach(p => {
+      let cashSum = 0, workDays = 0;
+      Object.entries(entries).forEach(([dk, v]) => {
+        const d = parseDateKey(dk);
+        if (d >= p.from && d <= p.to) {
+          cashSum += (v.cash || 0);
+          if ((v.cash || 0) > 0 || (v.tips || 0) > 0) workDays++;
+        }
+      });
+      const earn = cashSum * 0.04 + workDays * 200;
+      const labelEl = $(`cash-period-label-${p.key}`);
+      const sumEl   = $(`cash-period-sum-${p.key}`);
+      const earnEl  = $(`cash-period-earn-${p.key}`);
+      if (labelEl) labelEl.textContent = p.label;
+      if (sumEl)   sumEl.textContent   = cashSum.toFixed(0) + ' ₴';
+      if (earnEl)  earnEl.textContent  = earn.toFixed(0) + ' ₴';
     });
-    const earn = cashSum * 0.04 + workDays * 200;
-    $('cash-period-label').textContent = label;
-    $('cash-period-sum').textContent   = cashSum.toFixed(0) + ' ₴';
-    $('cash-period-earn').textContent  = earn.toFixed(0) + ' ₴';
   },
 
   loadDayEntry() {
@@ -326,12 +324,14 @@ const Cash = {
     Cash.calMonth--;
     if (Cash.calMonth < 0) { Cash.calMonth = 11; Cash.calYear--; }
     Cash.renderCalendar();
+    Cash.renderPeriodBar();
   },
 
   nextMonth() {
     Cash.calMonth++;
     if (Cash.calMonth > 11) { Cash.calMonth = 0; Cash.calYear++; }
     Cash.renderCalendar();
+    Cash.renderPeriodBar();
   },
 
   switchUser(uid) {
