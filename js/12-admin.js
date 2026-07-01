@@ -339,7 +339,6 @@ const Admin = {
   _allPages() {
     return App.getNavItems().filter(i => !i.adminOnly).map(i => ({
       page: i.page, icon: i.icon, label: i.label,
-      proiobOnly: !!i.proiobOnly,
     }));
   },
 
@@ -388,10 +387,7 @@ const Admin = {
     const pages = Admin._allPages();
 
     // Визначаємо які сторінки взагалі доступні цьому юзеру за роллю
-    const roleVisible = (p) => {
-      if (p.proiobOnly) return canAccessProiob(user || {});
-      return true;
-    };
+    const roleVisible = (p) => true;
 
     container.innerHTML = '<div style="margin-bottom:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)">Оберіть вкладки які бачить ' + esc((user?.displayName || user?.login) || 'юзер') + '</div>' +
       '<div id="page-vis-checkboxes" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">' +

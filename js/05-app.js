@@ -345,7 +345,7 @@ const App = {
     if (activePage && activePage !== 'home' && !App.isPageVisible(activePage)) {
       // Знайти першу дозволену сторінку
       const fallback = App.getNavItems().find(i =>
-        !i.adminOnly && !i.proiobOnly &&
+        !i.adminOnly &&
         App.isPageVisible(i.page)
       );
       App.navigate(fallback ? fallback.page : 'home');
@@ -714,7 +714,6 @@ const App = {
     const allItems = App.getNavItems().filter(item => {
       if (item.page === 'cash' && u.role !== 'waiter' && !isSysadmin(u)) return false;
       if (item.adminOnly) return false; // адмін окремо нижче
-      if (item.proiobOnly && !canAccessProiob(u)) return false;
       if (!isSysadmin(u) && !App.isPageVisible(item.page, u.id)) return false;
       return true;
     });
@@ -790,7 +789,6 @@ const App = {
       { page:'daily',     icon:'📋', label:"Щоденні обов'язки", section:'Основне' },
       { page:'notifications', icon:'🔔', label:'Сповіщення', section:'Основне' },
       { page:'interactive',   icon:'🎮', label:'Інтерактив',        section:'Основне' },
-      { page:'proiob',    icon:'💸', label:'Пройоб',             section:'Основне', proiobOnly:true },
       { page:'admin',     icon:'⚙️', label:'Управління',        section:'Адміністрування', adminOnly:true },
     ];
   },
@@ -877,7 +875,6 @@ const App = {
       Theme.render();
     }
     if (page==='journal')     EventLog.init();
-    if (page==='proiob')      Proiob.init();
 
     // Lazy poll: одразу підтягуємо свіжі дані для сторінок що не в постійному циклі
     const lazyPages = { schedule: '_pollSchedule', cash: '_pollCash', handover: '_pollDuties', daily: '_pollDuties', reserve: '_pollReserve' };
@@ -926,12 +923,11 @@ const App = {
     if (u.role === 'runner' || u.role2 === 'runner') { grid.innerHTML = ''; return; }
     // Усі сторінки крім тих що вже в bottom nav + адмін окремо
     const BN_MAIN = ['schedule','cash','menu','home'];
-    const _bnCookPages = ['schedule','staff','menu','interactive','reserve','proiob'];
+    const _bnCookPages = ['schedule','staff','menu','interactive','reserve'];
     const items = App.getNavItems().filter(item => {
       if (BN_MAIN.includes(item.page)) return false;
       if (item.page === 'cash' && u.role !== 'waiter' && !isSysadmin(u)) return false;
       if (item.adminOnly) return false;
-      if (item.proiobOnly && !canAccessProiob(u)) return false;
       if (!isSysadmin(u) && !App.isPageVisible(item.page, u.id)) return false;
       if ((u.role === 'cook' || u.role2 === 'cook') && !isAdmin(u) && !_bnCookPages.includes(item.page)) return false;
       return true;
