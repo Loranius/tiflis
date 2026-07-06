@@ -4,16 +4,36 @@
 const Staff = {
   section: 'active',
   filterRole: 'all', // поточний фільтр ролі
+  viewMode: 'tiles', // 'tiles' | 'list' — вигляд списку персоналу
 
   init() {
     Staff.filterRole = 'all';
+    Staff.viewMode = DB.get('staffViewMode', 'tiles');
     Staff.renderFilters();
+    Staff.renderViewToggle();
     Staff.renderActive();
     // Кнопка додати — тільки адміну
     const adminBtns = $('staff-admin-btns');
     if (isAdmin(currentUser)) {
       adminBtns.innerHTML = `<button class="btn btn-gold" onclick="Staff.openAddUser()" style="display:flex;align-items:center;gap:6px;white-space:nowrap">＋ Додати</button>`;
     }
+  },
+
+  renderViewToggle() {
+    const el = $('staff-view-toggle');
+    if (!el) return;
+    el.innerHTML = `
+      <button class="staff-view-btn ${Staff.viewMode==='tiles'?'active':''}" onclick="Staff.setViewMode('tiles')">▦ Плитки</button>
+      <button class="staff-view-btn ${Staff.viewMode==='list'?'active':''}" onclick="Staff.setViewMode('list')">☰ Список</button>
+    `;
+  },
+
+  setViewMode(mode) {
+    if (mode === Staff.viewMode) return;
+    Staff.viewMode = mode;
+    DB.set('staffViewMode', mode);
+    Staff.renderViewToggle();
+    if (Staff.section === 'active') Staff.renderActive();
   },
 
   showSection(sec) {
@@ -122,52 +142,80 @@ const Staff = {
       if (role) {
         html += `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin:16px 0 8px;padding-left:2px">${role.label} · ${members.length}</div>`;
       }
-      html += `<div class="staff-grid">`;
-      members.forEach(user => {
-        const raw = getUserById(user.id);
-        const dateStr = Staff._formatTenure(user.createdAt || raw?.created_at);
-        const avatarContent = user.avatar
-          ? `<img src="${user.avatar}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`
-          : `<span>${(user.displayName||user.login)[0].toUpperCase()}</span>`;
-        const canEdit = isAdmin(currentUser) || currentUser.id === user.id;
-
-        const rawU = getUserById(user.id);
-        const hasIg = rawU?.ig;
-        const hasTgUser = rawU?.tg;
-        html += `<div class="staff-card" data-role="${user.role||''}" onclick="Staff.showProfile('${user.id}')">
-          <!-- Верхній рядок: аватар + ім'я + бейдж ролі -->
-          <div style="display:flex;align-items:flex-start;gap:12px">
-            <div class="staff-card-avatar" style="flex-shrink:0">${avatarContent}</div>
-            <div style="flex:1;min-width:0;overflow:hidden">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
-                <div class="staff-card-name" style="min-width:0">${esc(user.displayName||user.login)}</div>
-                ${currentUser.id===user.id?'<span style="font-size:9px;font-weight:800;background:rgba(212,175,55,.2);border:1px solid rgba(212,175,55,.3);color:var(--gold);padding:1px 5px;border-radius:5px;flex-shrink:0">Я</span>':''}
-              </div>
-              ${user.nick?`<div style="font-size:11px;color:var(--gold);font-style:italic;line-height:1.3">✨ ${esc(user.nick)}</div>`:''}
-              ${dateStr?`<div class="staff-card-date">⏳ ${dateStr}</div>`:''}
-            </div>
-            <!-- Бейдж ролі — праворуч, flex-shrink:0 -->
-            <div style="flex-shrink:0" onclick="event.stopPropagation()">
-              <span class="badge badge-gold" style="font-size:10px;white-space:nowrap">${getRoleLabel(user.role)}</span>
-            </div>
-          </div>
-          <!-- Соцмережі — окремий рядок знизу, завжди вміщаються -->
-          ${(hasIg||hasTgUser)?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)" onclick="event.stopPropagation()">
-            ${hasTgUser?`<a href="https://t.me/${hasTgUser}" target="_blank" onclick="event.stopPropagation()"
-              style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#7ec8e3;text-decoration:none;background:rgba(126,200,227,.08);border:1px solid rgba(126,200,227,.2);padding:4px 10px;border-radius:10px;overflow:hidden;max-width:100%;box-sizing:border-box">
-              <span style="flex-shrink:0">✈️</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@${esc(hasTgUser)}</span>
-            </a>`:''}
-            ${hasIg?`<a href="https://instagram.com/${hasIg}" target="_blank" onclick="event.stopPropagation()"
-              style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#f472b6;text-decoration:none;background:rgba(244,114,182,.08);border:1px solid rgba(244,114,182,.2);padding:4px 10px;border-radius:10px;overflow:hidden;max-width:100%;box-sizing:border-box">
-              <span style="flex-shrink:0">📸</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@${esc(hasIg)}</span>
-            </a>`:''}
-          </div>`:''}
-        </div>`;
-      });
-      html += `</div>`;
+      html += Staff.viewMode === 'tiles'
+        ? `<div class="staff-tile-grid">${members.map(Staff._tileCard).join('')}</div>`
+        : `<div class="staff-grid">${members.map(Staff._listCard).join('')}</div>`;
     });
 
     $('staff-active-section').innerHTML = html;
+  },
+
+  // ── Картка-плитка (вигляд "плитками") ────────────────────────────
+  _tileCard(user) {
+    const raw = getUserById(user.id);
+    const dateStr = Staff._formatTenure(user.createdAt || raw?.created_at);
+    const avatarContent = user.avatar
+      ? `<img src="${user.avatar}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`
+      : `<span>${(user.displayName||user.login)[0].toUpperCase()}</span>`;
+    const hasIg = raw?.ig;
+    const hasTgUser = raw?.tg;
+    const name = (user.displayName||user.login).replace(/'/g,"\\'");
+    return `<div class="staff-tile" data-role="${user.role||''}" onclick="Staff.showProfile('${user.id}')">
+      <div class="staff-tile-top">
+        <div class="staff-tile-avatar" onclick="event.stopPropagation();Staff.openAvatarFull('${user.id}')">${avatarContent}</div>
+        <div style="display:flex;align-items:center;gap:5px;justify-content:center;flex-wrap:wrap">
+          <div class="staff-tile-name">${esc(user.displayName||user.login)}</div>
+          ${currentUser.id===user.id?'<span style="font-size:8.5px;font-weight:800;background:rgba(212,175,55,.2);border:1px solid rgba(212,175,55,.3);color:var(--gold);padding:1px 5px;border-radius:5px;flex-shrink:0">Я</span>':''}
+        </div>
+        ${user.nick?`<div class="staff-tile-nick">✨ ${esc(user.nick)}</div>`:''}
+        ${dateStr?`<div class="staff-tile-date">⏳ ${dateStr}</div>`:''}
+        <span class="staff-tile-role">${getRoleLabel(user.role)}</span>
+      </div>
+      ${(hasIg||hasTgUser)?`<div class="staff-tile-socials" onclick="event.stopPropagation()">
+        ${hasTgUser?`<a class="staff-tile-soc tg" href="https://t.me/${hasTgUser}" target="_blank" onclick="event.stopPropagation()">✈️ @${esc(hasTgUser)}</a>`:''}
+        ${hasIg?`<a class="staff-tile-soc ig" href="https://instagram.com/${hasIg}" target="_blank" onclick="event.stopPropagation()">📸 @${esc(hasIg)}</a>`:''}
+      </div>`:''}
+    </div>`;
+  },
+
+  // ── Картка-рядок (старий вигляд "списком") ──────────────────────
+  _listCard(user) {
+    const raw = getUserById(user.id);
+    const dateStr = Staff._formatTenure(user.createdAt || raw?.created_at);
+    const avatarContent = user.avatar
+      ? `<img src="${user.avatar}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`
+      : `<span>${(user.displayName||user.login)[0].toUpperCase()}</span>`;
+    const hasIg = raw?.ig;
+    const hasTgUser = raw?.tg;
+    return `<div class="staff-card" data-role="${user.role||''}" onclick="Staff.showProfile('${user.id}')">
+      <!-- Верхній рядок: аватар + ім'я + бейдж ролі -->
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div class="staff-card-avatar" style="flex-shrink:0" onclick="event.stopPropagation();Staff.openAvatarFull('${user.id}')">${avatarContent}</div>
+        <div style="flex:1;min-width:0;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
+            <div class="staff-card-name" style="min-width:0">${esc(user.displayName||user.login)}</div>
+            ${currentUser.id===user.id?'<span style="font-size:9px;font-weight:800;background:rgba(212,175,55,.2);border:1px solid rgba(212,175,55,.3);color:var(--gold);padding:1px 5px;border-radius:5px;flex-shrink:0">Я</span>':''}
+          </div>
+          ${user.nick?`<div style="font-size:11px;color:var(--gold);font-style:italic;line-height:1.3">✨ ${esc(user.nick)}</div>`:''}
+          ${dateStr?`<div class="staff-card-date">⏳ ${dateStr}</div>`:''}
+        </div>
+        <!-- Бейдж ролі — праворуч, flex-shrink:0 -->
+        <div style="flex-shrink:0" onclick="event.stopPropagation()">
+          <span class="badge badge-gold" style="font-size:10px;white-space:nowrap">${getRoleLabel(user.role)}</span>
+        </div>
+      </div>
+      <!-- Соцмережі — окремий рядок знизу, завжди вміщаються -->
+      ${(hasIg||hasTgUser)?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)" onclick="event.stopPropagation()">
+        ${hasTgUser?`<a href="https://t.me/${hasTgUser}" target="_blank" onclick="event.stopPropagation()"
+          style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#7ec8e3;text-decoration:none;background:rgba(126,200,227,.08);border:1px solid rgba(126,200,227,.2);padding:4px 10px;border-radius:10px;overflow:hidden;max-width:100%;box-sizing:border-box">
+          <span style="flex-shrink:0">✈️</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@${esc(hasTgUser)}</span>
+        </a>`:''}
+        ${hasIg?`<a href="https://instagram.com/${hasIg}" target="_blank" onclick="event.stopPropagation()"
+          style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#f472b6;text-decoration:none;background:rgba(244,114,182,.08);border:1px solid rgba(244,114,182,.2);padding:4px 10px;border-radius:10px;overflow:hidden;max-width:100%;box-sizing:border-box">
+          <span style="flex-shrink:0">📸</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@${esc(hasIg)}</span>
+        </a>`:''}
+      </div>`:''}
+    </div>`;
   },
 
   renderFired() {
@@ -250,7 +298,7 @@ const Staff = {
         </div>
         <!-- Аватар що "звисає" -->
         <div class="profile-avatar-hanging" id="pav-${userId}"
-          ${user.avatar?`onclick="Staff.openAvatarFull('${user.avatar}','${(user.displayName||user.login).replace(/'/g,"\'")}');event.stopPropagation()" style="cursor:pointer"`:''}
+          onclick="Staff.openAvatarFull('${userId}');event.stopPropagation()" style="cursor:zoom-in"
           data-init="${(user.displayName||user.login)[0].toUpperCase()}">
           ${avatarContent}
           ${isBdayToday?'<div style="position:absolute;top:-4px;right:-4px;font-size:16px">🎂</div>':''}
@@ -363,6 +411,10 @@ const Staff = {
         </div>
         <div class="form-group"><label class="lbl">Псевдонім</label>
           <input type="text" id="edit-nick" class="field" value="${user.nick||''}"></div>
+        <div class="form-group"><label class="lbl">Життєве кредо / статус</label>
+          <textarea id="edit-credo" class="field" rows="2" placeholder="Наприклад: жити легко, любити міцно..."
+            style="resize:none;font-family:'Cormorant Garamond',serif;font-style:italic">${esc(user.credo||'')}</textarea>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:3px">Показується під фото на весь екран</div></div>
         <div class="form-group"><label class="lbl">Telegram (@)</label>
           <input type="text" id="edit-tg" class="field" value="${user.tg_username||user.tg||''}"></div>
         <div class="form-group"><label class="lbl">Instagram (@)</label>
@@ -458,6 +510,7 @@ const Staff = {
     const newDisplayName = $('edit-display-name')?.value.trim();
     if (newDisplayName) { users[i].display_name = newDisplayName; users[i].displayName = newDisplayName; users[i].login = newDisplayName; }
     users[i].nick        = $('edit-nick')?.value.trim()||'';
+    users[i].credo       = $('edit-credo')?.value.trim()||'';
     users[i].tg_username = $('edit-tg')?.value.trim().replace('@','')||'';
     users[i].ig          = $('edit-ig')?.value.trim().replace('@','')||'';
     users[i].birthday    = $('edit-birthday')?.value||'';
@@ -476,7 +529,7 @@ const Staff = {
       const usersForCache = users.map(u => { if (u.id === userId) return safeUser; const {password: _p, ...s} = u; return s; });
       DB.set('users', usersForCache);
       try {
-        const upd = { avatar: users[i].avatar, nick: users[i].nick, tg_username: users[i].tg_username, ig: users[i].ig, birthday: users[i].birthday||null, zodiac: users[i].zodiac||null };
+        const upd = { avatar: users[i].avatar, nick: users[i].nick, credo: users[i].credo, tg_username: users[i].tg_username, ig: users[i].ig, birthday: users[i].birthday||null, zodiac: users[i].zodiac||null };
         if (newDisplayName) { upd.display_name = newDisplayName; upd.login = newDisplayName; }
         if (newPass && (isAdmin(currentUser) || isSelf)) upd.password = newPass;
         if (newRole  && isAdmin(currentUser) && !targetIsSysadmin) upd.role = newRole;
@@ -603,28 +656,97 @@ const Staff = {
     }, 100);
   },
 
-  openAvatarFull(url, name) {
-    // Відкриває аватарку на весь екран поверх модалки
+  openAvatarFull(userId) {
+    // Відкриває фото користувача на весь екран + життєве кредо під ним
+    const user = getDisplayUser(userId);
+    if (!user) return;
+    const name = user.displayName || user.login;
+    const isSelf = currentUser.id === userId;
+    const canEdit = isSelf || (isAdmin(currentUser) && userId !== SYSADMIN_ID);
+
     const overlay = document.createElement('div');
     overlay.id = 'avatar-full-overlay';
     overlay.style.cssText = [
       'position:fixed','inset:0','z-index:9999',
       'background:rgba(0,0,0,.92)','backdrop-filter:blur(6px)',
       'display:flex','align-items:center','justify-content:center',
-      'flex-direction:column','gap:14px','cursor:zoom-out','padding:20px',
+      'flex-direction:column','gap:14px','padding:20px','overflow-y:auto',
     ].join(';');
+
+    const photoHtml = user.avatar
+      ? `<img src="${user.avatar}" alt="${esc(name)}"
+          style="max-width:min(420px,86vw);max-height:52vh;object-fit:cover;
+                 border-radius:18px;border:2px solid var(--gold-border);
+                 box-shadow:0 12px 50px rgba(0,0,0,.6)">`
+      : `<div style="width:160px;height:160px;border-radius:50%;background:var(--eden-light);
+                border:2px solid var(--gold-border);display:flex;align-items:center;justify-content:center;
+                font-family:'Cormorant Garamond',serif;font-size:56px;font-weight:700;color:var(--gold)">
+          ${name[0].toUpperCase()}
+        </div>`;
+
     overlay.innerHTML = `
-      <img src="${url}" alt="${name}"
-        style="max-width:min(520px,90vw);max-height:78vh;object-fit:contain;
-               border-radius:12px;border:2px solid var(--gold-border);
-               box-shadow:0 8px 40px rgba(0,0,0,.7)">
+      <div style="cursor:zoom-out" onclick="if(event.target===this)Staff._closeAvatarOverlay()">${photoHtml}</div>
       <div style="font-family:'Cormorant Garamond',serif;font-size:20px;
-                  color:var(--gold);letter-spacing:.08em;font-weight:600">${name}</div>
-      <div style="font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase">
-        Натисніть будь-де щоб закрити
+                  color:var(--gold);letter-spacing:.06em;font-weight:600;text-align:center">${esc(name)}</div>
+      <div class="avatar-full-credo" id="avatar-full-credo-${userId}">
+        ${Staff._credoBoxHTML(userId, user.credo, canEdit)}
+      </div>
+      <div style="font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase;cursor:pointer" onclick="Staff._closeAvatarOverlay()">
+        Натисніть щоб закрити
       </div>`;
-    overlay.addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) Staff._closeAvatarOverlay(); });
     document.body.appendChild(overlay);
+  },
+
+  _closeAvatarOverlay() {
+    const el = $('avatar-full-overlay');
+    if (el) el.remove();
+  },
+
+  _credoBoxHTML(userId, credo, canEdit) {
+    return `
+      <div class="avatar-full-credo-label">Життєве кредо</div>
+      <div class="avatar-full-credo-text ${credo?'':'avatar-full-credo-empty'}">${credo ? '«'+esc(credo)+'»' : (canEdit ? 'Ви ще не додали свій статус' : 'Статус не вказано')}</div>
+      ${canEdit?`<button class="avatar-full-credo-edit-btn" onclick="event.stopPropagation();Staff._editCredoInline('${userId}')">✏️ ${credo?'Змінити':'Додати'}</button>`:''}
+    `;
+  },
+
+  _editCredoInline(userId) {
+    const box = $('avatar-full-credo-' + userId);
+    if (!box) return;
+    const user = getDisplayUser(userId);
+    box.innerHTML = `
+      <div class="avatar-full-credo-label">Життєве кредо</div>
+      <textarea class="avatar-full-credo-textarea" id="avatar-full-credo-input-${userId}"
+        placeholder="Наприклад: жити легко, любити міцно...">${esc(user.credo||'')}</textarea>
+      <div class="avatar-full-credo-save-row">
+        <button class="btn btn-gold btn-sm" onclick="event.stopPropagation();Staff._saveCredoInline('${userId}')">Зберегти</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();Staff._closeAvatarOverlay();Staff.openAvatarFull('${userId}')">Скасувати</button>
+      </div>`;
+    $('avatar-full-credo-input-' + userId)?.focus();
+  },
+
+  async _saveCredoInline(userId) {
+    const input = $('avatar-full-credo-input-' + userId);
+    if (!input) return;
+    const val = input.value.trim();
+    const users = DB.get('users', []);
+    const i = users.findIndex(u => u.id === userId);
+    if (i < 0) return;
+    users[i].credo = val;
+    DB.set('users', users);
+    const box = $('avatar-full-credo-' + userId);
+    const isSelf = currentUser.id === userId;
+    const canEdit = isSelf || (isAdmin(currentUser) && userId !== SYSADMIN_ID);
+    if (box) box.innerHTML = Staff._credoBoxHTML(userId, val, canEdit);
+    try {
+      await sb.update('users', { credo: val }, { id: userId });
+      toast('Кредо збережено', 'success-t');
+      if (Staff.section === 'active') Staff.renderActive();
+    } catch(e) {
+      toast('Помилка збереження', 'error');
+      console.error(e);
+    }
   }
 };
 

@@ -51,3 +51,79 @@
 }
 .staff-role-filter.active .srf-count { background: rgba(212,175,55,.35); }
 
+/* ── Перемикач вигляду: плитки / список ─────────────────────────── */
+.staff-view-toggle {
+  display: inline-flex; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 12px; padding: 3px; gap: 2px; margin-bottom: 14px;
+}
+.staff-view-btn {
+  border: none; background: transparent; color: var(--text-dim);
+  font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 11px;
+  letter-spacing: .04em; text-transform: uppercase; padding: 7px 13px;
+  border-radius: 9px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+  transition: all .15s;
+}
+.staff-view-btn.active { background: rgba(212,175,55,.15); color: var(--gold); border: 1px solid var(--gold-border); }
+
+/* ── Плиткова сітка персоналу ────────────────────────────────────── */
+.staff-tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.staff-tile {
+  background: var(--surface); border: 1px solid var(--gold-border); border-radius: 16px;
+  padding: 12px; cursor: pointer; transition: all .18s;
+  display: flex; flex-direction: column; gap: 9px; overflow: hidden;
+}
+.staff-tile:active { opacity: .85; transform: scale(.98); }
+.staff-tile-top { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 5px; }
+.staff-tile-avatar {
+  width: 60px; height: 60px; border-radius: 50%; background: var(--eden-light);
+  border: 2px solid var(--gold-border); display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 800; color: var(--gold); flex-shrink: 0; overflow: hidden; cursor: zoom-in;
+}
+.staff-tile-name {
+  font-size: 12.5px; font-weight: 700; color: var(--text); line-height: 1.25; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.staff-tile-nick {
+  font-family: 'Cormorant Garamond', serif; font-size: 12px; font-style: italic; color: var(--gold);
+  line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.staff-tile-date { font-size: 9.5px; color: var(--text-dim); }
+.staff-tile-role { font-size: 9px; font-weight: 800; color: var(--gold); background: rgba(212,175,55,.15);
+  border: 1px solid var(--gold-border); padding: 2px 8px; border-radius: 7px; }
+.staff-tile-socials {
+  display: flex; flex-wrap: wrap; gap: 5px; justify-content: center;
+  padding-top: 9px; border-top: 1px solid rgba(255,255,255,.06);
+}
+.staff-tile-soc {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; font-weight: 600;
+  text-decoration: none; padding: 3px 8px; border-radius: 8px; max-width: 100%;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-sizing: border-box;
+}
+.staff-tile-soc.tg { color: #7ec8e3; background: rgba(126,200,227,.08); border: 1px solid rgba(126,200,227,.2); }
+.staff-tile-soc.ig { color: #f472b6; background: rgba(244,114,182,.08); border: 1px solid rgba(244,114,182,.2); }
+
+/* ── Fullscreen аватар + життєве кредо ──────────────────────────── */
+.avatar-full-credo {
+  max-width: min(420px,86vw); width: 100%; text-align: center; cursor: default;
+  background: rgba(255,255,255,.04); border: 1px solid var(--gold-border); border-radius: 14px;
+  padding: 14px 18px; box-sizing: border-box;
+}
+.avatar-full-credo-label {
+  font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em;
+  color: rgba(240,236,224,.35); margin-bottom: 6px;
+}
+.avatar-full-credo-text { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 16px;
+  color: var(--text); line-height: 1.4; }
+.avatar-full-credo-empty { color: rgba(240,236,224,.35); font-size: 12.5px; font-family: 'Montserrat', sans-serif; font-style: normal; }
+.avatar-full-credo-edit-btn {
+  margin-top: 10px; background: none; border: 1px solid var(--gold-border); color: var(--gold);
+  font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  padding: 6px 12px; border-radius: 8px; cursor: pointer;
+}
+.avatar-full-credo-textarea {
+  width: 100%; background: rgba(0,0,0,.3); border: 1px solid var(--gold-border); border-radius: 10px;
+  color: var(--text); font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 15px;
+  padding: 10px; resize: none; min-height: 66px; outline: none; box-sizing: border-box;
+}
+.avatar-full-credo-save-row { display: flex; gap: 8px; margin-top: 8px; justify-content: center; }
+
