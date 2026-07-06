@@ -70,130 +70,66 @@ const Schedule = {
     return getUsers().filter(u => u.role === role || u.role2 === role);
   },
 
-  // ── Накопичення незбережених змін офіціанта ─────────────────────
+  // ── Накопичення змін для групового сповіщення в портал (не для збереження — воно тепер миттєве) ──
   _pendingChanges: {}, // { key: { date, oldVal, newVal } }
+  _notifyTimer: null,
 
   _recordChange(key, oldVal, newVal) {
     Schedule._pendingChanges[key] = { date: key.split('_').pop(), oldVal, newVal };
-    Schedule._showWaiterSaveBtn();
+    clearTimeout(Schedule._notifyTimer);
+    Schedule._notifyTimer = setTimeout(Schedule._flushNotifyBatch, 4000);
   },
 
-  _showWaiterSaveBtn() {
-    if (canEditSchedule(currentUser)) return; // є основна кнопка Зберегти
-    const count = Object.keys(Schedule._pendingChanges).length;
+  // Невеличкий індикатор "Збережено ✓" замість кнопки — зникає сам
+  _flashSaved() {
     const sa = $('schedule-actions');
     if (!sa) return;
-    if (count === 0) { sa.innerHTML = ''; return; }
-    sa.innerHTML = `
-      <span style="font-size:11px;color:var(--text-dim);align-self:center">${count} зм.</span>
-      <button class="btn btn-gold btn-sm" id="waiter-save-btn" onclick="Schedule.waiterSave()">
-        💾 Зберегти зміни
-      </button>`;
+    let ind = document.getElementById('schedule-saved-indicator');
+    if (!ind) {
+      ind = document.createElement('span');
+      ind.id = 'schedule-saved-indicator';
+      ind.style.cssText = 'font-size:11px;color:var(--gold);align-self:center;font-weight:700;opacity:0;transition:opacity .25s';
+      sa.appendChild(ind);
+    }
+    ind.textContent = '✓ Збережено';
+    ind.style.opacity = '1';
+    clearTimeout(Schedule._savedFadeTimer);
+    Schedule._savedFadeTimer = setTimeout(() => { ind.style.opacity = '0'; }, 1200);
   },
 
-  async waiterSave() {
+  // Раз на кілька секунд після останньої зміни — одне сумарне сповіщення в портал (без Telegram)
+  async _flushNotifyBatch() {
     const changes = { ...Schedule._pendingChanges };
     const keys = Object.keys(changes);
+    Schedule._pendingChanges = {};
     if (!keys.length) return;
 
-    const btn = $('waiter-save-btn');
-    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Збереження...'; }
-
     try {
-      // Зберігаємо кожну зміну в Supabase
-      await Promise.all(keys.map(key => {
-        const parts = key.split('_');
-        const date = parts[parts.length - 1];
-        const userId = parts.slice(0, -1).join('_');
-        return Schedule._saveToSupabase(userId, date, (DB.get('schedule', {})[key] || ''));
-      }));
-
-      // Формуємо текст сповіщення
       const authorName = currentUser.displayName || currentUser.login;
-      const authorRole = getRoleLabel(currentUser.role || '');
       const MONTH_NAMES = ['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'];
-      const DOW_NAMES   = ['нд','пн','вт','ср','чт','пт','сб'];
-      const SHIFT_LABELS_TG = {
-        'Д':   '🩷 Д — дитяча',
-        'Р':   '🟢 Р — робочий',
-        'Х':   '🔴 Х — вихідний',
-        'О':   '🟠 О — відпустка',
-        'СН':  '🔵 СН — сніданки',
-        'Б':   '🟡 Б — бар',
-        'С':   '🟣 С',
-        'Р/Б': '🟢 Р/Б — робочий+бар',
-        'СН/Б':'🔵 СН/Б — сніданки+бар',
-        '':    '⬜ — (порожньо)',
-      };
 
-      // Сортуємо по даті
       const sortedKeys = keys.slice().sort((a,b) => changes[a].date.localeCompare(changes[b].date));
-
-      const changeLines = sortedKeys.map(key => {
-        const { date, oldVal, newVal } = changes[key];
-        const [y, m, d] = date.split('-').map(Number);
-        const dow = DOW_NAMES[new Date(y, m-1, d).getDay()];
-        const dateStr = `${d} ${MONTH_NAMES[m-1]} (${dow})`;
-        const from = (SHIFT_LABELS_TG[oldVal] !== undefined ? SHIFT_LABELS_TG[oldVal] : oldVal) || '⬜ —';
-        const to   = (SHIFT_LABELS_TG[newVal] !== undefined ? SHIFT_LABELS_TG[newVal] : newVal) || '⬜ —';
-        return `📅 <b>${dateStr}</b>\n   ${from} ➜ ${to}`;
-      }).join('\n\n');
-
-      const now = new Date();
-      const timeStr = `${now.getDate()} ${MONTH_NAMES[now.getMonth()]}, ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-
-      const tgText = [
-        `╔══════════════════╗`,
-        `  ✏️ <b>ЗМІНА ГРАФІКУ</b>`,
-        `╚══════════════════╝`,
-        ``,
-        `👤 <b>${authorName}</b>`,
-        `🎯 ${authorRole}`,
-        ``,
-        `─────────────────────`,
-        changeLines,
-        `─────────────────────`,
-        ``,
-        `🕐 ${timeStr}`,
-        `<i>Портал персоналу · Тифліс</i>`,
-      ].join('\n');
-
       const notifTitle = `✏️ ${authorName} змінив(ла) графік`;
-      const notifBody  = sortedKeys.map(key => {
+      const notifBody = sortedKeys.map(key => {
         const { date, oldVal, newVal } = changes[key];
         const [y, m, d] = date.split('-').map(Number);
         return `${d} ${MONTH_NAMES[m-1]}: ${oldVal||'—'} → ${newVal||'—'}`;
       }).join(', ');
 
-      // Вставляємо в таблицю notifications (побачать всі адміни)
-      try {
-        const [inserted] = await sb.insert('notifications', {
-          title: notifTitle,
-          body: notifBody,
-          priority: 'medium',
-          author: authorName,
-        });
-        const items = DB.get('notifications', []);
-        items.push(inserted);
-        DB.set('notifications', items);
-      } catch(e) { console.warn('Notify insert error:', e); }
+      // Сповіщення лише в порталі (список "Сповіщення") — Telegram-розсилку про зміни графіку вимкнено
+      const [inserted] = await sb.insert('notifications', {
+        title: notifTitle,
+        body: notifBody,
+        priority: 'medium',
+        author: authorName,
+      });
+      const items = DB.get('notifications', []);
+      items.push(inserted);
+      DB.set('notifications', items);
 
-      // Telegram — тільки адмінам
-      const admins = DB.get('users', []).filter(u => !u.fired && isAdmin(u));
-      for (const adm of admins) {
-        const chatId = adm.chat_id || adm.tg_id;
-        if (chatId) await tgSendPersonal(chatId, tgText);
-      }
-
-      // Скидаємо pending
-      Schedule._pendingChanges = {};
-      const sa = $('schedule-actions');
-      if (sa) sa.innerHTML = '';
-      logEvent('schedule', 'Збережено зміни в графіку'); toast('Зміни збережено ✅', 'success-t');
+      logEvent('schedule', `Змінено ${keys.length} ${keys.length === 1 ? 'зміну' : 'змін'} в графіку`);
     } catch(e) {
-      console.error('waiterSave error:', e);
-      toast('Помилка збереження', 'error');
-      if (btn) { btn.disabled = false; btn.innerHTML = '💾 Зберегти зміни'; }
+      console.warn('Notify insert error:', e);
     }
   },
 
@@ -243,9 +179,7 @@ const Schedule = {
     const sa = $('schedule-actions');
     sa.innerHTML = '';
     if (canEditSchedule(currentUser)) {
-      sa.innerHTML = `
-        <button class="btn btn-ghost btn-sm" id="schedule-photo-btn">📷 Фото</button>
-        <button class="btn btn-gold btn-sm" onclick="Schedule.saveAll()">💾 Зберегти</button>`;
+      sa.innerHTML = `<button class="btn btn-ghost btn-sm" id="schedule-photo-btn">📷 Фото</button>`;
       const _spBtn = document.getElementById('schedule-photo-btn');
       if (_spBtn) _spBtn.addEventListener('click', () => Schedule.readPhoto());
     }
@@ -501,30 +435,6 @@ days — тільки дні з позначками (не вихідні).`;
     Schedule.renderTable(scheduleActiveRole, Schedule.calYear, Schedule.calMonth);
     toast(`✅ Імпортовано ${saved} записів графіку`, 'success-t');
     logEvent('schedule', `Імпорт графіку з фото: ${saved} записів`);
-
-    // ── TG: сповіщення про оновлення графіку через фото ──
-    try {
-      const importer = currentUser.displayName || currentUser.login || 'Адмін';
-      const MONTHS_UA_S = ['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'];
-      const monthLabel = month && year ? `${MONTHS_UA_S[(month - 1) % 12]} ${year}` : '';
-      const now = new Date();
-      const timeStr = `${now.getDate()} ${MONTHS_UA_S[now.getMonth()]}, ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-      const tgMsg = [
-        `╔══════════════════╗`,
-        `  📅 <b>ГРАФІК ОНОВЛЕНО</b>`,
-        `╚══════════════════╝`,
-        ``,
-        `📷 Імпортовано з фото`,
-        monthLabel ? `📆 Місяць: <b>${monthLabel}</b>` : '',
-        `✏️ Виконав(ла): <b>${esc(importer)}</b>`,
-        `📊 Записів: <b>${saved}</b>`,
-        `🕐 ${timeStr}`,
-        ``,
-        `<i>Портал персоналу · Тифліс</i>`,
-      ].filter(Boolean).join('\n');
-      // Надсилаємо всім (всі ролі)
-      await tgBroadcast(tgMsg);
-    } catch(tgErr) { console.warn('TG schedule photo notify:', tgErr); }
   },
 
   _pendingSchedulePhoto: null,
@@ -759,14 +669,10 @@ days — тільки дні з позначками (не вихідні).`;
     badge.textContent = val || '·';
     badge.className = 'shift-badge shift-' + val.replace(/\//g, '');
 
-    if (canEditSchedule(currentUser)) {
-      // Офіціанти і адміни — зберігають одразу, але фіксують зміну для сповіщення
-      Schedule._saveToSupabase(userId, date, val);
-      if (oldVal !== val) Schedule._recordChange(key, oldVal, val);
-    } else {
-      // Інші ролі — накопичують зміни
-      Schedule._recordChange(key, oldVal, val);
-    }
+    // Динамічне збереження — миттєво в Supabase, для будь-якої ролі, без кнопки "Зберегти"
+    Schedule._saveToSupabase(userId, date, val);
+    if (oldVal !== val) Schedule._recordChange(key, oldVal, val);
+    Schedule._flashSaved();
 
     // Якщо Duties відкриті — оновити їх щоб показувати актуальних офіціантів
     const dutiesNeedUpdate = ['handover', 'daily'].some(type => {
@@ -790,107 +696,6 @@ days — тільки дні з позначками (не вихідні).`;
     } catch(e) {
       console.error('Schedule save error:', e);
       toast('Помилка збереження зміни', 'error');
-    }
-  },
-
-  async saveAll() {
-    const changes = { ...Schedule._pendingChanges };
-    const keys = Object.keys(changes);
-
-    if (!keys.length) {
-      toast('Немає нових змін', 'success-t');
-      return;
-    }
-
-    const btn = document.querySelector('[onclick="Schedule.saveAll()"]');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Збереження...'; }
-
-    try {
-      // Зберігаємо лише змінені клітинки
-      await Promise.all(keys.map(key => {
-        const parts = key.split('_');
-        const date = parts[parts.length - 1];
-        const userId = parts.slice(0, -1).join('_');
-        const shift = DB.get('schedule', {})[key] || '';
-        return Schedule._saveToSupabase(userId, date, shift);
-      }));
-
-      // Формуємо сповіщення для адмінів
-      const authorName = currentUser.displayName || currentUser.login;
-      const authorRole = getRoleLabel(currentUser.role || '');
-      const MONTH_NAMES = ['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'];
-      const DOW_NAMES   = ['нд','пн','вт','ср','чт','пт','сб'];
-      const SHIFT_LABELS_TG = {
-        'Д':'🩷 Д — дитяча','Р':'🟢 Р — робочий','Х':'🔴 Х — вихідний',
-        'О':'🟠 О — відпустка','СН':'🔵 СН — сніданки','Б':'🟡 Б — бар',
-        'С':'🟣 С','Р/Б':'🟢 Р/Б — робочий+бар','СН/Б':'🔵 СН/Б — сніданки+бар',
-        '':'⬜ — (порожньо)',
-      };
-
-      const sortedKeys = keys.slice().sort((a,b) => changes[a].date.localeCompare(changes[b].date));
-      const changeLines = sortedKeys.map(key => {
-        const { date, oldVal, newVal } = changes[key];
-        const [y, m, d] = date.split('-').map(Number);
-        const dow = DOW_NAMES[new Date(y, m-1, d).getDay()];
-        const dateStr = `${d} ${MONTH_NAMES[m-1]} (${dow})`;
-        const from = (SHIFT_LABELS_TG[oldVal] !== undefined ? SHIFT_LABELS_TG[oldVal] : oldVal) || '⬜ —';
-        const to   = (SHIFT_LABELS_TG[newVal] !== undefined ? SHIFT_LABELS_TG[newVal] : newVal) || '⬜ —';
-        return `📅 <b>${dateStr}</b>\n   ${from} ➜ ${to}`;
-      }).join('\n\n');
-
-      const now = new Date();
-      const timeStr = `${now.getDate()} ${MONTH_NAMES[now.getMonth()]}, ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-
-      const tgText = [
-        `╔══════════════════╗`,
-        `  ✏️ <b>ЗМІНА ГРАФІКУ</b>`,
-        `╚══════════════════╝`,
-        ``,
-        `👤 <b>${authorName}</b>`,
-        `🎯 ${authorRole}`,
-        ``,
-        `─────────────────────`,
-        changeLines,
-        `─────────────────────`,
-        ``,
-        `🕐 ${timeStr}`,
-        `<i>Портал персоналу · Тифліс</i>`,
-      ].join('\n');
-
-      const notifBody = sortedKeys.map(key => {
-        const { date, oldVal, newVal } = changes[key];
-        const [y, m, d] = date.split('-').map(Number);
-        return `${d} ${MONTH_NAMES[m-1]}: ${oldVal||'—'} → ${newVal||'—'}`;
-      }).join(', ');
-
-      // Сповіщення в порталі
-      try {
-        const [inserted] = await sb.insert('notifications', {
-          title: `✏️ ${authorName} змінив(ла) графік`,
-          body: notifBody,
-          priority: 'medium',
-          author: authorName,
-        });
-        const items = DB.get('notifications', []);
-        items.push(inserted);
-        DB.set('notifications', items);
-      } catch(e) { console.warn('Notify insert error:', e); }
-
-      // Telegram — тільки адмінам (і не собі якщо поточний юзер адмін)
-      const admins = DB.get('users', []).filter(u => !u.fired && isAdmin(u) && u.id !== currentUser.id);
-      for (const adm of admins) {
-        const chatId = adm.chat_id || adm.tg_id;
-        if (chatId) await tgSendPersonal(chatId, tgText);
-      }
-
-      Schedule._pendingChanges = {};
-      logEvent('schedule', `Збережено ${keys.length} змін в графіку`);
-      toast(`✅ Збережено ${keys.length} ${keys.length === 1 ? 'зміну' : 'змін'}`, 'success-t');
-    } catch(e) {
-      console.error('saveAll error:', e);
-      toast('Помилка збереження', 'error');
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '💾 Зберегти'; }
     }
   },
 

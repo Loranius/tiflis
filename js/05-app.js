@@ -825,16 +825,6 @@ const App = {
       page = 'home';
     }
 
-    // Якщо є незбережені зміни в графіку (для ролей без прямого збереження) — попереджаємо
-    if (page !== 'schedule' && !canEditSchedule(currentUser) &&
-        Object.keys(Schedule._pendingChanges).length > 0) {
-      showConfirm('У вас є незбережені зміни в графіку. Покинути без збереження?', () => {
-        Schedule._pendingChanges = {};
-        App.navigate(page);
-      }, { okLabel: '⚠️ Покинути', okClass: 'btn-danger', cancelLabel: 'Залишитись' });
-      return;
-    }
-
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
     const el = $('page-'+page);
