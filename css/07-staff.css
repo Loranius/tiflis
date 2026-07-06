@@ -15,12 +15,16 @@
   border-left: 3px solid var(--gold-border); overflow: hidden;
 }
 /* Кольорова ліва межа по ролі */
-.staff-card[data-role="waiter"]    { border-left-color: rgba(212,175,55,.7); }
-.staff-card[data-role="barman"]    { border-left-color: rgba(126,200,227,.7); }
-.staff-card[data-role="manager"]   { border-left-color: rgba(200,144,232,.7); }
-.staff-card[data-role="admin"]     { border-left-color: rgba(72,199,142,.7); }
-.staff-card[data-role="cook"]      { border-left-color: rgba(255,160,80,.7); }
-.staff-card[data-role="sommelier"] { border-left-color: rgba(180,120,220,.7); }
+.staff-card[data-role="waiter"]    { border-left-color: rgba(212,175,55,.75); }
+.staff-card[data-role="barman"]    { border-left-color: rgba(126,200,227,.75); }
+.staff-card[data-role="hostess"]   { border-left-color: rgba(244,114,182,.75); }
+.staff-card[data-role="manager"]   { border-left-color: rgba(200,144,232,.75); }
+.staff-card[data-role="admin"]     { border-left-color: rgba(72,199,142,.75); }
+.staff-card[data-role="cook"]      { border-left-color: rgba(255,160,80,.75); }
+.staff-card[data-role="chef"]      { border-left-color: rgba(255,160,80,.75); }
+.staff-card[data-role="sommelier"] { border-left-color: rgba(167,139,250,.75); }
+.staff-card[data-role="trainee"]   { border-left-color: rgba(148,163,184,.7); }
+.staff-card[data-role="runner"]    { border-left-color: rgba(45,212,191,.75); }
 .staff-card:active { opacity: .85; transform: scale(.99); }
 .staff-card-avatar {
   width: 48px; height: 48px; border-radius: 50%; background: var(--eden-light);
@@ -68,11 +72,22 @@
 /* ── Плиткова сітка персоналу ────────────────────────────────────── */
 .staff-tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .staff-tile {
-  background: var(--surface); border: 1px solid var(--gold-border); border-radius: 16px;
+  background: var(--surface); border: 2px solid var(--gold-border); border-radius: 16px;
   padding: 12px; cursor: pointer; transition: all .18s;
   display: flex; flex-direction: column; gap: 9px; overflow: hidden;
 }
 .staff-tile:active { opacity: .85; transform: scale(.98); }
+/* Кольорова рамка по ролі — так само як ліва межа у списку */
+.staff-tile[data-role="waiter"]    { border-color: rgba(212,175,55,.75); }
+.staff-tile[data-role="barman"]    { border-color: rgba(126,200,227,.75); }
+.staff-tile[data-role="hostess"]   { border-color: rgba(244,114,182,.75); }
+.staff-tile[data-role="manager"]   { border-color: rgba(200,144,232,.75); }
+.staff-tile[data-role="admin"]     { border-color: rgba(72,199,142,.75); }
+.staff-tile[data-role="cook"]      { border-color: rgba(255,160,80,.75); }
+.staff-tile[data-role="chef"]      { border-color: rgba(255,160,80,.75); }
+.staff-tile[data-role="sommelier"] { border-color: rgba(167,139,250,.75); }
+.staff-tile[data-role="trainee"]   { border-color: rgba(148,163,184,.7); }
+.staff-tile[data-role="runner"]    { border-color: rgba(45,212,191,.75); }
 .staff-tile-top { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 5px; }
 .staff-tile-avatar {
   width: 60px; height: 60px; border-radius: 50%; background: var(--eden-light);

@@ -657,9 +657,17 @@ const App = {
     App.renderSidebarNav();
     App._applyBottomNavVisibility();
 
-    // Ранер — приховуємо нижню навігацію крім "Головна"
+    // Ранер — приховуємо нижню навігацію крім "Головна", і даємо доступ до "Персонал" замість "Каси"
     if (u.role === 'runner' || u.role2 === 'runner') {
       document.querySelectorAll('.bn-btn:not(.bn-home)').forEach(b => b.style.display = 'none');
+      const staffBtn = document.querySelector('.bn-btn[data-bnpage="cash"]');
+      if (staffBtn) {
+        staffBtn.style.display = '';
+        staffBtn.setAttribute('data-bnpage', 'staff');
+        staffBtn.querySelector('.bn-icon').textContent = '👥';
+        staffBtn.querySelector('span:last-child').textContent = 'Персонал';
+        staffBtn.onclick = () => { App.navigate('staff'); App.closeBnDrawer(); };
+      }
     }
     // Кухар — замінюємо «Каса» на «Резерв» в нижній панелі
     if ((u.role === 'cook' || u.role2 === 'cook') && !isAdmin(u)) {
@@ -688,8 +696,14 @@ const App = {
     homeBtn.addEventListener('click', () => { App.navigate('home'); App.closeSidebar(); });
     nav.appendChild(homeBtn);
 
-    // ── Ранер — лише головна, нічого більше ──────────────────────────
+    // ── Ранер — головна + персонал (свій профіль), нічого більше ──────
     if (u.role === 'runner' || u.role2 === 'runner') {
+      const staffBtn = document.createElement('button');
+      staffBtn.className = 'nav-btn';
+      staffBtn.setAttribute('data-page','staff');
+      staffBtn.innerHTML = '<span class="icon">👥</span>Персонал';
+      staffBtn.addEventListener('click', () => { App.navigate('staff'); App.closeSidebar(); });
+      nav.appendChild(staffBtn);
       App.renderBnDrawer(u);
       return;
     }
@@ -806,8 +820,8 @@ const App = {
   },
 
   navigate(page) {
-    // Ранер бачить лише головну сторінку
-    if ((currentUser?.role === 'runner' || currentUser?.role2 === 'runner') && page !== 'home') {
+    // Ранер бачить лише головну та персонал (свій профіль)
+    if ((currentUser?.role === 'runner' || currentUser?.role2 === 'runner') && page !== 'home' && page !== 'staff') {
       page = 'home';
     }
 

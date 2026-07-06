@@ -59,7 +59,7 @@ const Staff = {
     // Іконки ролей
     const roleIcons = {
       admin:'🛡️', waiter:'👨‍🍳', barman:'🍺', hostess:'✨',
-      chef:'👨‍🍳', sommelier:'🍷', trainee:'🎓',
+      chef:'👨‍🍳', sommelier:'🍷', trainee:'🎓', runner:'🏃',
     };
 
     const makeFilter = (key, label, icon, count, active) =>
@@ -411,10 +411,10 @@ const Staff = {
         </div>
         <div class="form-group"><label class="lbl">Псевдонім</label>
           <input type="text" id="edit-nick" class="field" value="${user.nick||''}"></div>
-        <div class="form-group"><label class="lbl">Життєве кредо / статус</label>
+        ${isSelf?`<div class="form-group"><label class="lbl">Життєве кредо / статус</label>
           <textarea id="edit-credo" class="field" rows="2" placeholder="Наприклад: жити легко, любити міцно..."
             style="resize:none;font-family:'Cormorant Garamond',serif;font-style:italic">${esc(user.credo||'')}</textarea>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:3px">Показується під фото на весь екран</div></div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:3px">Показується під фото на весь екран</div></div>`:''}
         <div class="form-group"><label class="lbl">Telegram (@)</label>
           <input type="text" id="edit-tg" class="field" value="${user.tg_username||user.tg||''}"></div>
         <div class="form-group"><label class="lbl">Instagram (@)</label>
@@ -510,7 +510,7 @@ const Staff = {
     const newDisplayName = $('edit-display-name')?.value.trim();
     if (newDisplayName) { users[i].display_name = newDisplayName; users[i].displayName = newDisplayName; users[i].login = newDisplayName; }
     users[i].nick        = $('edit-nick')?.value.trim()||'';
-    users[i].credo       = $('edit-credo')?.value.trim()||'';
+    if ($('edit-credo')) users[i].credo = $('edit-credo').value.trim();
     users[i].tg_username = $('edit-tg')?.value.trim().replace('@','')||'';
     users[i].ig          = $('edit-ig')?.value.trim().replace('@','')||'';
     users[i].birthday    = $('edit-birthday')?.value||'';
@@ -662,7 +662,7 @@ const Staff = {
     if (!user) return;
     const name = user.displayName || user.login;
     const isSelf = currentUser.id === userId;
-    const canEdit = isSelf || (isAdmin(currentUser) && userId !== SYSADMIN_ID);
+    const canEditCredo = isSelf; // кредо редагує лише власник акаунту
 
     const overlay = document.createElement('div');
     overlay.id = 'avatar-full-overlay';
@@ -689,7 +689,7 @@ const Staff = {
       <div style="font-family:'Cormorant Garamond',serif;font-size:20px;
                   color:var(--gold);letter-spacing:.06em;font-weight:600;text-align:center">${esc(name)}</div>
       <div class="avatar-full-credo" id="avatar-full-credo-${userId}">
-        ${Staff._credoBoxHTML(userId, user.credo, canEdit)}
+        ${Staff._credoBoxHTML(userId, user.credo, canEditCredo)}
       </div>
       <div style="font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase;cursor:pointer" onclick="Staff._closeAvatarOverlay()">
         Натисніть щоб закрити
@@ -727,6 +727,7 @@ const Staff = {
   },
 
   async _saveCredoInline(userId) {
+    if (currentUser.id !== userId) return; // лише власник акаунту редагує своє кредо
     const input = $('avatar-full-credo-input-' + userId);
     if (!input) return;
     const val = input.value.trim();
@@ -736,9 +737,7 @@ const Staff = {
     users[i].credo = val;
     DB.set('users', users);
     const box = $('avatar-full-credo-' + userId);
-    const isSelf = currentUser.id === userId;
-    const canEdit = isSelf || (isAdmin(currentUser) && userId !== SYSADMIN_ID);
-    if (box) box.innerHTML = Staff._credoBoxHTML(userId, val, canEdit);
+    if (box) box.innerHTML = Staff._credoBoxHTML(userId, val, true);
     try {
       await sb.update('users', { credo: val }, { id: userId });
       toast('Кредо збережено', 'success-t');
