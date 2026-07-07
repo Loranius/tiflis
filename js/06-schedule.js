@@ -74,6 +74,9 @@ const Schedule = {
   _pendingChanges: {}, // { key: { date, oldVal, newVal } }
   _notifyTimer: null,
 
+  // ── Захист щойно внесених, ще не підтверджених сервером змін від перезапису фоновим опитуванням ──
+  _pendingWrites: {}, // { key: { val, ts } }
+
   _recordChange(key, oldVal, newVal) {
     Schedule._pendingChanges[key] = { date: key.split('_').pop(), oldVal, newVal };
     clearTimeout(Schedule._notifyTimer);
@@ -669,8 +672,13 @@ days — тільки дні з позначками (не вихідні).`;
     badge.textContent = val || '·';
     badge.className = 'shift-badge shift-' + val.replace(/\//g, '');
 
+    // Позначаємо зміну як "в очікуванні підтвердження від сервера" —
+    // це захищає її від затирання фоновим опитуванням (_pollSchedule),
+    // яке може повернути ще не оновлені дані через мережеву затримку
+    Schedule._pendingWrites[key] = { val, ts: Date.now() };
+
     // Динамічне збереження — миттєво в Supabase, для будь-якої ролі, без кнопки "Зберегти"
-    Schedule._saveToSupabase(userId, date, val);
+    Schedule._saveToSupabase(userId, date, val, key);
     if (oldVal !== val) Schedule._recordChange(key, oldVal, val);
     Schedule._flashSaved();
 
@@ -690,9 +698,14 @@ days — тільки дні з позначками (не вихідні).`;
     }
   },
 
-  async _saveToSupabase(userId, date, shift) {
+  async _saveToSupabase(userId, date, shift, key) {
     try {
       await sb.upsert('schedule', { user_id: userId, date, shift }, 'user_id,date');
+      // Підтверджено сервером — знімаємо захист від перезапису опитуванням,
+      // але лише якщо з того часу не з'явилась ще новіша локальна зміна цієї ж комірки
+      if (key && Schedule._pendingWrites[key] && Schedule._pendingWrites[key].val === shift) {
+        delete Schedule._pendingWrites[key];
+      }
     } catch(e) {
       console.error('Schedule save error:', e);
       toast('Помилка збереження зміни', 'error');

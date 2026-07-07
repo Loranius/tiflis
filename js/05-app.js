@@ -445,6 +445,23 @@ const App = {
     const rows = await sb.query('schedule', { _raw: `date=gte.${_f}&date=lte.${_t}` });
     const scheduleMap = {};
     rows.forEach(s => { scheduleMap[`${s.user_id}_${s.date}`] = s.shift; });
+
+    // Захист: не затирати щойно внесені локальні зміни, які ще не встигли
+    // підтвердитись на сервері (уникаємо race condition з upsert-ом і "стрибків" позначок назад)
+    if (typeof Schedule !== 'undefined' && Schedule._pendingWrites) {
+      const PENDING_TTL = 25000; // трохи більше циклу опитування (20с) — запобіжник на випадок збою
+      const now = Date.now();
+      Object.keys(Schedule._pendingWrites).forEach(k => {
+        const pw = Schedule._pendingWrites[k];
+        if (!pw) return;
+        if (now - pw.ts < PENDING_TTL) {
+          scheduleMap[k] = pw.val;
+        } else {
+          delete Schedule._pendingWrites[k];
+        }
+      });
+    }
+
     const old = JSON.stringify(DB.get('schedule', {}));
     const fresh = JSON.stringify(scheduleMap);
     if (old !== fresh) {
