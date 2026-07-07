@@ -21,6 +21,10 @@ const Interactive = {
           class="menu-section-tab ${Interactive.currentTab==='horoscope'?'active':''}">
           🔮 Гороскоп
         </button>
+        <button onclick="Interactive.switchTab('memes')" id="itab-memes"
+          class="menu-section-tab ${Interactive.currentTab==='memes'?'active':''}">
+          😂 Меми
+        </button>
       </div>
       <div id="interactive-tab-content"></div>`;
     Interactive.renderTab();
@@ -37,6 +41,7 @@ const Interactive = {
   renderTab() {
     if (Interactive.currentTab === 'letters') Interactive.renderLetters();
     if (Interactive.currentTab === 'horoscope') Interactive.renderHoroscope();
+    if (Interactive.currentTab === 'memes') Interactive.renderMemes();
   },
 
   // ─── Слова на літеру ───────────────────────────────────────
@@ -311,6 +316,324 @@ const Interactive = {
     });
     colleaguesDiv.appendChild(grid);
     el.appendChild(colleaguesDiv);
+  },
+
+  // ─── Меми ──────────────────────────────────────────────────────
+  MEMES_KEY: 'interactive_memes',
+  MEME_TITLE_MAX: 30,
+  MEME_DESC_MAX: 500,
+
+  getMemes() {
+    return DB.get(Interactive.MEMES_KEY, []);
+  },
+
+  async _saveMemes(memes) {
+    DB.set(Interactive.MEMES_KEY, memes);
+    try {
+      await sb.upsert('settings', { key: Interactive.MEMES_KEY, value: JSON.stringify(memes) }, 'key');
+    } catch(e) { console.error('Interactive._saveMemes error:', e); }
+  },
+
+  async initMemes() {
+    try {
+      const rows = await sb.query('settings', { filter:{ key: Interactive.MEMES_KEY }, select:'value', limit:1 });
+      if (rows?.[0]?.value) {
+        const parsed = JSON.parse(rows[0].value);
+        if (Array.isArray(parsed)) DB.set(Interactive.MEMES_KEY, parsed);
+      }
+    } catch(e) {}
+  },
+
+  renderMemes() {
+    const el = $('interactive-tab-content');
+    if (!el) return;
+
+    if (!Interactive._memesLoaded) {
+      Interactive._memesLoaded = true;
+      Interactive.initMemes().then(() => {
+        if (Interactive.currentTab === 'memes') Interactive.renderMemes();
+      });
+    }
+
+    const memes = [...Interactive.getMemes()].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+    const cardsHtml = memes.length
+      ? memes.map(m => Interactive._renderMemeCard(m)).join('')
+      : `<div class="card" style="padding:32px;text-align:center;color:var(--text-dim)">
+           <div style="font-size:32px;margin-bottom:10px">😂</div>
+           <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">Ще немає мемів</div>
+           <div style="font-size:12px">Стань першим, хто додасть мем ресторану!</div>
+         </div>`;
+
+    el.innerHTML = `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+        <button onclick="Interactive.openMemeModal()" class="btn btn-gold">
+          ➕ Мем
+        </button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        ${cardsHtml}
+      </div>`;
+  },
+
+  _renderMemeCard(m) {
+    const ratingsObj = m.ratings || {};
+    const scores = Object.values(ratingsObj).filter(v => typeof v === 'number' && v > 0);
+    const avg = scores.length ? (scores.reduce((a,b) => a+b, 0) / scores.length) : null;
+    const myScore = currentUser ? (ratingsObj[currentUser.id] || 0) : 0;
+    const createdLabel = m.createdAt ? new Date(m.createdAt).toLocaleDateString('uk-UA', { day:'numeric', month:'long', year:'numeric' }) : '';
+
+    const scoreButtons = Array.from({length:10}, (_,i) => i+1).map(n => `
+      <button onclick="Interactive.rateMeme('${m.id}',${n})"
+        style="width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:11px;font-weight:800;
+               border:1px solid ${n===myScore ? 'var(--gold)' : 'rgba(255,255,255,.12)'};
+               background:${n===myScore ? 'var(--gold)' : 'var(--surface)'};
+               color:${n===myScore ? '#1a1a1a' : 'var(--text-dim)'};transition:.15s">
+        ${n}
+      </button>`).join('');
+
+    return `
+      <div class="card" style="padding:16px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:700;color:var(--gold)">
+              ${esc(m.title)}
+            </div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+              👤 ${esc(m.authorName || 'Невідомо')} · ${esc(createdLabel)}
+            </div>
+          </div>
+          ${avg !== null ? `
+          <div style="text-align:center;flex-shrink:0">
+            <div style="font-size:20px;font-weight:800;color:var(--gold);line-height:1">${avg.toFixed(1)}</div>
+            <div style="font-size:9px;color:var(--text-muted)">${scores.length} оцін.</div>
+          </div>` : ''}
+        </div>
+
+        ${m.photoUrl ? `
+        <img src="${esc(m.photoUrl)}" onclick="Interactive.openFullImage('${esc(m.photoUrl)}')"
+          style="width:100%;max-height:260px;object-fit:cover;border-radius:12px;margin-bottom:10px;cursor:zoom-in;
+                 border:1px solid var(--gold-border)">` : ''}
+
+        ${m.description ? `<div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:10px;white-space:pre-wrap">${esc(m.description)}</div>` : ''}
+
+        ${m.link ? `<a href="${esc(m.link)}" target="_blank" rel="noopener noreferrer"
+          style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--gold);margin-bottom:12px;word-break:break-all">
+          🔗 ${esc(m.link)}
+        </a>` : ''}
+
+        <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:10px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);font-weight:700;margin-bottom:8px">
+            ${myScore ? `Твоя оцінка: ${myScore}` : 'Оціни мем'}
+          </div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">${scoreButtons}</div>
+        </div>
+      </div>`;
+  },
+
+  openFullImage(url) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out';
+    overlay.innerHTML = `
+      <img src="${esc(url)}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px">
+      <button style="position:absolute;top:16px;right:16px;width:36px;height:36px;border-radius:50%;
+        background:rgba(255,255,255,.12);border:none;color:#fff;font-size:16px;cursor:pointer">✕</button>`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  },
+
+  _pendingMemeFile: null,
+  _pendingMemePreview: '',
+
+  openMemeModal() {
+    Interactive._pendingMemeFile = null;
+    Interactive._pendingMemePreview = '';
+    showModal(`
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:21px;color:var(--gold);font-weight:700">
+          ➕ Новий мем
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:6px 10px">✕</button>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px">
+        <label class="lbl">Назва (до ${Interactive.MEME_TITLE_MAX} символів)</label>
+        <input type="text" class="field" id="meme-title" maxlength="${Interactive.MEME_TITLE_MAX}" placeholder="Напр.: Коли гість замовив 40 морсів">
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;text-align:right" id="meme-title-count">0 / ${Interactive.MEME_TITLE_MAX}</div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px">
+        <label class="lbl">Опис (до ${Interactive.MEME_DESC_MAX} символів)</label>
+        <textarea class="field" id="meme-desc" maxlength="${Interactive.MEME_DESC_MAX}" rows="4"
+          style="resize:vertical;font-family:inherit" placeholder="Що сталось..."></textarea>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;text-align:right" id="meme-desc-count">0 / ${Interactive.MEME_DESC_MAX}</div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px">
+        <label class="lbl">Посилання (необов'язково)</label>
+        <input type="url" class="field" id="meme-link" placeholder="https://...">
+      </div>
+
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="lbl">Фото (необов'язково)</label>
+        <input type="file" id="meme-photo-input" accept="image/*" style="display:none" onchange="Interactive._onMemePhotoSelected(this)">
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px" id="meme-photo-wrap">
+          <button type="button" class="btn btn-ghost" style="padding:10px 16px;font-size:13px;border:1px dashed rgba(255,255,255,.2)"
+            onclick="document.getElementById('meme-photo-input').click()">
+            📷 Додати фото
+          </button>
+          <div id="meme-photo-preview" style="display:none;position:relative">
+            <img id="meme-photo-img" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--gold-border);cursor:zoom-in"
+              onclick="Interactive.openFullImage(this.src)">
+            <button type="button" onclick="Interactive._clearMemePhoto()"
+              style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
+                background:var(--danger);border:none;color:#fff;font-size:10px;cursor:pointer;
+                display:flex;align-items:center;justify-content:center;padding:0;line-height:1">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-gold" id="meme-save-btn" style="flex:1" onclick="Interactive.saveMeme()">
+          ✅ Опублікувати
+        </button>
+        <button class="btn btn-ghost" onclick="closeModal()">Скасувати</button>
+      </div>
+    `);
+
+    const titleEl = document.getElementById('meme-title');
+    const descEl  = document.getElementById('meme-desc');
+    titleEl?.addEventListener('input', () => {
+      document.getElementById('meme-title-count').textContent = `${titleEl.value.length} / ${Interactive.MEME_TITLE_MAX}`;
+    });
+    descEl?.addEventListener('input', () => {
+      document.getElementById('meme-desc-count').textContent = `${descEl.value.length} / ${Interactive.MEME_DESC_MAX}`;
+    });
+  },
+
+  _onMemePhotoSelected(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    Interactive._pendingMemeFile = file;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      Interactive._pendingMemePreview = e.target.result;
+      const imgEl = document.getElementById('meme-photo-img');
+      const preview = document.getElementById('meme-photo-preview');
+      if (imgEl) imgEl.src = e.target.result;
+      if (preview) preview.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  },
+
+  _clearMemePhoto() {
+    Interactive._pendingMemeFile = null;
+    Interactive._pendingMemePreview = '';
+    const inp = document.getElementById('meme-photo-input');
+    const preview = document.getElementById('meme-photo-preview');
+    if (inp) inp.value = '';
+    if (preview) preview.style.display = 'none';
+  },
+
+  async saveMeme() {
+    const title = document.getElementById('meme-title')?.value.trim() || '';
+    const description = document.getElementById('meme-desc')?.value.trim() || '';
+    const link = document.getElementById('meme-link')?.value.trim() || '';
+
+    if (!title) { toast('Вкажіть назву мему', 'error-t'); return; }
+    if (title.length > Interactive.MEME_TITLE_MAX) { toast(`Назва занадто довга (макс. ${Interactive.MEME_TITLE_MAX})`, 'error-t'); return; }
+    if (description.length > Interactive.MEME_DESC_MAX) { toast(`Опис занадто довгий (макс. ${Interactive.MEME_DESC_MAX})`, 'error-t'); return; }
+    if (link) {
+      try { new URL(link); } catch(e) { toast('Некоректне посилання', 'error-t'); return; }
+    }
+
+    const btn = document.getElementById('meme-save-btn');
+    btnLock(btn);
+
+    try {
+      let photoUrl = '';
+      if (Interactive._pendingMemeFile) {
+        try {
+          photoUrl = await uploadImageFile(Interactive._pendingMemeFile, 'images', 'memes');
+        } catch(e) {
+          console.error('Meme photo upload error:', e);
+          toast('Не вдалось завантажити фото, мем збережено без нього', 'error-t');
+        }
+      }
+
+      const meme = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        title,
+        description,
+        link: link || '',
+        photoUrl: photoUrl || '',
+        authorId: currentUser?.id || '',
+        authorName: currentUser?.displayName || currentUser?.login || 'Невідомо',
+        createdAt: new Date().toISOString(),
+        ratings: {},
+      };
+
+      const memes = Interactive.getMemes();
+      memes.push(meme);
+      await Interactive._saveMemes(memes);
+
+      closeModal();
+      toast('✅ Мем опубліковано!', 'success-t');
+      Interactive._pendingMemeFile = null;
+      Interactive._pendingMemePreview = '';
+      if (Interactive.currentTab === 'memes') Interactive.renderMemes();
+
+      Interactive.notifyNewMeme(meme);
+    } catch(e) {
+      console.error('saveMeme error:', e);
+      toast('Помилка збереження мему', 'error');
+    } finally {
+      btnUnlock(btn);
+    }
+  },
+
+  async rateMeme(memeId, score) {
+    if (!currentUser) return;
+    const memes = Interactive.getMemes();
+    const meme = memes.find(m => m.id === memeId);
+    if (!meme) return;
+    if (!meme.ratings) meme.ratings = {};
+    if (meme.ratings[currentUser.id] === score) {
+      delete meme.ratings[currentUser.id];
+    } else {
+      meme.ratings[currentUser.id] = score;
+    }
+    await Interactive._saveMemes(memes);
+    if (Interactive.currentTab === 'memes') Interactive.renderMemes();
+  },
+
+  async notifyNewMeme(meme) {
+    try {
+      const allUsers = getUsers().filter(u => !u.fired);
+      const authorLabel = esc(meme.authorName);
+      const msg = [
+        `😂 <b>Новий мем у порталі!</b>`,
+        `📌 ${esc(meme.title)}`,
+        `👤 Автор: ${authorLabel}`,
+        meme.description ? `\n${esc(meme.description).slice(0, 300)}` : '',
+      ].filter(Boolean).join('\n');
+
+      const targets = allUsers.filter(u => {
+        if (isAdmin(u)) return false;
+        if (u.role === 'chef' || u.role2 === 'chef') return false;
+        return true;
+      });
+
+      for (const u of targets) {
+        const destId = u.chat_id || u.tg_id;
+        if (!destId) continue;
+        if (meme.photoUrl) {
+          await tgSendPhoto(destId, meme.photoUrl, msg);
+        } else {
+          await tgSendPersonal(destId, msg);
+        }
+      }
+    } catch(e) { console.error('Interactive.notifyNewMeme error:', e); }
   },
 };
 
