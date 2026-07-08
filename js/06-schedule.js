@@ -700,7 +700,21 @@ days — тільки дні з позначками (не вихідні).`;
 
   async _saveToSupabase(userId, date, shift, key) {
     try {
-      await sb.upsert('schedule', { user_id: userId, date, shift }, 'user_id,date');
+      const result = await sb.upsert('schedule', { user_id: userId, date, shift }, 'user_id,date');
+      // sb.upsert повертає null, якщо запис не дійшов до сервера через мережеву
+      // похибку і був лише поставлений в офлайн-чергу (sb._enqueue) — це ще НЕ
+      // підтвердження. У такому разі захист pendingWrites МАЄ лишатись активним,
+      // інакше наступне опитування перезапише комірку старими серверними даними
+      // ще до того, як чергу вдасться відправити (саме це й спричиняло "скидання"
+      // деяких комірок через кілька секунд після зміни).
+      if (result === null) {
+        if (key && Schedule._pendingWrites[key] && Schedule._pendingWrites[key].val === shift) {
+          // Продовжуємо захист і оновлюємо позначку часу, щоб TTL не сплив,
+          // поки запис чекає у черзі на відправку
+          Schedule._pendingWrites[key].ts = Date.now();
+        }
+        return;
+      }
       // Підтверджено сервером — знімаємо захист від перезапису опитуванням,
       // але лише якщо з того часу не з'явилась ще новіша локальна зміна цієї ж комірки
       if (key && Schedule._pendingWrites[key] && Schedule._pendingWrites[key].val === shift) {

@@ -449,7 +449,7 @@ const App = {
     // Захист: не затирати щойно внесені локальні зміни, які ще не встигли
     // підтвердитись на сервері (уникаємо race condition з upsert-ом і "стрибків" позначок назад)
     if (typeof Schedule !== 'undefined' && Schedule._pendingWrites) {
-      const PENDING_TTL = 25000; // трохи більше циклу опитування (20с) — запобіжник на випадок збою
+      const PENDING_TTL = 65000; // з запасом на 2-3 цикли опитування (20с) — щоб пережити коротку мережеву затримку, поки flushQueue не підтвердить запис
       const now = Date.now();
       Object.keys(Schedule._pendingWrites).forEach(k => {
         const pw = Schedule._pendingWrites[k];

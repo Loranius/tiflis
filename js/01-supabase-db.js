@@ -69,6 +69,14 @@ const sb = {
       const op = q[0];
       try {
         await sb._runQueuedOp(op);
+        // Якщо це була відкладена зміна графіку — тепер вона реально підтверджена
+        // сервером, тож можна зняти захист _pendingWrites для цієї комірки
+        if (op.method === 'upsert' && op.table === 'schedule' && typeof Schedule !== 'undefined') {
+          const key = `${op.data.user_id}_${op.data.date}`;
+          if (Schedule._pendingWrites[key] && Schedule._pendingWrites[key].val === op.data.shift) {
+            delete Schedule._pendingWrites[key];
+          }
+        }
         q.shift();
         sb._setQueue(q);
       } catch(e) {
