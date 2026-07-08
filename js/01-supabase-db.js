@@ -25,6 +25,43 @@ const sb = {
     return res.json();
   },
 
+  // ── Гарантоване отримання ВСІХ рядків через пагінацію ───────────
+  // PostgREST (Supabase) за замовчуванням обрізає відповідь до Max Rows
+  // (типово 1000) БЕЗ помилки — просто мовчки повертає перші N рядків.
+  // Без ORDER BY порядок цих рядків нестабільний, тож при кожному
+  // запиті могли "зникати" різні рядки (саме це спричиняло скидання
+  // деяких комірок графіка). queryAll обходить ліміт сторінками по
+  // Range-заголовку і сортує за 'id', щоб сторінки були стабільні.
+  async queryAll(table, opts = {}) {
+    const PAGE = 1000;
+    let all = [];
+    let from = 0;
+    const orderBy = opts.order || 'id';
+    while (true) {
+      let url = `${SUPA_URL}/rest/v1/${table}`;
+      const params = [`order=${orderBy}`];
+      if (opts.select)  params.unshift(`select=${opts.select}`);
+      if (opts.filter)  Object.entries(opts.filter).forEach(([k,v]) => params.push(`${k}=eq.${encodeURIComponent(v)}`));
+      if (opts._raw)    params.push(opts._raw);
+      url += '?' + params.join('&');
+
+      const res = await fetch(url, {
+        headers: {
+          'apikey': SUPA_KEY,
+          'Content-Type': 'application/json',
+          'Range-Unit': 'items',
+          'Range': `${from}-${from + PAGE - 1}`,
+        }
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const page = await res.json();
+      all = all.concat(page);
+      if (page.length < PAGE) break; // остання сторінка
+      from += PAGE;
+    }
+    return all;
+  },
+
   // ── Offline write queue ────────────────────────────────────────
   QUEUE_KEY: 'tiflis_offline_queue',
 

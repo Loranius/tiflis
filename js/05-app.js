@@ -195,7 +195,8 @@ const App = {
       sb.query('users',            { order: 'created_at' }).catch(() => []),
       sb.query('roles',            { order: 'key' }).catch(() => []),
       // Завантажуємо schedule лише за ±2 місяці (зменшує payload при великій БД)
-      sb.query('schedule', { _raw: (() => {
+      // queryAll — гарантовано отримує ВСІ рядки сторінками, не обрізаючи по Max Rows
+      sb.queryAll('schedule', { _raw: (() => {
         const _n=new Date();
         const _f=new Date(_n.getFullYear(),_n.getMonth()-1,1).toISOString().slice(0,10);
         const _t=new Date(_n.getFullYear(),_n.getMonth()+3,0).toISOString().slice(0,10);
@@ -442,7 +443,7 @@ const App = {
     const _n=new Date();
     const _f=new Date(_n.getFullYear(),_n.getMonth()-1,1).toISOString().slice(0,10);
     const _t=new Date(_n.getFullYear(),_n.getMonth()+3,0).toISOString().slice(0,10);
-    const rows = await sb.query('schedule', { _raw: `date=gte.${_f}&date=lte.${_t}` });
+    const rows = await sb.queryAll('schedule', { _raw: `date=gte.${_f}&date=lte.${_t}` });
     const scheduleMap = {};
     rows.forEach(s => { scheduleMap[`${s.user_id}_${s.date}`] = s.shift; });
 
