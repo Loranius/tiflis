@@ -420,6 +420,7 @@ days — тільки дні з позначками (не вихідні).`;
         try {
           await sb.upsert('schedule', { user_id: userId, date, shift }, 'user_id,date');
           saved++;
+          if (typeof AmoreSync !== 'undefined') AmoreSync.pushShift(userId, date, shift);
         } catch(e) {
           console.warn('schedule upsert error:', date, e);
         }
@@ -699,6 +700,10 @@ days — тільки дні з позначками (не вихідні).`;
   },
 
   async _saveToSupabase(userId, date, shift, key) {
+    // Фонова синхронізація з Amore — не блокує і не залежить від
+    // основного збереження в Тефлісі (тихо пропускається, якщо це не Діма)
+    if (typeof AmoreSync !== 'undefined') AmoreSync.pushShift(userId, date, shift);
+
     try {
       const result = await sb.upsert('schedule', { user_id: userId, date, shift }, 'user_id,date');
       // sb.upsert повертає null, якщо запис не дійшов до сервера через мережеву
