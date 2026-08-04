@@ -1,64 +1,65 @@
 # Тифліс v2 — портал персоналу
 
-Повністю новий портал: vanilla JS, без збірки, без залежностей.
-Хостинг — GitHub Pages, бекенд — Supabase (REST, без supabase-js).
+`tiflisv2` — єдиний активний репозиторій порталу персоналу ресторану «Тифліс».
+Старий `Loranius/tiflis` використовується лише як архів і джерело поведінки під час міграції модулів.
 
-## Головна ідея v2
+## Стек
 
-1. **Демо-режим з коробки.** Порожній `config.js` → портал працює на
-   локальних мок-даних (localStorage). Відкрив `index.html` — і все клікабельне.
-2. **ACL в одному файлі** (`js/core/acl.js`). Усі права ролей — один
-   декларативний конфіг. Меню, гарди навігації та кнопки дій читають
-   його ж, тому розсинхрон неможливий. Адмін може перекривати
-   видимість сторінок через Управління → Доступи.
-3. **Store — єдиний шар даних** (`js/lib/store.js`). Сторінки не знають,
-   демо це чи Supabase. Всі виклики: `Store.list / insert / update /
-   remove / upsert`, підписки — `Store.onChange`.
-4. **Автозбереження скрізь.** Графік зберігає кожен тап по клітинці,
-   доступи — кожен перемикач. Кнопок «Зберегти» на сторінках немає.
+- React + TypeScript + Vite
+- Supabase Auth, PostgreSQL, RLS та Edge Functions
+- React Router із hash-навігацією для статичного хостингу
+- централізований ACL у `src/lib/acl.ts`
+- адаптивний desktop/mobile інтерфейс
+
+## Уже працює
+
+- перший вхід через старий логін і пароль;
+- автоматичне створення Supabase Auth-акаунта;
+- сесія без збереження пароля в браузері;
+- роль `sysadmin` для legacy-користувача `sysadmin`;
+- захищений layout і рольова навігація;
+- головна сторінка з реальним графіком та сповіщеннями;
+- JWT-захищений API для Telegram-операцій;
+- автоматичне видалення старих localStorage-сесій і service worker;
+- CI-перевірка типів та production build.
+
+## Локальний запуск
+
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Publishable key дозволено використовувати у фронтенді. `service_role`, Telegram token та інші привілейовані секрети зберігаються тільки в Supabase Edge Function secrets.
 
 ## Структура
 
+```text
+src/
+  auth/                 AuthProvider і міграційний вхід
+  components/           оболонка та спільні компоненти
+  lib/                   Supabase-клієнт і ACL
+  pages/                 сторінки модулів
+  App.tsx                захищений роутер
+  styles.css             дизайн-система
+supabase/
+  migrations/            відтворювані зміни БД
+  functions/
+    tiflis-auth-migrate/ одноразовий перехід legacy → Auth
+    tiflis-secure-api/   привілейовані JWT-операції
 ```
-index.html
-config.js                 ← сюди Supabase URL + anon key
-manifest.webmanifest, sw.js  ← PWA (піднімай VERSION у sw.js при деплої)
-css/  tokens.css base.css components.css pages.css
-js/
-  lib/   utils.js demo-data.js store.js
-  core/  ui.js acl.js auth.js router.js
-  pages/ today.js schedule.js cash.js staff.js menu.js reserve.js admin.js
-  app.js
-supabase/schema.sql
-```
 
-## Підключення Supabase
+Стара vanilla-реалізація збережена в гілці `archive/vanilla-v2`. Папки `js/` та `css/` у поточній rewrite-гілці тимчасово залишені як довідник, але новий `index.html` їх не підключає.
 
-1. Supabase → SQL Editor → виконай `supabase/schema.sql`
-2. Project Settings → API → скопіюй URL і anon key у `config.js`
-3. Задеплой на GitHub Pages. Готово.
+## Порядок перенесення модулів
 
-Вхід — ім'я + PIN з таблиці `users`. Перший сисадмін створюється
-скриптом (Діма / 0000 — зміни PIN одразу).
+1. Графік
+2. Каса та рейтинг
+3. Меню і стоп-лист
+4. Резерви
+5. Персонал та Telegram
+6. Обов'язки, сповіщення і журнал подій
+7. Адмін-панель та остаточне ввімкнення RLS на legacy-таблицях
 
-## Демо-акаунти (демо-режим)
-
-| Ім'я | PIN | Роль |
-|---|---|---|
-| Діма | 0000 | сисадмін |
-| Тамара | 1111 | адмін + хостес |
-| Оксана | 2222 | офіціант |
-| Сергій | 3333 | кухар |
-| Максим | 4444 | шеф-кухар |
-| Ніно | 5555 | хостес |
-| Артем | 6666 | ранер |
-
-«Скинути демо-дані» — Управління → Доступи (внизу).
-
-## Як додати нову сторінку
-
-1. `js/pages/mypage.js` → `Router.register('mypage', { render(root){...} })`
-2. Рядок у `ACL.PAGES` з ролями
-3. `<script>` в index.html + рядок в `ASSETS` у sw.js
-
-Все. Меню, гард і доступи в адмінці з'являться самі.
+Кожен модуль переноситься вертикальним зрізом: UI → типізований сервіс → RLS-політики → тести → видалення відповідного legacy-коду.
