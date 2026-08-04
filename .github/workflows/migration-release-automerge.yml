@@ -1,0 +1,59 @@
+name: Merge Verified Migration Release
+
+on:
+  push:
+    branches:
+      - release/migration-complete
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: ${{ contains(github.event.head_commit.message, '[release-finalize]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout verified release
+        uses: actions/checkout@v6
+        with:
+          ref: release/migration-complete
+          fetch-depth: 0
+
+      - name: Remove one-time merge workflow
+        run: |
+          rm -f .github/workflows/migration-release-automerge.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'release: verified migration tree ready [release-ready]'
+          git push origin HEAD:release/migration-complete
+
+      - name: Create or update release pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          number="$(gh pr list --repo Loranius/tiflisv2 --head release/migration-complete --base main --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$number" ]; then
+            url="$(gh pr create \
+              --repo Loranius/tiflisv2 \
+              --head release/migration-complete \
+              --base main \
+              --title 'Release: verified complete Tiflis v2 migration' \
+              --body 'Deterministic consolidation of PR #2–#9. The release branch exists only after dependency audit, strict TypeScript, production build, active-route verification, domain-function verification, and removal of the vanilla runtime have all succeeded.')"
+            number="${url##*/}"
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Squash verified release into main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          gh pr ready "$PR_NUMBER" --repo Loranius/tiflisv2 || true
+          gh pr merge "$PR_NUMBER" \
+            --repo Loranius/tiflisv2 \
+            --squash \
+            --subject 'Release: verified complete Tiflis v2 migration' \
+            --body 'Consolidate the complete React/TypeScript portal, all JWT domain APIs, Auth-only staff lifecycle, daily operations workspace, and verified legacy-runtime removal.'
