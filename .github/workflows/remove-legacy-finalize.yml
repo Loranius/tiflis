@@ -1,0 +1,62 @@
+name: Remove Legacy Runtime Gate
+
+on:
+  push:
+    branches:
+      - chore/remove-legacy-runtime
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[legacy-finalize]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: chore/remove-legacy-runtime
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Remove archived runtime from active tree
+        run: |
+          rm -rf js css
+          rm -f config.js sw.js
+          if ! grep -R "ModulePage" -n src/App.tsx src/components src/pages --exclude=ModulePage.tsx; then
+            rm -f src/pages/ModulePage.tsx
+          fi
+      - name: Update README completion status
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('README.md')
+          text = path.read_text()
+          marker = '## Active migration status'
+          if marker not in text:
+              text += '''\n\n## Active migration status\n\nThe primary migration is complete. `main` contains only the React/TypeScript runtime and the Supabase domain functions. The previous vanilla implementation is preserved in `archive/vanilla-v2` and is no longer loaded by the application.\n\nLive areas: Today + operations, Schedule, Cash & Rating, Menu & Stop List, Reservations, Staff, and Administration.\n'''
+          path.write_text(text)
+          PY
+      - name: Verify no legacy runtime references remain
+        run: |
+          if grep -R -n -E '(config\.js|sw\.js|js/pages|css/)' index.html src package.json vite.config.ts; then
+            echo 'Legacy runtime reference found'
+            exit 1
+          fi
+      - name: Install dependencies
+        run: npm install
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Commit clean active tree
+        run: |
+          rm -f .github/workflows/remove-legacy-finalize.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'chore: remove archived vanilla runtime [legacy-finalize]'
+          git push origin HEAD:chore/remove-legacy-runtime
