@@ -1,0 +1,69 @@
+name: Admin Self-Cleaning Gate
+
+on:
+  push:
+    branches:
+      - feature/admin-v1
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[admin-finalize]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/admin-v1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Connect admin module
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          app_path = Path('src/App.tsx')
+          app = app_path.read_text()
+          if "./pages/AdminPage" not in app:
+              anchor = "import { CashPage } from './pages/CashPage';"
+              app = app.replace(anchor, "import { AdminPage } from './pages/AdminPage';\n" + anchor)
+
+          app = re.sub(
+              r'\s*<Route path="/admin" element=\{<ProtectedPage page="admin"><ModulePage[\s\S]*?</ProtectedPage>\} />',
+              '\n          <Route path="/admin" element={<ProtectedPage page="admin"><AdminPage /></ProtectedPage>} />',
+              app,
+              count=1,
+          )
+          if '<AdminPage />' not in app:
+              raise SystemExit('admin route was not patched')
+          if '<ModulePage' not in app:
+              app = app.replace("import { ModulePage } from './pages/ModulePage';\n", '')
+          app_path.write_text(app)
+
+          config_path = Path('supabase/config.toml')
+          config = config_path.read_text()
+          block = '\n[functions.tiflis-admin-api]\nverify_jwt = true\n'
+          if '[functions.tiflis-admin-api]' not in config:
+              config = config.rstrip() + '\n' + block
+          config_path.write_text(config)
+          PY
+      - name: Install dependencies
+        run: npm install
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Commit clean result
+        run: |
+          rm -f .github/workflows/admin-finalize.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(admin): connect control center [admin-finalize]'
+          git push origin HEAD:feature/admin-v1
