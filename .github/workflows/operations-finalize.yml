@@ -1,0 +1,61 @@
+name: Operations Self-Cleaning Gate
+
+on:
+  push:
+    branches:
+      - feature/operations-v1
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[operations-finalize]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/operations-v1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Connect operations workspace
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          dashboard_path = Path('src/pages/DashboardPage.tsx')
+          dashboard = dashboard_path.read_text()
+          if "../components/OperationsDashboard" not in dashboard:
+              anchor = "import { useAuth } from '../auth/AuthProvider';"
+              dashboard = dashboard.replace(anchor, anchor + "\nimport { OperationsDashboard } from '../components/OperationsDashboard';")
+          if '<OperationsDashboard />' not in dashboard:
+              marker = "    </div>\n  );\n}"
+              if marker not in dashboard:
+                  raise SystemExit('dashboard closing marker not found')
+              dashboard = dashboard.replace(marker, "      <OperationsDashboard />\n" + marker, 1)
+          dashboard_path.write_text(dashboard)
+
+          config_path = Path('supabase/config.toml')
+          config = config_path.read_text()
+          if '[functions.tiflis-operations-api]' not in config:
+              config = config.rstrip() + '\n\n[functions.tiflis-operations-api]\nverify_jwt = true\n'
+          config_path.write_text(config)
+          PY
+      - name: Install dependencies
+        run: npm install
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Commit clean result
+        run: |
+          rm -f .github/workflows/operations-finalize.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(operations): connect daily workspace [operations-finalize]'
+          git push origin HEAD:feature/operations-v1
