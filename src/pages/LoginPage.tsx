@@ -1,6 +1,6 @@
 import { ArrowRight, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 
 export function LoginPage() {
