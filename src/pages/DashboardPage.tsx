@@ -32,6 +32,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
+    const userId = user.id;
     const today = new Date().toISOString().slice(0, 10);
 
     async function load() {
@@ -39,7 +40,7 @@ export function DashboardPage() {
         supabase
           .from('schedule')
           .select('date,shift')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .gte('date', today)
           .order('date', { ascending: true })
           .limit(7),
