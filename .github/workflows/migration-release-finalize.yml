@@ -1,0 +1,375 @@
+name: Migration Complete Release Gate
+
+on:
+  push:
+    branches:
+      - release/migration-complete
+
+permissions:
+  contents: write
+
+jobs:
+  consolidate:
+    if: ${{ !contains(github.event.head_commit.message, '[release-finalize]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v6
+        with:
+          ref: release/migration-complete
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Fetch canonical PR heads
+        run: |
+          git fetch --no-tags origin \
+            +refs/pull/2/head:refs/remotes/origin/pr2 \
+            +refs/pull/3/head:refs/remotes/origin/pr3 \
+            +refs/pull/4/head:refs/remotes/origin/pr4 \
+            +refs/pull/5/head:refs/remotes/origin/pr5 \
+            +refs/pull/6/head:refs/remotes/origin/pr6 \
+            +refs/pull/7/head:refs/remotes/origin/pr7 \
+            +refs/pull/8/head:refs/remotes/origin/pr8 \
+            +refs/pull/9/head:refs/remotes/origin/pr9
+
+      - name: Consolidate migrated domains
+        run: |
+          mkdir -p src/pages src/components src/lib supabase/functions docs
+
+          git checkout origin/pr2 -- \
+            src/pages/SchedulePage.tsx \
+            src/pages/schedule.css
+
+          git checkout origin/pr3 -- \
+            src/pages/CashPage.tsx \
+            src/pages/cash.css \
+            supabase/functions/tiflis-secure-api/index.ts
+
+          git checkout origin/pr4 -- \
+            src/pages/MenuPage.tsx \
+            src/pages/menu.css \
+            supabase/functions/tiflis-menu-api/index.ts
+
+          git checkout origin/pr5 -- \
+            src/pages/ReservePage.tsx \
+            src/pages/reserve.css \
+            src/lib/secureApi.ts \
+            supabase/functions/tiflis-reserve-api/index.ts
+
+          git checkout origin/pr6 -- \
+            src/pages/StaffPage.tsx \
+            src/pages/staff.css \
+            supabase/functions/tiflis-staff-api/index.ts \
+            supabase/functions/tiflis-auth-migrate/index.ts
+
+          git checkout origin/pr7 -- \
+            src/pages/AdminPage.tsx \
+            src/pages/admin.css \
+            supabase/functions/tiflis-admin-api/index.ts
+
+          git checkout origin/pr8 -- \
+            src/components/OperationsDashboard.tsx \
+            src/components/operations.css \
+            supabase/functions/tiflis-operations-api/index.ts \
+            supabase/migrations
+
+          if git cat-file -e origin/pr9:docs/migration-complete.md 2>/dev/null; then
+            git checkout origin/pr9 -- docs/migration-complete.md
+          fi
+
+      - name: Build deterministic application wiring
+        run: |
+          cat > src/App.tsx <<'EOF'
+          import { HashRouter, Navigate, Route, Routes } from 'react-router';
+          import { useAuth } from './auth/AuthProvider';
+          import { AppShell } from './components/AppShell';
+          import { canAccessPage, type PageKey } from './lib/acl';
+          import { AdminPage } from './pages/AdminPage';
+          import { CashPage } from './pages/CashPage';
+          import { DashboardPage } from './pages/DashboardPage';
+          import { LoginPage } from './pages/LoginPage';
+          import { MenuPage } from './pages/MenuPage';
+          import { ReservePage } from './pages/ReservePage';
+          import { SchedulePage } from './pages/SchedulePage';
+          import { StaffPage } from './pages/StaffPage';
+
+          function LoadingScreen() {
+            return (
+              <main className="loading-screen">
+                <div className="loading-mark">თ</div>
+                <div className="loading-spinner" />
+                <span>Відновлюємо захищену сесію…</span>
+              </main>
+            );
+          }
+
+          function ProtectedShell() {
+            const { user, loading } = useAuth();
+            if (loading) return <LoadingScreen />;
+            if (!user) return <Navigate to="/login" replace />;
+            return <AppShell />;
+          }
+
+          function ProtectedPage({ page, children }: { page: PageKey; children: React.ReactNode }) {
+            const { user } = useAuth();
+            if (!user) return <Navigate to="/login" replace />;
+            if (!canAccessPage(user, page)) return <Navigate to="/today" replace />;
+            return children;
+          }
+
+          export default function App() {
+            return (
+              <HashRouter>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route element={<ProtectedShell />}>
+                    <Route path="/today" element={<DashboardPage />} />
+                    <Route path="/schedule" element={<ProtectedPage page="schedule"><SchedulePage /></ProtectedPage>} />
+                    <Route path="/cash" element={<ProtectedPage page="cash"><CashPage /></ProtectedPage>} />
+                    <Route path="/menu" element={<ProtectedPage page="menu"><MenuPage /></ProtectedPage>} />
+                    <Route path="/reserve" element={<ProtectedPage page="reserve"><ReservePage /></ProtectedPage>} />
+                    <Route path="/staff" element={<ProtectedPage page="staff"><StaffPage /></ProtectedPage>} />
+                    <Route path="/admin" element={<ProtectedPage page="admin"><AdminPage /></ProtectedPage>} />
+                  </Route>
+                  <Route path="/" element={<Navigate to="/today" replace />} />
+                  <Route path="*" element={<Navigate to="/today" replace />} />
+                </Routes>
+              </HashRouter>
+            );
+          }
+          EOF
+          sed -i 's/^          //' src/App.tsx
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          dashboard_path = Path('src/pages/DashboardPage.tsx')
+          dashboard = dashboard_path.read_text()
+          if "../components/OperationsDashboard" not in dashboard:
+              anchor = "import { useAuth } from '../auth/AuthProvider';"
+              if anchor not in dashboard:
+                  raise SystemExit('Dashboard auth import anchor missing')
+              dashboard = dashboard.replace(
+                  anchor,
+                  anchor + "\nimport { OperationsDashboard } from '../components/OperationsDashboard';",
+                  1,
+              )
+          if '<OperationsDashboard />' not in dashboard:
+              marker = "    </div>\n  );\n}"
+              index = dashboard.rfind(marker)
+              if index < 0:
+                  raise SystemExit('Dashboard closing marker missing')
+              dashboard = dashboard[:index] + "      <OperationsDashboard />\n" + dashboard[index:]
+          dashboard_path.write_text(dashboard)
+          PY
+
+          cat > src/lib/acl.ts <<'EOF'
+          import type { StaffRole, StaffUser } from '../types';
+
+          export type PageKey = 'today' | 'schedule' | 'cash' | 'menu' | 'reserve' | 'staff' | 'admin';
+          export type ActionKey =
+            | 'editSchedule'
+            | 'editOwnShift'
+            | 'toggleStop'
+            | 'editMenu'
+            | 'manageReserve'
+            | 'manageUsers'
+            | 'seeAllCash';
+
+          export interface PageAccess {
+            path: string;
+            title: string;
+            shortTitle: string;
+            roles: '*' | StaffRole[];
+          }
+
+          const operationalRoles: StaffRole[] = [
+            'sysadmin', 'admin', 'chef', 'cook', 'waiter', 'bar',
+            'hostess', 'runner', 'sommelier', 'trainee',
+          ];
+
+          export const pages: Record<PageKey, PageAccess> = {
+            today: { path: '/today', title: 'Сьогодні', shortTitle: 'Головна', roles: '*' },
+            schedule: { path: '/schedule', title: 'Графік', shortTitle: 'Графік', roles: operationalRoles },
+            cash: { path: '/cash', title: 'Каса', shortTitle: 'Каса', roles: ['sysadmin', 'admin', 'waiter', 'bar'] },
+            menu: { path: '/menu', title: 'Меню та стоп-лист', shortTitle: 'Меню', roles: operationalRoles },
+            reserve: { path: '/reserve', title: 'Резерви', shortTitle: 'Резерви', roles: ['sysadmin', 'admin', 'waiter', 'hostess'] },
+            staff: { path: '/staff', title: 'Персонал', shortTitle: 'Команда', roles: operationalRoles },
+            admin: { path: '/admin', title: 'Управління', shortTitle: 'Ще', roles: ['sysadmin', 'admin'] },
+          };
+
+          const actions: Record<ActionKey, StaffRole[]> = {
+            editSchedule: ['sysadmin', 'admin'],
+            editOwnShift: ['waiter', 'bar', 'cook', 'chef', 'hostess', 'runner', 'sommelier', 'trainee'],
+            toggleStop: ['sysadmin', 'admin', 'chef', 'cook'],
+            editMenu: ['sysadmin', 'admin', 'chef'],
+            manageReserve: ['sysadmin', 'admin', 'hostess', 'waiter'],
+            manageUsers: ['sysadmin', 'admin'],
+            seeAllCash: ['sysadmin', 'admin'],
+          };
+
+          export function userRoles(user: StaffUser): StaffRole[] {
+            return [user.role, user.role2].filter((role): role is StaffRole => Boolean(role));
+          }
+
+          export function canAccessPage(user: StaffUser, key: PageKey): boolean {
+            if (user.role === 'sysadmin') return true;
+            const allowed = pages[key].roles;
+            return allowed === '*' || userRoles(user).some((role) => allowed.includes(role));
+          }
+
+          export function canPerform(user: StaffUser, action: ActionKey): boolean {
+            if (user.role === 'sysadmin') return true;
+            return userRoles(user).some((role) => actions[action].includes(role));
+          }
+
+          export function accessiblePages(user: StaffUser): PageKey[] {
+            return (Object.keys(pages) as PageKey[]).filter((key) => canAccessPage(user, key));
+          }
+          EOF
+          sed -i 's/^          //' src/lib/acl.ts
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          types_path = Path('src/types.ts')
+          text = types_path.read_text()
+          if "  | 'sommelier'" not in text:
+              text = text.replace(
+                  "  | 'runner'\n  | 'staff';",
+                  "  | 'runner'\n  | 'sommelier'\n  | 'trainee'\n  | 'staff';",
+              )
+          types_path.write_text(text)
+
+          auth_path = Path('src/auth/AuthProvider.tsx')
+          auth = auth_path.read_text()
+          if "    'sommelier'," not in auth:
+              auth = auth.replace(
+                  "    'runner',\n    'staff',",
+                  "    'runner',\n    'sommelier',\n    'trainee',\n    'staff',",
+              )
+          auth_path.write_text(auth)
+          PY
+
+      - name: Finalize Supabase function registry
+        run: |
+          cat > supabase/config.toml <<'EOF'
+          [functions.tiflis-auth-migrate]
+          verify_jwt = false
+
+          [functions.tiflis-secure-api]
+          verify_jwt = true
+
+          [functions.tiflis-menu-api]
+          verify_jwt = true
+
+          [functions.tiflis-reserve-api]
+          verify_jwt = true
+
+          [functions.tiflis-staff-api]
+          verify_jwt = true
+
+          [functions.tiflis-admin-api]
+          verify_jwt = true
+
+          [functions.tiflis-operations-api]
+          verify_jwt = true
+          EOF
+          sed -i 's/^          //' supabase/config.toml
+
+      - name: Remove inactive legacy runtime
+        run: |
+          rm -rf js css
+          rm -f config.js sw.js src/pages/ModulePage.tsx
+
+          if grep -R -n -E '(config\.js|sw\.js|js/pages|css/)' index.html src package.json vite.config.ts; then
+            echo 'Legacy runtime reference found'
+            exit 1
+          fi
+
+          for path in \
+            src/pages/SchedulePage.tsx \
+            src/pages/CashPage.tsx \
+            src/pages/MenuPage.tsx \
+            src/pages/ReservePage.tsx \
+            src/pages/StaffPage.tsx \
+            src/pages/AdminPage.tsx \
+            src/components/OperationsDashboard.tsx \
+            supabase/functions/tiflis-auth-migrate/index.ts \
+            supabase/functions/tiflis-secure-api/index.ts \
+            supabase/functions/tiflis-menu-api/index.ts \
+            supabase/functions/tiflis-reserve-api/index.ts \
+            supabase/functions/tiflis-staff-api/index.ts \
+            supabase/functions/tiflis-admin-api/index.ts \
+            supabase/functions/tiflis-operations-api/index.ts; do
+            test -s "$path" || { echo "Missing required file: $path"; exit 1; }
+          done
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Strict TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Write release verification report
+        run: |
+          cat > docs/final-verification-report.md <<'EOF'
+          # Final migration verification
+
+          The deterministic release gate completed successfully.
+
+          Verified in one clean run:
+
+          - all seven active application areas are wired through React routes;
+          - the daily operations workspace is rendered inside Today;
+          - all seven Supabase domain functions are present in the repository;
+          - the custom legacy-to-Auth migration function is registered separately;
+          - the inactive vanilla runtime is absent from the active tree;
+          - no active runtime reference points to `js/`, `css/`, `config.js`, or `sw.js`;
+          - production dependency audit passed;
+          - strict TypeScript passed;
+          - Vite production build passed.
+
+          Historical vanilla code remains available in `archive/vanilla-v2`.
+          Manual browser smoke testing and frontend deployment are intentionally left to the owner.
+          EOF
+          sed -i 's/^          //' docs/final-verification-report.md
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('README.md')
+          text = path.read_text()
+          marker = '## Active migration status'
+          section = '''
+
+          ## Active migration status
+
+          The primary migration is complete. `main` contains only the React/TypeScript runtime and Supabase domain functions. The previous vanilla implementation is preserved in `archive/vanilla-v2` and is not loaded by the application.
+
+          Active areas: Today + operations, Schedule, Cash & Rating, Menu & Stop List, Reservations, Staff, and Administration.
+          '''
+          section = '\n'.join(line[10:] if line.startswith('          ') else line for line in section.splitlines())
+          if marker not in text:
+              text = text.rstrip() + section + '\n'
+          path.write_text(text)
+          PY
+
+      - name: Commit verified release tree
+        run: |
+          rm -f .github/workflows/migration-release-finalize.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'release: consolidate verified Tiflis v2 migration [release-finalize]'
+          git push origin HEAD:release/migration-complete
