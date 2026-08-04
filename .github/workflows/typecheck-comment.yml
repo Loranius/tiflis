@@ -1,0 +1,38 @@
+name: Temporary Typecheck Comment
+
+on:
+  push:
+    branches:
+      - feature/staff-v1
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - name: Run typecheck
+        id: check
+        continue-on-error: true
+        run: npm run typecheck > typecheck.log 2>&1
+      - name: Comment diagnostic
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '### Temporary typecheck diagnostic'
+            echo '```text'
+            head -c 12000 typecheck.log
+            echo
+            echo '```'
+          } > diagnostic.md
+          gh pr comment 6 --repo Loranius/tiflisv2 --body-file diagnostic.md
