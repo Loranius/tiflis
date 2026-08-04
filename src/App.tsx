@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { MenuPage } from './pages/MenuPage';
 import { ModulePage } from './pages/ModulePage';
+import { ReservePage } from './pages/ReservePage';
 import { SchedulePage } from './pages/SchedulePage';
 
 function LoadingScreen() {
@@ -43,7 +44,7 @@ export default function App() {
           <Route path="/schedule" element={<ProtectedPage page="schedule"><SchedulePage /></ProtectedPage>} />
           <Route path="/cash" element={<ProtectedPage page="cash"><CashPage /></ProtectedPage>} />
           <Route path="/menu" element={<ProtectedPage page="menu"><MenuPage /></ProtectedPage>} />
-          <Route path="/reserve" element={<ProtectedPage page="reserve"><ModulePage title="Резерви" description="Бронювання столів за датою, залом і статусом із журналом змін." source="tiflis: 18-reserve.js + tiflisv2: reserve.js" nextStep="Перенести календар броней і схему залів" /></ProtectedPage>} />
+          <Route path="/reserve" element={<ProtectedPage page="reserve"><ReservePage /></ProtectedPage>} />
           <Route path="/staff" element={<ProtectedPage page="staff"><ModulePage title="Персонал" description="Профілі працівників, ролі, Telegram-прив’язка та статус активності." source="tiflis: 09-staff.js + 12-admin.js" nextStep="Перенести профілі на staff_profiles і прибрати legacy passwords" /></ProtectedPage>} />
           <Route path="/admin" element={<ProtectedPage page="admin"><ModulePage title="Управління" description="ACL, працівники, налаштування порталу, аудит і серверні інтеграції." source="tiflis: 12-admin.js + централізований ACL v2" nextStep="Створити серверні admin actions через tiflis-secure-api" /></ProtectedPage>} />
         </Route>
