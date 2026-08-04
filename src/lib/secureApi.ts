@@ -7,13 +7,14 @@ interface SecureApiEnvelope {
 
 export async function secureApi<T extends SecureApiEnvelope>(
   body: Record<string, unknown>,
+  functionSlug = 'tiflis-secure-api',
 ): Promise<T> {
   const { data, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !data.session?.access_token) {
     throw new Error('Сесія завершилась. Увійдіть повторно.');
   }
 
-  const response = await fetch(edgeFunctionUrl('tiflis-secure-api'), {
+  const response = await fetch(edgeFunctionUrl(functionSlug), {
     method: 'POST',
     headers: {
       apikey: supabasePublishableKey,
