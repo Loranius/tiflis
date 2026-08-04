@@ -1,4 +1,4 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router';
 import { useAuth } from './auth/AuthProvider';
 import { AppShell } from './components/AppShell';
 import { canAccessPage, type PageKey } from './lib/acl';
