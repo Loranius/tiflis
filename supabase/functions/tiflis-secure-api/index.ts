@@ -57,6 +57,11 @@ function normalizeRole(role: string | null | undefined): string {
   return role === "barman" || role === "bartender" ? "bar" : role || "staff";
 }
 
+function canonicalShift(value: unknown): string {
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return normalized === "Б/Р" ? "Р/Б" : normalized;
+}
+
 function isAdmin(profile: StaffProfile): boolean {
   return profile.active && [profile.role, profile.role2].some((role) => role === "admin" || role === "sysadmin");
 }
@@ -75,7 +80,9 @@ function cleanText(value: unknown): string {
 
 function parseMonth(value: unknown): { month: string; start: string; end: string } | null {
   if (typeof value !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return null;
-  const [year, month] = value.split("-").map(Number);
+  const [yearText = "", monthText = ""] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
   return {
     month: value,
     start: new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10),
@@ -162,12 +169,13 @@ Deno.serve(async (req: Request) => {
         const role = normalizeRole(String(item.key).replace(/^schedule_order_/, ""));
         orders[role] = [...new Set([...(orders[role] ?? []), ...parseOrder(item.value)])];
       }
+      const entries = (scheduleResult.data ?? []).map((entry) => ({ ...entry, shift: canonicalShift(entry.shift) }));
       return json(req, {
         ok: true,
         month: range.month,
         me: { legacyUserId: profile.legacy_user_id, canEditAll: isAdmin(profile) },
         users,
-        entries: scheduleResult.data ?? [],
+        entries,
         orders,
         shiftTypes: { waiter: WAITER_SHIFT_TYPES, default: DEFAULT_SHIFT_TYPES },
       });
@@ -176,7 +184,7 @@ Deno.serve(async (req: Request) => {
     if (action === "schedule_upsert") {
       const targetUserId = typeof body.user_id === "string" ? body.user_id.trim().slice(0, 120) : "";
       const date = parseIsoDate(body.date);
-      const shift = typeof body.shift === "string" ? body.shift.trim().toUpperCase() : "";
+      const shift = canonicalShift(body.shift);
       if (!targetUserId || !date || !ALLOWED_SHIFT_CODES.has(shift)) return json(req, { ok: false, error: "Invalid schedule entry" }, 400);
       const ownRow = targetUserId === profile.legacy_user_id;
       if (!isAdmin(profile) && !(ownRow && canEditOwnSchedule(profile))) return json(req, { ok: false, error: "Insufficient permissions" }, 403);
