@@ -1,0 +1,36 @@
+name: Temporary Typecheck Commit
+
+on:
+  push:
+    branches:
+      - feature/staff-v1
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: ${{ !contains(github.event.head_commit.message, '[skip diagnostic]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/staff-v1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - name: Capture typecheck
+        continue-on-error: true
+        run: |
+          mkdir -p diagnostics
+          npm run typecheck > diagnostics/staff-typecheck.log 2>&1 || true
+      - name: Commit diagnostic
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add diagnostics/staff-typecheck.log
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore(ci): capture staff typecheck [skip diagnostic]'
+          git push origin HEAD:feature/staff-v1

@@ -1,0 +1,29 @@
+name: Temporary Typecheck Diagnostic
+
+on:
+  push:
+    branches:
+      - feature/staff-v1
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Capture typecheck
+        continue-on-error: true
+        run: npm run typecheck > typecheck.log 2>&1
+      - name: Upload diagnostic
+        uses: actions/upload-artifact@v6
+        with:
+          name: staff-typecheck-diagnostic
+          path: typecheck.log
+          if-no-files-found: error

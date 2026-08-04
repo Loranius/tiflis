@@ -1,0 +1,43 @@
+name: Staff Self-Cleaning Gate
+
+on:
+  push:
+    branches:
+      - feature/staff-v1
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[staff-finalize]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/staff-v1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Remove temporary diagnostics
+        run: |
+          rm -f \
+            .github/workflows/typecheck-diagnostic.yml \
+            .github/workflows/typecheck-comment.yml \
+            .github/workflows/typecheck-commit.yml \
+            .github/workflows/organize-staff-imports.yml \
+            .github/workflows/staff-finalize.yml \
+            scripts/organize-staff-imports.mjs \
+            diagnostics/staff-typecheck.log
+          rmdir diagnostics 2>/dev/null || true
+          rmdir scripts 2>/dev/null || true
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'chore(staff): remove temporary diagnostics [staff-finalize]'
+          git push origin HEAD:feature/staff-v1
