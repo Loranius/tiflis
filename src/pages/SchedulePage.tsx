@@ -83,7 +83,9 @@ function monthKey(date: Date): string {
 }
 
 function parseMonth(value: string): Date {
-  const [year, month] = value.split('-').map(Number);
+  const [yearText = '', monthText = ''] = value.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
   return new Date(year, month - 1, 1);
 }
 
