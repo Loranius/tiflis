@@ -2,6 +2,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router';
 import { useAuth } from './auth/AuthProvider';
 import { AppShell } from './components/AppShell';
 import { canAccessPage, type PageKey } from './lib/acl';
+import { CashPage } from './pages/CashPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { ModulePage } from './pages/ModulePage';
@@ -39,7 +40,7 @@ export default function App() {
         <Route element={<ProtectedShell />}>
           <Route path="/today" element={<DashboardPage />} />
           <Route path="/schedule" element={<ProtectedPage page="schedule"><SchedulePage /></ProtectedPage>} />
-          <Route path="/cash" element={<ProtectedPage page="cash"><ModulePage title="Каса" description="Особиста каса, чайові, рейтинг і контроль доступу до загальних показників." source="tiflis: 07-cash.js + 08-rating.js" nextStep="Перенести внесення каси та рейтинг по половинах місяця" /></ProtectedPage>} />
+          <Route path="/cash" element={<ProtectedPage page="cash"><CashPage /></ProtectedPage>} />
           <Route path="/menu" element={<ProtectedPage page="menu"><ModulePage title="Меню та стоп-лист" description="Пошук страв, категорії, фото, алергени, час приготування та стоп-позиції." source="tiflis: 03-menu.js + tiflisv2: menu.js" nextStep="Побудувати типізований каталог і серверні права редагування" /></ProtectedPage>} />
           <Route path="/reserve" element={<ProtectedPage page="reserve"><ModulePage title="Резерви" description="Бронювання столів за датою, залом і статусом із журналом змін." source="tiflis: 18-reserve.js + tiflisv2: reserve.js" nextStep="Перенести календар броней і схему залів" /></ProtectedPage>} />
           <Route path="/staff" element={<ProtectedPage page="staff"><ModulePage title="Персонал" description="Профілі працівників, ролі, Telegram-прив’язка та статус активності." source="tiflis: 09-staff.js + 12-admin.js" nextStep="Перенести профілі на staff_profiles і прибрати legacy passwords" /></ProtectedPage>} />
