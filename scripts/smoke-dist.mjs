@@ -40,6 +40,10 @@ async function assertArtifact() {
   if (!html.includes('id="boot-recovery"')) fail('boot recovery screen is missing');
   if (html.includes('/src/main.tsx')) fail('production HTML still points to the source entry');
   if (html.includes('%VITE_BUILD_ID%')) fail('build identifier was not injected');
+  if (html.includes('stable-runtime/loader.js')) fail('raw legacy fallback leaked into production HTML');
+  if (html.includes('TIFLIS_RAW_RUNTIME') || html.includes('TIFLIS_VITE_ENTRY')) {
+    fail('HTML runtime markers were not transformed');
+  }
 
   const references = localAssetReferences(html);
   if (!references.some((reference) => reference.includes('/assets/') || reference.includes('assets/'))) {
