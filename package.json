@@ -13,7 +13,8 @@
     "typecheck": "tsc -b --pretty false",
     "perf:budget": "node scripts/check-bundle-budget.mjs",
     "smoke:dist": "node scripts/smoke-dist.mjs",
-    "stable:materialize": "node scripts/materialize-stable-runtime.mjs"
+    "stable:materialize": "node scripts/materialize-stable-runtime.mjs",
+    "audit:portal": "node scripts/final-portal-audit.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
