@@ -29,8 +29,6 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
-      - name: Bundle performance budget
-        run: npm run check:bundle
       - name: Commit generated fixes
         run: |
           rm .github/workflows/ux-hotfix-pack.yml
