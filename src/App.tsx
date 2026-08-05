@@ -69,6 +69,9 @@ function ShellSkeleton() {
         </header>
         <section className="page-content"><RouteSkeleton /></section>
       </main>
+      <nav className="mobile-nav shell-mobile-nav-skeleton" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, index) => <i className="shell-mobile-nav-item" key={index} />)}
+      </nav>
     </div>
   );
 }
