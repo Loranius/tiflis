@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: registration-reset-dashboard
+  cancel-in-progress: true
+
 jobs:
   apply:
     if: github.actor != 'github-actions[bot]'
@@ -45,6 +49,6 @@ jobs:
           rm .github/scripts/apply_registration_wiring.py
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src/pages/AdminPage.tsx supabase/functions/tiflis-auth-migrate/index.ts .github/workflows/registration-reset-dashboard.yml .github/scripts/apply_registration_wiring.py
+          git add src/pages/AdminPage.tsx src/pages/DashboardPage.tsx supabase/functions/tiflis-auth-migrate/index.ts .github/workflows/registration-reset-dashboard.yml .github/scripts/apply_registration_wiring.py
           git commit -m "Wire registration approvals and pending login status"
           git push origin HEAD:feature/self-registration-reset-dashboard-v1
