@@ -1,0 +1,180 @@
+/* Shared mobile density and swipe layer for all portal modules. */
+
+@media (max-width: 760px) {
+  body .cash-tabs-v2,
+  body .menu-section-tabs-v2,
+  body .menu-category-tabs-v2,
+  body .admin-tabs-v2,
+  body .schedule-role-tabs,
+  body .reserve-date-strip-v2 {
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 10px;
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  body .cash-tabs-v2::-webkit-scrollbar,
+  body .menu-section-tabs-v2::-webkit-scrollbar,
+  body .menu-category-tabs-v2::-webkit-scrollbar,
+  body .admin-tabs-v2::-webkit-scrollbar,
+  body .schedule-role-tabs::-webkit-scrollbar,
+  body .reserve-date-strip-v2::-webkit-scrollbar {
+    display: none;
+  }
+
+  body .cash-tabs-v2 button,
+  body .menu-section-tabs-v2 button,
+  body .menu-category-tabs-v2 button,
+  body .admin-tabs-v2 button,
+  body .schedule-role-tabs button,
+  body .reserve-date-strip-v2 button {
+    scroll-snap-align: start;
+  }
+
+  body .cash-page-v2,
+  body .menu-page-v2,
+  body .staff-page-v2,
+  body .reserve-page-v2,
+  body .admin-page-v2,
+  body .schedule-page-v2,
+  body .duty-planner-page-v1 {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 540px) {
+  body .topbar {
+    padding-inline: 16px;
+  }
+
+  body .page-content {
+    padding-inline: 14px;
+  }
+
+  body .cash-metrics-v2,
+  body .menu-metrics-v2,
+  body .staff-metrics-v2,
+  body .reserve-metrics-v2,
+  body .admin-metrics-v2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  body .cash-metrics-v2 article,
+  body .menu-metrics-v2 article,
+  body .staff-metrics-v2 article,
+  body .reserve-metrics-v2 article,
+  body .admin-metrics-v2 article {
+    min-width: 0;
+    min-height: 96px !important;
+    padding: 13px !important;
+    border-radius: 16px !important;
+  }
+
+  body .cash-metrics-v2 article span,
+  body .menu-metrics-v2 article span,
+  body .staff-metrics-v2 article span,
+  body .reserve-metrics-v2 article span,
+  body .admin-metrics-v2 article span {
+    overflow-wrap: anywhere;
+    font-size: 8px !important;
+    line-height: 1.35;
+  }
+
+  body .cash-metrics-v2 article strong,
+  body .menu-metrics-v2 article strong,
+  body .staff-metrics-v2 article strong,
+  body .reserve-metrics-v2 article strong,
+  body .admin-metrics-v2 article strong {
+    font-size: 21px !important;
+    line-height: 1.1;
+  }
+
+  body .menu-metrics-v2 article:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  body .cash-tabs-v2 {
+    padding: 6px;
+  }
+
+  body .cash-tabs-v2 button {
+    min-width: 108px !important;
+    min-height: 40px;
+    padding-inline: 11px;
+  }
+
+  body .menu-section-tabs-v2,
+  body .menu-category-tabs-v2,
+  body .admin-tabs-v2,
+  body .schedule-role-tabs {
+    padding-inline: 9px;
+  }
+
+  body .menu-command-actions-v2 > button,
+  body .staff-command-v2 > button,
+  body .reserve-head-actions-v2 button,
+  body .admin-primary-v2 {
+    min-height: 44px;
+  }
+
+  body .cash-calendar-card-v2,
+  body .cash-list-card-v2,
+  body .cash-leaderboard-card-v2,
+  body .cash-team-rating-v2,
+  body .admin-panel-v2,
+  body .duty-planner-card-v1 {
+    padding-inline: 14px !important;
+  }
+
+  body .menu-table-heading-v3,
+  body .menu-table-row-v3 {
+    grid-template-columns: minmax(0, 1fr) minmax(92px, 30%) !important;
+  }
+
+  body .menu-table-name-v3 strong {
+    font-size: 12px !important;
+  }
+
+  body .menu-table-value-v3 strong {
+    font-size: 12px !important;
+  }
+
+  body .schedule-table-v2 .schedule-name-column {
+    width: 146px;
+    min-width: 146px;
+    max-width: 146px;
+  }
+
+  body .schedule-person-copy strong {
+    font-size: 10px;
+  }
+
+  body .schedule-person-copy small {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 370px) {
+  body .page-content {
+    padding-inline: 10px;
+  }
+
+  body .cash-metrics-v2 article,
+  body .menu-metrics-v2 article,
+  body .staff-metrics-v2 article,
+  body .reserve-metrics-v2 article,
+  body .admin-metrics-v2 article {
+    min-height: 91px !important;
+    padding: 11px !important;
+  }
+
+  body .schedule-table-v2 .schedule-name-column {
+    width: 136px;
+    min-width: 136px;
+    max-width: 136px;
+  }
+}
