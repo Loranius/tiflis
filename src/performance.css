@@ -34,7 +34,8 @@ body {
 .route-skeleton-hero,
 .route-skeleton-card,
 .shell-skeleton-line,
-.shell-skeleton-nav-item {
+.shell-skeleton-nav-item,
+.shell-mobile-nav-item {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -65,7 +66,8 @@ body {
 .route-skeleton-hero::after,
 .route-skeleton-card::after,
 .shell-skeleton-line::after,
-.shell-skeleton-nav-item::after {
+.shell-skeleton-nav-item::after,
+.shell-mobile-nav-item::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -74,7 +76,8 @@ body {
   animation: skeleton-sweep 1.45s ease-in-out infinite;
 }
 
-.app-shell-skeleton .sidebar {
+.app-shell-skeleton .sidebar,
+.shell-mobile-nav-skeleton {
   pointer-events: none;
 }
 
@@ -130,6 +133,12 @@ body {
 
 .shell-skeleton-topbar .shell-skeleton-copy {
   width: 210px;
+}
+
+.shell-mobile-nav-item {
+  width: 42px;
+  height: 38px;
+  border-radius: 12px;
 }
 
 .login-boot-skeleton {
@@ -224,7 +233,8 @@ body {
   .route-skeleton-hero::after,
   .route-skeleton-card::after,
   .shell-skeleton-line::after,
-  .shell-skeleton-nav-item::after {
+  .shell-skeleton-nav-item::after,
+  .shell-mobile-nav-item::after {
     animation: none;
   }
 
