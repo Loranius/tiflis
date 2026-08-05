@@ -1,0 +1,13 @@
+.today-metric-row-v3 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.today-content-grid-v3 > .today-panel-v3:only-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 680px) {
+  .today-metric-row-v3 {
+    grid-template-columns: 1fr;
+  }
+}
