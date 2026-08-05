@@ -1,0 +1,44 @@
+name: Cash period backend
+
+on:
+  push:
+    branches:
+      - ux/cash-schedule-menu-favicon
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ux/cash-schedule-menu-favicon
+          fetch-depth: 0
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Apply backend period logic
+        run: python .github/scripts/apply_cash_period_backend.py
+      - name: Check edge function
+        run: deno check supabase/functions/tiflis-secure-api/index.ts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck client
+        run: npm run typecheck
+      - name: Build client
+        run: npm run build
+      - name: Commit backend change
+        run: |
+          rm .github/workflows/cash-period-backend.yml
+          rm .github/scripts/apply_cash_period_backend.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add supabase/functions/tiflis-secure-api/index.ts .github/workflows/cash-period-backend.yml .github/scripts/apply_cash_period_backend.py
+          git commit -m "Add payroll period leaderboard calculations"
+          git push origin HEAD:ux/cash-schedule-menu-favicon
