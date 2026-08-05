@@ -1,0 +1,73 @@
+name: Tiflis Agent Core MCP CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/tiflis-agent-core-mcp/**'
+      - 'tools/tiflis-agent-stack/**'
+      - '.mcp.json'
+      - '.serena/**'
+      - '.agents/skills/tiflis-*/**'
+      - '.github/workflows/agent-core-mcp-ci.yml'
+  pull_request:
+    paths:
+      - 'tools/tiflis-agent-core-mcp/**'
+      - 'tools/tiflis-agent-stack/**'
+      - '.mcp.json'
+      - '.serena/**'
+      - '.agents/skills/tiflis-*/**'
+      - '.github/workflows/agent-core-mcp-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install agent core dependencies
+        run: npm --prefix tools/tiflis-agent-core-mcp install --no-fund
+
+      - name: Check server syntax and JSON configuration
+        run: |
+          npm --prefix tools/tiflis-agent-core-mcp run check
+          node -e "JSON.parse(require('fs').readFileSync('.mcp.json', 'utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('tools/tiflis-agent-stack/playwright.config.json', 'utf8'))"
+
+      - name: Verify Brain MCP boots
+        shell: bash
+        run: |
+          set +e
+          timeout 5s npm --prefix tools/tiflis-agent-core-mcp run brain </dev/null > /tmp/tiflis-brain.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            cat /tmp/tiflis-brain.log
+            exit "$status"
+          fi
+          cat /tmp/tiflis-brain.log
+          grep -q "Tiflis Brain MCP running on stdio" /tmp/tiflis-brain.log
+
+      - name: Verify Memory MCP boots
+        shell: bash
+        run: |
+          set +e
+          timeout 5s npm --prefix tools/tiflis-agent-core-mcp run memory </dev/null > /tmp/tiflis-memory.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            cat /tmp/tiflis-memory.log
+            exit "$status"
+          fi
+          cat /tmp/tiflis-memory.log
+          grep -q "Tiflis Memory MCP running on stdio" /tmp/tiflis-memory.log
