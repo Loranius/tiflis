@@ -11,15 +11,15 @@ import './cash-leaderboard.css';
 export type CashLeaderboardPeriod = 'first' | 'second' | 'month' | 'year';
 
 export interface CashLeaderboardRow {
-  userId: string;
-  name: string;
+  userId?: string | null;
+  name?: string | null;
   rank: number;
-  total: number | null;
-  relative: number;
+  total?: number | null;
+  relative?: number | null;
   mine: boolean;
-  avatar: string | null;
-  role: string;
-  role2: string | null;
+  avatar?: string | null;
+  role?: string | null;
+  role2?: string | null;
 }
 
 interface CashLeaderboardProps {
@@ -53,6 +53,11 @@ function periodLabel(period: CashLeaderboardPeriod, daysInMonth: number, year: n
   return 'Увесь місяць';
 }
 
+function displayName(row: CashLeaderboardRow): string {
+  const name = typeof row.name === 'string' ? row.name.trim() : '';
+  return name || `Працівник #${row.rank}`;
+}
+
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -64,7 +69,7 @@ function initials(name: string): string {
 
 function roleLabel(row: CashLeaderboardRow): string {
   const labels = [row.role, row.role2]
-    .filter((role): role is string => Boolean(role))
+    .filter((role): role is string => typeof role === 'string' && Boolean(role.trim()))
     .map((role) => ROLE_LABELS[role] || role)
     .filter((role, index, all) => all.indexOf(role) === index);
   return labels.join(' · ') || 'Працівник ресторану';
@@ -79,12 +84,15 @@ function formatTotal(value: number): string {
 }
 
 function PersonAvatar({ row, podium = false }: { row: CashLeaderboardRow; podium?: boolean }) {
+  const name = displayName(row);
+  const avatar = typeof row.avatar === 'string' && row.avatar.trim() ? row.avatar.trim() : null;
+
   return (
     <span className={`cash-board-avatar ${podium ? 'is-podium' : ''}`} aria-hidden="true">
-      <span>{initials(row.name)}</span>
-      {row.avatar ? (
+      <span>{initials(name)}</span>
+      {avatar ? (
         <img
-          src={row.avatar}
+          src={avatar}
           alt=""
           loading="lazy"
           onError={(event) => { event.currentTarget.hidden = true; }}
@@ -95,8 +103,11 @@ function PersonAvatar({ row, podium = false }: { row: CashLeaderboardRow; podium
 }
 
 function ResultValue({ row }: { row: CashLeaderboardRow }) {
-  if (row.total !== null) return <strong>{formatTotal(row.total)}</strong>;
-  return <strong>{Math.round(row.relative)}% від лідера</strong>;
+  if (typeof row.total === 'number' && Number.isFinite(row.total)) {
+    return <strong>{formatTotal(row.total)}</strong>;
+  }
+  const relative = typeof row.relative === 'number' && Number.isFinite(row.relative) ? row.relative : 0;
+  return <strong>{Math.round(relative)}% від лідера</strong>;
 }
 
 export function CashLeaderboard({
@@ -157,13 +168,13 @@ export function CashLeaderboard({
           <div className="cash-live-podium" aria-label="Перші три місця">
             {podium.map((row) => (
               <article
-                key={row.userId}
+                key={row.userId || `podium-${row.rank}`}
                 className={`cash-podium-card rank-${row.rank} ${row.mine ? 'is-mine' : ''}`}
               >
                 <span className="cash-podium-medal">{PODIUM_EMOJI[row.rank - 1] || `#${row.rank}`}</span>
                 <PersonAvatar row={row} podium />
                 <div className="cash-podium-person">
-                  <strong>{row.name}</strong>
+                  <strong>{displayName(row)}</strong>
                   <small>{roleLabel(row)}</small>
                 </div>
                 <ResultValue row={row} />
@@ -175,11 +186,11 @@ export function CashLeaderboard({
           {trail.length > 0 ? (
             <div className="cash-live-trail" aria-label="Наступні місця топу">
               {trail.map((row) => (
-                <article key={row.userId} className={row.mine ? 'is-mine' : ''}>
+                <article key={row.userId || `trail-${row.rank}`} className={row.mine ? 'is-mine' : ''}>
                   <span className="cash-live-rank">#{row.rank}</span>
                   <PersonAvatar row={row} />
                   <div className="cash-live-person">
-                    <strong>{row.name}</strong>
+                    <strong>{displayName(row)}</strong>
                     <small>{roleLabel(row)}</small>
                   </div>
                   <div className="cash-live-result">
@@ -195,7 +206,7 @@ export function CashLeaderboard({
             <div className="cash-live-own-summary">
               <ShieldCheck size={18} />
               <PersonAvatar row={mine} />
-              <span>{mine.name}</span>
+              <span>{displayName(mine)}</span>
               <strong>#{mine.rank}</strong>
             </div>
           ) : null}
