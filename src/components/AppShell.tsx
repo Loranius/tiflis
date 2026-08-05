@@ -9,9 +9,11 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
+import { memo, useEffect, useMemo } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { accessiblePages, pages, type PageKey } from '../lib/acl';
+import { preloadPage, preloadPages } from '../lib/pageLoaders';
 
 const icons: Record<PageKey, LucideIcon> = {
   today: Home,
@@ -23,13 +25,46 @@ const icons: Record<PageKey, LucideIcon> = {
   admin: Settings,
 };
 
-export function AppShell() {
+const preferredWarmOrder: PageKey[] = ['schedule', 'menu', 'reserve', 'cash', 'staff', 'admin'];
+
+type NavigatorWithConnection = Navigator & {
+  connection?: {
+    saveData?: boolean;
+    effectiveType?: string;
+  };
+};
+
+function warmPage(page: PageKey) {
+  void preloadPage(page).catch(() => undefined);
+}
+
+export const AppShell = memo(function AppShell() {
   const { user, logout } = useAuth();
   const location = useLocation();
-  if (!user) return null;
 
-  const navigation = accessiblePages(user);
-  const activeKey = navigation.find((key) => location.pathname.startsWith(pages[key].path)) || 'today';
+  const navigation = useMemo(() => user ? accessiblePages(user) : [], [user]);
+  const activeKey = useMemo(
+    () => navigation.find((key) => location.pathname.startsWith(pages[key].path)) || 'today',
+    [location.pathname, navigation],
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    const connection = (navigator as NavigatorWithConnection).connection;
+    if (connection?.saveData || connection?.effectiveType?.includes('2g')) return;
+
+    const likelyPages = preferredWarmOrder
+      .filter((page) => page !== activeKey && navigation.includes(page))
+      .slice(0, 2);
+    if (likelyPages.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      void preloadPages(likelyPages);
+    }, 1400);
+    return () => window.clearTimeout(timer);
+  }, [activeKey, navigation, user]);
+
+  if (!user) return null;
 
   return (
     <div className="app-shell">
@@ -49,6 +84,9 @@ export function AppShell() {
               <NavLink
                 key={key}
                 to={pages[key].path}
+                onPointerEnter={() => warmPage(key)}
+                onFocus={() => warmPage(key)}
+                onTouchStart={() => warmPage(key)}
                 className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
               >
                 <Icon size={19} strokeWidth={1.9} />
@@ -96,6 +134,8 @@ export function AppShell() {
             <NavLink
               key={key}
               to={pages[key].path}
+              onPointerDown={() => warmPage(key)}
+              onFocus={() => warmPage(key)}
               className={({ isActive }) => `mobile-nav-item${isActive ? ' is-active' : ''}`}
             >
               <Icon size={20} strokeWidth={1.9} />
@@ -106,4 +146,4 @@ export function AppShell() {
       </nav>
     </div>
   );
-}
+});
