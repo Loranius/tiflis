@@ -90,13 +90,14 @@ export function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    const userId = user.id;
     const today = new Date().toISOString().slice(0, 10);
 
     async function load() {
       const result = await supabase
         .from('schedule')
         .select('date,shift')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .gte('date', today)
         .order('date', { ascending: true })
         .limit(3);

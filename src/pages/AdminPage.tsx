@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RegistrationAdminPanel } from '../components/RegistrationAdminPanel';
 import { secureApi } from '../lib/secureApi';
 import './admin.css';
 
@@ -324,6 +325,8 @@ export function AdminPage() {
             <article><UtensilsCrossed size={20} /><span>Меню</span><strong>{data.metrics.menuItems}</strong><small>{data.metrics.stoppedItems} у стопі</small></article>
             <article><BellRing size={20} /><span>Резерви сьогодні</span><strong>{data.metrics.todayReservations}</strong><small>{data.metrics.upcomingReservations} на 30 днів</small></article>
           </section>
+
+          <RegistrationAdminPanel />
 
           <section className="admin-grid-v2">
             <article className="admin-panel-v2">
