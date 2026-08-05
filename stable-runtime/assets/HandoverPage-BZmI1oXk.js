@@ -1,1 +1,0 @@
-import{o as e,t}from"./react-vendor-Dog2UPXm.js";var n=t();function r(){return(0,n.jsx)(e,{to:`/duties?tab=handover`,replace:!0})}export{r as HandoverPage};
