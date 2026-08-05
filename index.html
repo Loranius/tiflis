@@ -13,9 +13,81 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Prata&display=optional" />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Prata&display=optional" rel="stylesheet" media="print" onload="this.media='all'" />
     <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Prata&display=optional" rel="stylesheet" /></noscript>
+    <style>
+      #boot-recovery{min-height:100vh;display:grid;place-items:center;padding:24px;background:#101813;color:#f2eee5;font-family:system-ui,sans-serif;text-align:center}
+      #boot-recovery[hidden]{display:none}
+      #boot-recovery>div{max-width:420px;display:grid;gap:12px;padding:24px;border:1px solid rgba(215,182,108,.25);border-radius:22px;background:#17231b}
+      #boot-recovery strong{font-size:22px;color:#d7b66c}
+      #boot-recovery span{color:#b8c1ba;line-height:1.55}
+      #boot-recovery button{min-height:44px;border:1px solid rgba(215,182,108,.3);border-radius:12px;background:rgba(215,182,108,.12);color:#f4d98e;font:inherit;font-weight:700}
+    </style>
+    <script>
+      (() => {
+        const recoveryKey = 'tiflis-v2-asset-recovery-20260805-1';
+        let appStarted = false;
+
+        window.__TIFLIS_APP_STARTED__ = () => {
+          appStarted = true;
+          const recovery = document.getElementById('boot-recovery');
+          if (recovery) recovery.hidden = true;
+        };
+
+        async function clearLegacyRuntime() {
+          try {
+            if ('serviceWorker' in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              await Promise.allSettled(registrations.map((registration) => registration.unregister()));
+            }
+          } catch (_) {}
+
+          try {
+            if ('caches' in window) {
+              const keys = await caches.keys();
+              await Promise.allSettled(keys.map((key) => caches.delete(key)));
+            }
+          } catch (_) {}
+        }
+
+        async function recoverOnce() {
+          let alreadyRecovered = false;
+          try { alreadyRecovered = sessionStorage.getItem(recoveryKey) === '1'; } catch (_) {}
+          if (alreadyRecovered) return false;
+          try { sessionStorage.setItem(recoveryKey, '1'); } catch (_) {}
+          await clearLegacyRuntime();
+          const url = new URL(location.href);
+          url.searchParams.set('runtime', Date.now().toString());
+          location.replace(url.toString());
+          return true;
+        }
+
+        window.addEventListener('error', (event) => {
+          const target = event.target;
+          const assetFailed = target instanceof HTMLScriptElement || target instanceof HTMLLinkElement;
+          if (assetFailed) void recoverOnce();
+        }, true);
+
+        window.addEventListener('unhandledrejection', () => {
+          if (!appStarted) void recoverOnce();
+        });
+
+        window.setTimeout(async () => {
+          if (appStarted) return;
+          if (await recoverOnce()) return;
+          const recovery = document.getElementById('boot-recovery');
+          if (recovery) recovery.hidden = false;
+        }, 4500);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-recovery" hidden>
+      <div>
+        <strong>Портал не завантажився</strong>
+        <span>Ми очистили застарілий кеш. Натисніть кнопку, щоб перезапустити сайт.</span>
+        <button type="button" onclick="location.reload()">Перезапустити портал</button>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
