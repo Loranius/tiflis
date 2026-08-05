@@ -181,8 +181,8 @@ Deno.serve(async (req: Request) => {
       if (!await consumeRate(req, action, login, 4)) return json(req, { ok: false, error: "Забагато спроб. Повторіть пізніше." }, 429);
 
       const [legacyResult, pendingResult] = await Promise.all([
-        admin.from("users").select("id").ilike("login", login).limit(1).maybeSingle(),
-        admin.from("registration_requests").select("id,status").ilike("login", login).eq("status", "pending").limit(1).maybeSingle(),
+        admin.from("users").select("id").eq("login", login).limit(1).maybeSingle(),
+        admin.from("registration_requests").select("id,status").eq("login", login).eq("status", "pending").limit(1).maybeSingle(),
       ]);
       if (legacyResult.data || pendingResult.data) return json(req, { ok: false, error: "Такий логін уже зайнятий або заявка вже очікує рішення." }, 409);
 
@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
       if (!validLogin(login)) return json(req, { ok: true, message: "Якщо акаунт і Telegram прив’язані, код уже надіслано." });
       if (!await consumeRate(req, action, login, 4)) return json(req, { ok: false, error: "Забагато запитів. Повторіть через 15 хвилин." }, 429);
 
-      const { data: user } = await admin.from("users").select("id,login,display_name,tg_id,chat_id,fired").ilike("login", login).limit(1).maybeSingle();
+      const { data: user } = await admin.from("users").select("id,login,display_name,tg_id,chat_id,fired").eq("login", login).limit(1).maybeSingle();
       if (!user || user.fired === true || !(user.chat_id || user.tg_id)) return json(req, { ok: true, message: "Якщо акаунт і Telegram прив’язані, код уже надіслано." });
       const { data: profile } = await admin.from("staff_profiles").select("user_id").eq("legacy_user_id", user.id).maybeSingle();
       if (!profile?.user_id) return json(req, { ok: true, message: "Якщо акаунт і Telegram прив’язані, код уже надіслано." });
@@ -253,7 +253,7 @@ Deno.serve(async (req: Request) => {
       }
       if (!await consumeRate(req, action, login, 8)) return json(req, { ok: false, error: "Забагато спроб. Запросіть новий код пізніше." }, 429);
 
-      const { data: user } = await admin.from("users").select("id,fired").ilike("login", login).limit(1).maybeSingle();
+      const { data: user } = await admin.from("users").select("id,fired").eq("login", login).limit(1).maybeSingle();
       if (!user || user.fired === true) return json(req, { ok: false, error: "Код недійсний або прострочений." }, 400);
       const { data: request } = await admin.from("password_reset_requests").select("id,token_hash,expires_at,attempts").eq("legacy_user_id", user.id).is("consumed_at", null).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle();
       const suppliedHash = await codeHash(String(user.id), code);
@@ -344,7 +344,13 @@ Deno.serve(async (req: Request) => {
       decided_by: currentAdmin.name,
       decision_note: note,
     }).eq("id", requestId);
-    if (updateError) throw updateError;
+    if (updateError) {
+      await Promise.allSettled([
+        admin.from("staff_profiles").delete().eq("user_id", request.auth_user_id),
+        admin.from("users").delete().eq("id", id),
+      ]);
+      throw updateError;
+    }
     await admin.from("audit_log").insert({ actor_id: currentAdmin.legacyId, actor_name: currentAdmin.name, action: "registration_approve", entity_type: "registration_request", entity_id: requestId, summary: `Погоджено реєстрацію ${request.login} · роль ${role}` });
     return json(req, { ok: true, status: "approved", userId: id });
   } catch (error) {

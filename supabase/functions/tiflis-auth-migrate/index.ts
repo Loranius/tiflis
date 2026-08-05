@@ -202,7 +202,7 @@ Deno.serve(async (req: Request) => {
       const { data: pending } = await admin
         .from("registration_requests")
         .select("auth_user_id,status")
-        .ilike("login", login)
+        .eq("login", login)
         .eq("status", "pending")
         .limit(1)
         .maybeSingle();
