@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../auth/AuthProvider';
 import {
   loadDutyPlan,
   publishDutyPlan,
@@ -24,6 +25,13 @@ import {
   type DutyPlanType,
   type WorkingWaiter,
 } from '../lib/dutyPlannerClient';
+import {
+  clearDutyPlannerDraft,
+  readDutyPlannerDate,
+  readDutyPlannerDraft,
+  rememberDutyPlannerDate,
+  rememberDutyPlannerDraft,
+} from '../lib/dutyPlannerDrafts';
 import { addDays, formatDate, formatMoment, initials, localIso } from '../lib/operationsClient';
 import './duty-planner.css';
 
@@ -48,6 +56,11 @@ function tuesdayForWeek(value: string): string {
 function initialDate(type: DutyPlanType): string {
   const today = localIso();
   return type === 'handover' ? tuesdayForWeek(today) : today;
+}
+
+function restoredInitialDate(ownerId: string, type: DutyPlanType): string {
+  const stored = readDutyPlannerDate(ownerId, type);
+  return stored || initialDate(type);
 }
 
 function workerLabel(worker: WorkingWaiter): string {
@@ -105,8 +118,10 @@ export function DutyPlannerPage({
   description,
   icon: Icon,
 }: DutyPlannerPageProps) {
-  const [date, setDate] = useState(() => initialDate(planType));
-  const [calendarMonth, setCalendarMonth] = useState(() => monthKey(initialDate(planType)));
+  const { user } = useAuth();
+  const ownerId = user?.id || 'active-session';
+  const [date, setDate] = useState(() => restoredInitialDate(ownerId, planType));
+  const [calendarMonth, setCalendarMonth] = useState(() => monthKey(restoredInitialDate(ownerId, planType)));
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [data, setData] = useState<DutyPlanResponse | null>(null);
   const [duties, setDuties] = useState<DutySelections>({});
@@ -119,6 +134,24 @@ export function DutyPlannerPage({
   const [notice, setNotice] = useState<string | null>(null);
 
   const hydrate = useCallback((response: DutyPlanResponse) => {
+    const restored = readDutyPlannerDraft(ownerId, response.planType, response.date);
+    if (restored) {
+      const dutyMap: DutySelections = {};
+      response.definitions.forEach((definition) => {
+        const value = restored.duties[definition.key];
+        if (typeof value === 'string') dutyMap[definition.key] = value;
+      });
+      const zoneMap: ZoneSelections = {};
+      response.zones.forEach((zone) => {
+        zoneMap[zone.key] = trimZoneValues(restored.zones[zone.key] || []);
+      });
+      setDuties(dutyMap);
+      setZones(zoneMap);
+      setDirty(true);
+      setNotice('Відновлено останні незбережені зміни.');
+      return;
+    }
+
     const dutyMap: DutySelections = {};
     response.assignments.forEach((item) => { dutyMap[item.duty_key] = item.assignee_id; });
     const zoneMap: ZoneSelections = {};
@@ -131,7 +164,7 @@ export function DutyPlannerPage({
     setDuties(dutyMap);
     setZones(zoneMap);
     setDirty(false);
-  }, []);
+  }, [ownerId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -148,6 +181,15 @@ export function DutyPlannerPage({
   }, [date, hydrate, planType]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    rememberDutyPlannerDate(ownerId, planType, date);
+  }, [date, ownerId, planType]);
+
+  useEffect(() => {
+    if (!dirty || !data?.permissions.canManage) return;
+    rememberDutyPlannerDraft(ownerId, planType, date, { duties, zones });
+  }, [data?.permissions.canManage, date, dirty, duties, ownerId, planType, zones]);
 
   const workerMap = useMemo(
     () => new Map((data?.workingWaiters || []).map((worker) => [worker.id, worker])),
@@ -178,7 +220,8 @@ export function DutyPlannerPage({
       setCalendarOpen(false);
       return;
     }
-    if (dirty && !window.confirm('Є незбережені зміни. Перейти на іншу дату без збереження?')) return;
+    if (dirty) rememberDutyPlannerDraft(ownerId, planType, date, { duties, zones });
+    setDirty(false);
     setDate(normalized);
     setCalendarMonth(monthKey(normalized));
     setCalendarOpen(false);
@@ -249,6 +292,8 @@ export function DutyPlannerPage({
     setNotice(null);
     try {
       await saveDutyPlan(planType, date, draft());
+      clearDutyPlannerDraft(ownerId, planType, date);
+      setDirty(false);
       setNotice('Розподіл збережено.');
       await load();
     } catch (reason) {
@@ -280,13 +325,20 @@ export function DutyPlannerPage({
     setPublishing(true);
     setError(null);
     setNotice(null);
+    let saved = false;
     try {
       await saveDutyPlan(planType, date, draft());
+      saved = true;
+      clearDutyPlannerDraft(ownerId, planType, date);
+      setDirty(false);
       const response = await publishDutyPlan(planType, date);
       setNotice(`Збережено й надіслано в Telegram: ${response.sent}; без Telegram: ${response.skipped}.`);
       await load();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Не вдалося зберегти й надіслати розподіл.');
+      const fallback = saved
+        ? 'Розподіл збережено, але не вдалося надіслати його в Telegram.'
+        : 'Не вдалося зберегти й надіслати розподіл.';
+      setError(reason instanceof Error ? reason.message : fallback);
     } finally {
       setSaving(false);
       setPublishing(false);
@@ -340,7 +392,7 @@ export function DutyPlannerPage({
 
       {error ? <div className="duty-planner-alert-v1 is-error" role="alert"><CircleAlert size={17} /><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
       {notice ? <div className="duty-planner-alert-v1 is-success"><Check size={17} /><span>{notice}</span><button type="button" onClick={() => setNotice(null)}><X size={16} /></button></div> : null}
-      {dirty ? <div className="duty-planner-unsaved-v1">Є незбережені зміни.</div> : null}
+      {dirty ? <div className="duty-planner-unsaved-v1">Є незбережені зміни. Чернетку збережено на цьому пристрої.</div> : null}
       {loading ? <div className="duty-planner-loading-v1"><RefreshCw size={23} className="is-spinning" /><span>Підтягуємо графік і призначення…</span></div> : null}
 
       {!loading && data ? (
