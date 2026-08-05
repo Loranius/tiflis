@@ -9,7 +9,23 @@ import './route-transitions.css';
 import './legacy-navigation.css';
 import './reserve-mobile.css';
 
-const LEGACY_MARKER = 'tiflis-v2-react-runtime-ready';
+const LEGACY_MARKER = 'tiflis-v2-react-runtime-ready-20260805-1';
+
+function safeStorageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeStorageSet(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Storage can be blocked by privacy settings. The portal must still start.
+  }
+}
 
 function clearInsecureLegacyStorage() {
   const insecureKeys = [
@@ -19,7 +35,12 @@ function clearInsecureLegacyStorage() {
     'tiflis_saved_password',
     'tiflis_tg_token',
   ];
-  insecureKeys.forEach((key) => localStorage.removeItem(key));
+
+  try {
+    insecureKeys.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // A denied localStorage access must not turn the whole application black.
+  }
 }
 
 async function unregisterLegacyWorkers() {
@@ -31,17 +52,15 @@ async function unregisterLegacyWorkers() {
 async function clearLegacyCaches() {
   if (!('caches' in window)) return;
   const keys = await caches.keys();
-  await Promise.allSettled(
-    keys.filter((key) => key.startsWith('tiflis-')).map((key) => caches.delete(key)),
-  );
+  await Promise.allSettled(keys.map((key) => caches.delete(key)));
 }
 
 function scheduleLegacyRetirement() {
-  if (localStorage.getItem(LEGACY_MARKER) === '1') return;
+  if (safeStorageGet(LEGACY_MARKER) === '1') return;
 
   const finish = async () => {
     await Promise.allSettled([unregisterLegacyWorkers(), clearLegacyCaches()]);
-    localStorage.setItem(LEGACY_MARKER, '1');
+    safeStorageSet(LEGACY_MARKER, '1');
   };
 
   const idleWindow = window as Window & {
@@ -49,10 +68,17 @@ function scheduleLegacyRetirement() {
   };
 
   if (idleWindow.requestIdleCallback) {
-    idleWindow.requestIdleCallback(() => { void finish(); }, { timeout: 2500 });
+    idleWindow.requestIdleCallback(() => { void finish(); }, { timeout: 1500 });
   } else {
-    window.setTimeout(() => { void finish(); }, 900);
+    window.setTimeout(() => { void finish(); }, 400);
   }
+}
+
+function reportStarted() {
+  const recoveryWindow = window as Window & {
+    __TIFLIS_APP_STARTED__?: () => void;
+  };
+  recoveryWindow.__TIFLIS_APP_STARTED__?.();
 }
 
 clearInsecureLegacyStorage();
@@ -68,4 +94,5 @@ createRoot(root).render(
   </StrictMode>,
 );
 
+window.requestAnimationFrame(reportStarted);
 scheduleLegacyRetirement();
