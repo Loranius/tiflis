@@ -1,0 +1,137 @@
+/* Mobile floor-plan fit layer.
+   Loaded globally so the reservation map stays usable even before its lazy chunk settles. */
+
+@media (max-width: 760px) {
+  .reserve-page-v2 .reserve-workspace-v2 {
+    overflow: visible;
+  }
+
+  .reserve-page-v2 .reserve-floor-wrap-v2 {
+    min-width: 0;
+    padding: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    touch-action: pan-x pan-y;
+  }
+
+  .reserve-page-v2 .reserve-floor-wrap-v2::-webkit-scrollbar {
+    display: none;
+  }
+
+  .reserve-page-v2 .reserve-floor-legend-v2 {
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+
+  .reserve-page-v2 .reserve-floor-legend-v2 span {
+    padding: 4px 7px;
+    font-size: 8px;
+  }
+
+  .reserve-page-v2 .reserve-floor-canvas-v2 {
+    width: 100%;
+    min-width: 0;
+    height: clamp(280px, 90vw, 390px);
+    min-height: 0 !important;
+    aspect-ratio: auto !important;
+    overflow: hidden;
+    border-radius: 16px;
+    background-size: 32px 32px, 32px 32px, auto, auto;
+    contain: layout paint;
+  }
+
+  .reserve-page-v2 .reserve-floor-canvas-v2::before {
+    left: 10px;
+    bottom: 8px;
+    font-size: 7px;
+    letter-spacing: .14em;
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2 {
+    min-width: clamp(40px, 11.5vw, 52px);
+    min-height: clamp(42px, 12vw, 54px);
+    gap: 1px;
+    padding: 4px;
+    border-width: 1.5px;
+    box-shadow: 0 5px 12px rgba(0, 0, 0, .22);
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2:hover {
+    transform: translate(-50%, -50%);
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2:active,
+  .reserve-page-v2 .reserve-floor-table-v2:focus-visible {
+    transform: translate(-50%, -50%) scale(1.04);
+    z-index: 3;
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2.is-small {
+    width: clamp(42px, 12vw, 54px);
+    border-radius: 9px;
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2.is-big {
+    width: clamp(52px, 15vw, 68px);
+    border-radius: 11px;
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2.is-round {
+    width: clamp(46px, 13vw, 58px);
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2.is-cabin {
+    width: clamp(62px, 18vw, 80px);
+    border-radius: 12px;
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2 strong {
+    font-size: clamp(11px, 3.2vw, 14px);
+    line-height: 1;
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2 span,
+  .reserve-page-v2 .reserve-floor-table-v2 small {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: clamp(6px, 1.8vw, 8px);
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2 i {
+    right: -5px;
+    top: -5px;
+    min-width: 17px;
+    height: 17px;
+    font-size: 7px;
+  }
+}
+
+@media (max-width: 430px) {
+  .reserve-page-v2 .reserve-floor-canvas-v2 {
+    height: clamp(270px, 88vw, 350px);
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2.is-cabin {
+    width: clamp(58px, 17vw, 72px) !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .reserve-page-v2 .reserve-floor-wrap-v2 {
+    padding-inline: 7px;
+  }
+
+  .reserve-page-v2 .reserve-floor-canvas-v2 {
+    height: 270px;
+  }
+
+  .reserve-page-v2 .reserve-floor-table-v2 span {
+    display: none;
+  }
+}
