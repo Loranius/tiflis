@@ -34,3 +34,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Bundle performance budget
+        run: npm run perf:budget
