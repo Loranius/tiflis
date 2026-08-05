@@ -15,7 +15,6 @@ type CashRow = {
   user_id: string | null;
   date: string;
   cash: number | string | null;
-  first_cash: number | string | null;
 };
 
 function corsHeaders(req: Request): HeadersInit {
@@ -110,7 +109,7 @@ Deno.serve(async (req: Request) => {
     });
     const cashResult = await serviceClient
       .from("cash")
-      .select("user_id,date,cash,first_cash")
+      .select("user_id,date,cash")
       .gte("date", range.start)
       .lt("date", range.end);
     if (cashResult.error) throw cashResult.error;
@@ -118,7 +117,7 @@ Deno.serve(async (req: Request) => {
     const positiveCashUsers = new Set<string>();
     for (const row of (cashResult.data ?? []) as CashRow[]) {
       if (!row.user_id) continue;
-      if (numberOf(row.first_cash ?? row.cash) > 0) positiveCashUsers.add(row.user_id);
+      if (numberOf(row.cash) > 0) positiveCashUsers.add(row.user_id);
     }
 
     const sourceRows = Array.isArray(payload.leaderboard) ? payload.leaderboard : [];
