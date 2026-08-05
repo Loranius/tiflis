@@ -1,7 +1,17 @@
-import { ArrowRight, LockKeyhole, ShieldCheck } from 'lucide-react';
+import {
+  ArrowRight,
+  Banknote,
+  CalendarDays,
+  ClipboardList,
+  LockKeyhole,
+  ShieldCheck,
+  Soup,
+  UserRound,
+} from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
+import './login.css';
 
 export function LoginPage() {
   const { user, login } = useAuth();
@@ -26,41 +36,86 @@ export function LoginPage() {
   }
 
   return (
-    <main className="login-page">
-      <section className="login-hero" aria-hidden="true">
-        <div className="hero-orbit hero-orbit-one" />
-        <div className="hero-orbit hero-orbit-two" />
-        <div className="hero-copy">
-          <span className="eyebrow">Внутрішній портал команди</span>
-          <h1>Тифліс</h1>
-          <p>Графік, каса, меню, резерви й робочі інструменти в одному захищеному просторі.</p>
+    <main className="login-page-v3">
+      <section className="login-showcase-v3">
+        <div className="login-brand-v3">
+          <div className="login-brand-mark-v3">თ</div>
+          <div className="login-brand-copy-v3">
+            <strong>Тифліс</strong>
+            <span>ресторан · Вінниця</span>
+          </div>
+        </div>
+
+        <div className="login-story-v3">
+          <span className="eyebrow">Внутрішній простір команди</span>
+          <h1>Уся зміна — в одному ритмі.</h1>
+          <p>Графік, сервіс, меню, резерви та каса зібрані в єдиному робочому порталі ресторану.</p>
+
+          <div className="login-feature-grid-v3" aria-label="Можливості порталу">
+            <article className="login-feature-v3">
+              <CalendarDays size={21} />
+              <strong>Графік</strong>
+              <span>Зміни всієї команди</span>
+            </article>
+            <article className="login-feature-v3">
+              <Soup size={21} />
+              <strong>Меню</strong>
+              <span>Стоп-лист і склад страв</span>
+            </article>
+            <article className="login-feature-v3">
+              <ClipboardList size={21} />
+              <strong>Резерви</strong>
+              <span>Зали, столи й таймлайн</span>
+            </article>
+            <article className="login-feature-v3">
+              <Banknote size={21} />
+              <strong>Каса</strong>
+              <span>Виручка та особистий результат</span>
+            </article>
+          </div>
+        </div>
+
+        <div className="login-showcase-footer-v3">
+          <span><strong>Театральна, 20</strong> · Вінниця</span>
+          <span>Тифліс Staff Portal v2</span>
         </div>
       </section>
 
-      <section className="login-panel">
-        <div className="login-card">
-          <div className="login-logo">თ</div>
-          <div className="login-heading">
-            <span className="eyebrow">Тифліс · v2</span>
-            <h2>Вхід для персоналу</h2>
-            <p>Використай свій звичний логін і пароль зі старого порталу.</p>
+      <section className="login-access-v3">
+        <div className="login-card-v3">
+          <div className="login-mobile-brand-v3">
+            <div className="login-brand-mark-v3">თ</div>
+            <div className="login-brand-copy-v3">
+              <strong>Тифліс</strong>
+              <span>портал персоналу</span>
+            </div>
           </div>
 
-          <form className="login-form" onSubmit={submit}>
-            <label>
+          <div className="login-heading-v3">
+            <span className="eyebrow">Захищений вхід</span>
+            <h2>Почати зміну</h2>
+            <p>Введи свій робочий логін і пароль. Після входу портал відкриє інструменти відповідно до твоєї ролі.</p>
+          </div>
+
+          <form className="login-form-v3" onSubmit={submit}>
+            <label className="login-field-v3">
               <span>Логін</span>
-              <input
-                autoComplete="username"
-                value={loginValue}
-                onChange={(event) => setLoginValue(event.target.value)}
-                placeholder="Як у старому порталі"
-                required
-              />
+              <div className="login-input-v3">
+                <UserRound size={18} />
+                <input
+                  autoComplete="username"
+                  value={loginValue}
+                  onChange={(event) => setLoginValue(event.target.value)}
+                  placeholder="Робочий логін"
+                  required
+                />
+              </div>
             </label>
-            <label>
+
+            <label className="login-field-v3">
               <span>Пароль</span>
-              <div className="input-with-icon">
-                <LockKeyhole size={17} />
+              <div className="login-input-v3">
+                <LockKeyhole size={18} />
                 <input
                   type="password"
                   autoComplete="current-password"
@@ -72,17 +127,17 @@ export function LoginPage() {
               </div>
             </label>
 
-            {error ? <div className="form-error" role="alert">{error}</div> : null}
+            {error ? <div className="login-error-v3" role="alert">{error}</div> : null}
 
-            <button className="primary-button" type="submit" disabled={submitting}>
-              <span>{submitting ? 'Перевіряємо…' : 'Увійти'}</span>
+            <button className="login-submit-v3" type="submit" disabled={submitting}>
+              <span>{submitting ? 'Перевіряємо доступ…' : 'Увійти до порталу'}</span>
               {!submitting ? <ArrowRight size={18} /> : null}
             </button>
           </form>
 
-          <div className="security-note">
-            <ShieldCheck size={18} />
-            <p>Під час першого входу акаунт автоматично переходить на Supabase Auth. Пароль у браузері не зберігається.</p>
+          <div className="login-security-v3">
+            <ShieldCheck size={19} />
+            <p>Перший вхід безпечно переносить твій акаунт на Supabase Auth. Пароль не зберігається в браузері.</p>
           </div>
         </div>
       </section>
