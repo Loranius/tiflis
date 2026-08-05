@@ -69,6 +69,10 @@ function formatToday(): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function isWorkShift(shift: string | null): boolean {
+  return Boolean(shift && !['Х', 'О'].includes(shift));
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
@@ -101,9 +105,14 @@ export function DashboardPage() {
         .eq('user_id', userId)
         .gte('date', today)
         .order('date', { ascending: true })
-        .limit(3);
+        .limit(31);
       if (cancelled) return;
-      if (!result.error) setSchedule((result.data || []) as ScheduleRow[]);
+      if (!result.error) {
+        const workShifts = ((result.data || []) as ScheduleRow[])
+          .filter((row) => isWorkShift(row.shift))
+          .slice(0, 3);
+        setSchedule(workShifts);
+      }
       setLoading(false);
     }
 
@@ -111,10 +120,7 @@ export function DashboardPage() {
     return () => { cancelled = true; };
   }, [user]);
 
-  const nextShift = useMemo(
-    () => schedule.find((row) => row.shift && !['Х', 'О', ''].includes(row.shift)),
-    [schedule],
-  );
+  const nextShift = schedule[0] || null;
   const quickActions = useMemo(
     () => user ? QUICK_ACTIONS.filter((action) => canAccessPage(user, action.page)).slice(0, 4) : [],
     [user],
@@ -126,7 +132,7 @@ export function DashboardPage() {
     ? 'Завантажуємо графік…'
     : nextShift
       ? `${formatDate(nextShift.date)} · ${nextShift.shift}`
-      : 'Найближчих змін немає';
+      : 'Найближчих робочих змін немає';
 
   return (
     <div className="today-page-v3">
@@ -134,7 +140,7 @@ export function DashboardPage() {
         <div className="today-hero-copy-v3">
           <span className="today-date-v3"><Sparkles size={15} /> {formatToday()}</span>
           <h2>Гарної зміни, {firstName}</h2>
-          <p>Тут залишено тільки те, що потрібно сьогодні: три найближчі дні графіка та ваші робочі обов’язки.</p>
+          <p>Тут залишено тільки те, що потрібно сьогодні: три найближчі робочі зміни та ваші обов’язки.</p>
           <div className="today-shift-pill-v3">
             <CalendarCheck2 size={19} />
             <div className="today-shift-pill-copy-v3"><span>Наступна зміна</span><strong>{nextShiftLabel}</strong></div>
@@ -172,16 +178,16 @@ export function DashboardPage() {
       <section className="today-content-grid-v3">
         <article className="today-panel-v3">
           <div className="today-panel-heading-v3">
-            <div><span className="eyebrow">Три найближчі дні</span><h3>Мій графік</h3></div>
+            <div><span className="eyebrow">Три найближчі зміни</span><h3>Мій графік</h3></div>
             {user && canAccessPage(user, 'schedule') ? <Link className="today-panel-link-v3" to={pages.schedule.path}>Відкрити <ArrowUpRight size={14} /></Link> : null}
           </div>
           <div className="today-schedule-v3">
             {loading ? <div className="today-empty-v3"><span>Завантажуємо найближчі зміни…</span></div> : null}
             {!loading && schedule.length === 0 ? (
-              <div className="today-empty-v3"><CalendarDays size={27} /><strong>Графік поки порожній</strong><span>Коли зміни будуть призначені, вони з’являться тут.</span></div>
+              <div className="today-empty-v3"><CalendarDays size={27} /><strong>Робочих змін поки немає</strong><span>Коли зміни будуть призначені, вони з’являться тут.</span></div>
             ) : null}
             {!loading ? schedule.map((row) => (
-              <div className="today-schedule-row-v3" key={row.date}><span>{formatDate(row.date)}</span><strong>{row.shift || 'Вихідний'}</strong></div>
+              <div className="today-schedule-row-v3" key={row.date}><span>{formatDate(row.date)}</span><strong>{row.shift}</strong></div>
             )) : null}
           </div>
         </article>
