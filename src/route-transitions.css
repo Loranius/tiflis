@@ -5,8 +5,8 @@
 .route-transition {
   min-height: min(720px, calc(100dvh - 150px));
   transform-origin: 50% 0;
-  animation-duration: 240ms;
-  animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+  animation-duration: 110ms;
+  animation-timing-function: cubic-bezier(.2, .8, .2, 1);
   animation-fill-mode: both;
 }
 
@@ -19,57 +19,57 @@
 }
 
 .topbar-title-transition {
-  animation: topbar-title-enter 190ms cubic-bezier(.22, 1, .36, 1) both;
+  animation: topbar-title-enter 90ms cubic-bezier(.2, .8, .2, 1) both;
 }
 
 .nav-item,
 .mobile-nav-item,
 .mobile-more-link {
   transition:
-    color 180ms ease,
-    background-color 180ms ease,
-    border-color 180ms ease,
-    transform 180ms cubic-bezier(.22, 1, .36, 1);
+    color 105ms ease,
+    background-color 105ms ease,
+    border-color 105ms ease,
+    transform 105ms cubic-bezier(.2, .8, .2, 1);
 }
 
 .nav-item svg,
 .mobile-nav-item svg,
 .mobile-more-link svg {
-  transition: transform 190ms cubic-bezier(.22, 1, .36, 1), color 180ms ease;
+  transition: transform 105ms cubic-bezier(.2, .8, .2, 1), color 105ms ease;
 }
 
 .nav-item.is-active svg,
 .mobile-nav-item.is-active svg,
 .mobile-more-link.is-active > svg:first-child {
-  transform: translateY(-1px) scale(1.06);
+  transform: translateY(-1px) scale(1.04);
 }
 
 @keyframes route-enter-forward {
   from {
-    opacity: 0;
-    transform: translate3d(18px, 0, 0) scale(.996);
+    opacity: .72;
+    transform: translate3d(6px, 0, 0);
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes route-enter-backward {
   from {
-    opacity: 0;
-    transform: translate3d(-18px, 0, 0) scale(.996);
+    opacity: .72;
+    transform: translate3d(-6px, 0, 0);
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes topbar-title-enter {
   from {
-    opacity: 0;
-    transform: translateY(5px);
+    opacity: .75;
+    transform: translateY(2px);
   }
   to {
     opacity: 1;
@@ -80,28 +80,28 @@
 @media (max-width: 980px) {
   .route-transition {
     min-height: calc(100dvh - 160px);
-    animation-duration: 205ms;
+    animation-duration: 85ms;
   }
 
   @keyframes route-enter-forward {
     from {
-      opacity: 0;
-      transform: translate3d(11px, 0, 0) scale(.998);
+      opacity: .78;
+      transform: translate3d(4px, 0, 0);
     }
     to {
       opacity: 1;
-      transform: translate3d(0, 0, 0) scale(1);
+      transform: translate3d(0, 0, 0);
     }
   }
 
   @keyframes route-enter-backward {
     from {
-      opacity: 0;
-      transform: translate3d(-11px, 0, 0) scale(.998);
+      opacity: .78;
+      transform: translate3d(-4px, 0, 0);
     }
     to {
       opacity: 1;
-      transform: translate3d(0, 0, 0) scale(1);
+      transform: translate3d(0, 0, 0);
     }
   }
 }
