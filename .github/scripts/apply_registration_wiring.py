@@ -66,3 +66,17 @@ new = '''    if (!legacy) {
 '''
 text = replace_once(text, old, new, "pending registration login")
 path.write_text(text)
+
+
+# Preserve the authenticated user id before entering the async loader so
+# strict TypeScript keeps the null check across the closure boundary.
+path = Path("src/pages/DashboardPage.tsx")
+text = path.read_text()
+text = replace_once(
+    text,
+    "    let cancelled = false;\n    const today = new Date().toISOString().slice(0, 10);",
+    "    let cancelled = false;\n    const userId = user.id;\n    const today = new Date().toISOString().slice(0, 10);",
+    "dashboard user id",
+)
+text = replace_once(text, ".eq('user_id', user.id)", ".eq('user_id', userId)", "dashboard query")
+path.write_text(text)
