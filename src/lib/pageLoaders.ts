@@ -7,6 +7,8 @@ export const loadCashPage = () => import('../pages/CashPage');
 export const loadMenuPage = () => import('../pages/MenuPage');
 export const loadReservePage = () => import('../pages/ReservePage');
 export const loadStaffPage = () => import('../pages/StaffPage');
+export const loadDutiesPage = () => import('../pages/DutiesPage');
+export const loadHandoverPage = () => import('../pages/HandoverPage');
 export const loadAdminPage = () => import('../pages/AdminPage');
 
 const pageLoaders: Record<PageKey, () => Promise<unknown>> = {
@@ -16,6 +18,8 @@ const pageLoaders: Record<PageKey, () => Promise<unknown>> = {
   menu: loadMenuPage,
   reserve: loadReservePage,
   staff: loadStaffPage,
+  duties: loadDutiesPage,
+  handover: loadHandoverPage,
   admin: loadAdminPage,
 };
 
