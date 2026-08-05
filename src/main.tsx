@@ -6,6 +6,7 @@ import './styles.css';
 import './performance.css';
 import './design-system.css';
 import './route-transitions.css';
+import './legacy-navigation.css';
 
 const LEGACY_MARKER = 'tiflis-v2-react-runtime-ready';
 
