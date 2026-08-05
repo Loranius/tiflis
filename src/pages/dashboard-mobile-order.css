@@ -1,0 +1,27 @@
+@media (max-width: 640px) {
+  .today-page-v3 {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .today-page-v3 > .today-hero-v3 {
+    order: 1;
+  }
+
+  .today-page-v3 > .today-operations-v4,
+  .today-page-v3 > .operations-deferred-placeholder {
+    order: 2;
+  }
+
+  .today-page-v3 > .today-metric-row-v3 {
+    order: 3;
+  }
+
+  .today-page-v3 > .today-content-grid-v3 {
+    order: 4;
+  }
+
+  .today-page-v3 > .today-quick-grid-v3 {
+    order: 5;
+  }
+}
