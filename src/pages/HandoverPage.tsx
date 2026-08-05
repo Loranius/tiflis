@@ -1,14 +1,5 @@
-import { Sparkles } from 'lucide-react';
-import { DutyPlannerPage } from '../components/DutyPlannerPage';
+import { Navigate } from 'react-router';
 
 export function HandoverPage() {
-  return (
-    <DutyPlannerPage
-      planType="handover"
-      eyebrow="Щовівторка"
-      title="Здача зміни"
-      description="Чек-лист здачі зміни на вибраний вівторок. Відповідального можна обрати лише серед офіціантів, які цього дня стоять у робочому графіку."
-      icon={Sparkles}
-    />
-  );
+  return <Navigate to="/duties?tab=handover" replace />;
 }
