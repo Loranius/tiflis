@@ -6,7 +6,6 @@ import {
   Check,
   Copy,
   Edit3,
-  Instagram,
   KeyRound,
   LockKeyhole,
   MessageCircle,
@@ -378,7 +377,7 @@ export function StaffPage() {
         <div className="staff-detail-status-v2"><span className={selected.authLinked ? 'is-ok' : 'is-warn'}>{selected.authLinked ? <BadgeCheck size={16} /> : <LockKeyhole size={16} />}{selected.authLinked ? 'Захищений Auth-акаунт' : 'Очікує першого входу'}</span><span>{selected.fired ? 'В архіві' : 'Активний працівник'}</span></div>
         <div className="staff-detail-grid-v2"><article><CalendarDays size={18} /><span>Наступна зміна</span><strong>{formatShift(selected.nextShift)}</strong></article><article><BriefcaseBusiness size={18} /><span>За місяць</span><strong>{selected.monthShiftCount} змін</strong></article><article><Cake size={18} /><span>День народження</span><strong>{formatDate(selected.birthday)}</strong></article><article><Sparkles size={18} /><span>У команді</span><strong>{tenure(selected.createdAt)}</strong></article></div>
         {selected.credo ? <blockquote>“{selected.credo}”</blockquote> : null}
-        <div className="staff-socials-v2">{selected.telegramUsername ? <span><MessageCircle size={15} /> @{selected.telegramUsername}</span> : null}{selected.instagram ? <span><Instagram size={15} /> @{selected.instagram}</span> : null}{!selected.telegramUsername && !selected.instagram ? <span>Соцмережі не вказані</span> : null}</div>
+        <div className="staff-socials-v2">{selected.telegramUsername ? <span><MessageCircle size={15} /> @{selected.telegramUsername}</span> : null}{selected.instagram ? <span><span aria-hidden="true">IG</span> @{selected.instagram}</span> : null}{!selected.telegramUsername && !selected.instagram ? <span>Соцмережі не вказані</span> : null}</div>
         <div className="staff-detail-actions-v2">{data?.me.canManage && selected.id !== 'sysadmin' ? <button type="button" className={selected.fired ? 'is-activate' : 'is-archive'} onClick={() => void setActive(selected, selected.fired)} disabled={saving}>{selected.fired ? <UserCheck size={17} /> : <UserRoundX size={17} />}{selected.fired ? 'Повернути в команду' : 'Перенести в архів'}</button> : <span />}{data?.me.canManage && selected.authLinked ? <button type="button" className="is-key" onClick={() => void resetPassword(selected)} disabled={saving}><KeyRound size={17} /> Скинути пароль</button> : null}{canEditSelected ? <button type="button" className="is-edit" onClick={() => { setEditor(createEditor(selected)); setSelected(null); }}><Edit3 size={17} /> Редагувати</button> : null}</div>
       </section></div> : null}
 

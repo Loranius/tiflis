@@ -344,7 +344,7 @@ export function AdminPage() {
         </div>
       ) : null}
 
-      {!loading && config && tab === 'notice' ? (
+      {!loading && data && config && tab === 'notice' ? (
         <div className="admin-two-column-v2">
           <section className="admin-panel-v2 admin-form-v2">
             <div className="admin-panel-heading-v2"><div><span className="eyebrow">Нова публікація</span><h3>Повідомлення команді</h3></div><Megaphone size={22} /></div>
@@ -368,7 +368,7 @@ export function AdminPage() {
         </div>
       ) : null}
 
-      {!loading && config && tab === 'system' ? (
+      {!loading && data && config && tab === 'system' ? (
         <div className="admin-two-column-v2">
           <section className="admin-panel-v2 admin-form-v2">
             <div className="admin-panel-heading-v2"><div><span className="eyebrow">Typed config</span><h3>Поведінка порталу</h3></div><ServerCog size={22} /></div>
