@@ -68,6 +68,11 @@ const ROLE_LABELS: Record<string, string> = {
   admin: 'Адміністрація', waiter: 'Офіціанти', bar: 'Бар', chef: 'Шеф-кухарі', cook: 'Кухня',
   hostess: 'Хостес', runner: 'Ранери', sommelier: 'Сомельє', staff: 'Команда',
 };
+const PERSON_ROLE_LABELS: Record<string, string> = {
+  admin: 'Адміністратор', sysadmin: 'Системний адміністратор', waiter: 'Офіціант',
+  bar: 'Бармен', chef: 'Шеф-кухар', cook: 'Кухар', hostess: 'Хостес',
+  runner: 'Ранер', sommelier: 'Сомельє', trainee: 'Стажер', staff: 'Працівник',
+};
 
 function normalizeRole(value: string | null | undefined): string {
   if (value === 'barman' || value === 'bartender') return 'bar';
@@ -112,6 +117,15 @@ function staffRoles(staff: ScheduleStaff): string[] {
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] || role;
+}
+
+function staffRoleTitle(staff: ScheduleStaff): string {
+  const roles = staffRoles(staff);
+  if (roles.includes('waiter') && roles.includes('bar')) return 'Бармен-офіціант';
+  if (roles.includes('waiter') && roles.includes('sommelier')) return 'Сомельє-офіціант';
+  if (roles.includes('waiter') && roles.includes('hostess')) return 'Хостес-офіціант';
+  if (roles.includes('waiter') && roles.includes('runner')) return 'Ранер-офіціант';
+  return roles.map((role) => PERSON_ROLE_LABELS[role] || role).join(' · ') || 'Працівник';
 }
 
 function isWorkingShift(code: ShiftCode | null | undefined): boolean {
@@ -318,7 +332,7 @@ export function SchedulePage() {
               <tbody>{visibleStaff.map((staff) => {
                 const ownRow = data?.me.legacyUserId === staff.id;
                 return <tr key={staff.id} className={ownRow ? 'is-own-row' : ''}>
-                  <td className="schedule-name-column"><div className="schedule-person"><span className="schedule-person-avatar">{initials(staff.name)}</span><span className="schedule-person-copy"><strong>{staff.name}</strong><small>{staffRoles(staff).map(roleLabel).join(' · ')}</small></span>{ownRow ? <span className="schedule-own-badge">Ви</span> : null}</div></td>
+                  <td className="schedule-name-column"><div className="schedule-person"><span className="schedule-person-avatar">{initials(staff.name)}</span><span className="schedule-person-copy"><strong>{staff.name}</strong><small>{staffRoleTitle(staff)}</small></span>{ownRow ? <span className="schedule-own-badge">Ви</span> : null}</div></td>
                   {days.map((day) => {
                     const date = dateForDay(month, day), key = cellKey(staff.id, date), value = entries[key] || '';
                     const weekend = [0, 6].includes(new Date(`${date}T12:00:00`).getDay()), editable = canEditStaff(staff);
