@@ -40,8 +40,19 @@ const roleNames: Record<string, string> = {
   staff: 'Працівник',
 };
 
-const preferredWarmOrder: PageKey[] = ['schedule', 'menu', 'reserve', 'cash', 'staff', 'admin'];
-const mobilePriority: PageKey[] = ['today', 'schedule', 'menu', 'reserve', 'cash', 'staff', 'admin'];
+// Порядок із попереднього порталу: головна завжди перша в desktop-sidebar,
+// далі графік, каса, персонал, меню, резерви й управління.
+const legacyDesktopOrder: PageKey[] = [
+  'today',
+  'schedule',
+  'cash',
+  'staff',
+  'menu',
+  'reserve',
+  'admin',
+];
+
+const preferredWarmOrder: PageKey[] = ['schedule', 'cash', 'menu', 'reserve', 'staff', 'admin'];
 
 type NavigatorWithConnection = Navigator & {
   connection?: {
@@ -50,8 +61,44 @@ type NavigatorWithConnection = Navigator & {
   };
 };
 
+type MobileSlot = 'schedule' | 'role' | 'home' | 'menu';
+
 function warmPage(page: PageKey) {
   void preloadPage(page).catch(() => undefined);
+}
+
+function MobilePageLink({
+  pageKey,
+  slot,
+  home = false,
+}: {
+  pageKey: PageKey;
+  slot: MobileSlot;
+  home?: boolean;
+}) {
+  const Icon = icons[pageKey];
+  return (
+    <NavLink
+      to={pages[pageKey].path}
+      onPointerDown={() => warmPage(pageKey)}
+      onFocus={() => warmPage(pageKey)}
+      className={({ isActive }) => [
+        'mobile-nav-item',
+        `mobile-slot-${slot}`,
+        home ? 'mobile-nav-home' : '',
+        isActive ? 'is-active' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      {home ? (
+        <div className="mobile-nav-home-icon" aria-hidden="true">
+          <Icon size={23} strokeWidth={2} />
+        </div>
+      ) : (
+        <Icon size={20} strokeWidth={1.9} />
+      )}
+      <span>{pages[pageKey].shortTitle}</span>
+    </NavLink>
+  );
 }
 
 export const AppShell = memo(function AppShell() {
@@ -59,7 +106,14 @@ export const AppShell = memo(function AppShell() {
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const navigation = useMemo(() => user ? accessiblePages(user) : [], [user]);
+  const accessible = useMemo(
+    () => new Set<PageKey>(user ? accessiblePages(user) : []),
+    [user],
+  );
+  const navigation = useMemo(
+    () => legacyDesktopOrder.filter((key) => accessible.has(key)),
+    [accessible],
+  );
   const activeKey = useMemo(
     () => navigation.find((key) => location.pathname.startsWith(pages[key].path)) || 'today',
     [location.pathname, navigation],
@@ -71,13 +125,24 @@ export const AppShell = memo(function AppShell() {
     ? 'backward'
     : 'forward';
 
-  const mobilePrimary = useMemo(
-    () => mobilePriority.filter((key) => navigation.includes(key)).slice(0, 4),
-    [navigation],
-  );
+  // Стара мобільна схема: Графік · Каса/рольова заміна · Головна · Меню · Ще.
+  // Якщо каса недоступна для ролі, на її місце стає найближчий робочий модуль,
+  // але головна завжди залишається строго в третій, центральній позиції.
+  const mobileRoleKey = useMemo<PageKey | null>(() => {
+    const fallbackOrder: PageKey[] = ['cash', 'reserve', 'staff'];
+    return fallbackOrder.find((key) => navigation.includes(key)) || null;
+  }, [navigation]);
+
+  const mobileFixedKeys = useMemo(() => new Set<PageKey>([
+    'today',
+    ...(navigation.includes('schedule') ? ['schedule' as PageKey] : []),
+    ...(mobileRoleKey ? [mobileRoleKey] : []),
+    ...(navigation.includes('menu') ? ['menu' as PageKey] : []),
+  ]), [mobileRoleKey, navigation]);
+
   const mobileSecondary = useMemo(
-    () => navigation.filter((key) => !mobilePrimary.includes(key)),
-    [mobilePrimary, navigation],
+    () => navigation.filter((key) => !mobileFixedKeys.has(key)),
+    [mobileFixedKeys, navigation],
   );
   const moreContainsActive = mobileSecondary.includes(activeKey);
 
@@ -124,7 +189,6 @@ export const AppShell = memo(function AppShell() {
   if (!user) return null;
 
   const roleLabel = roleNames[user.role] || user.role;
-  const mobileNavCount = mobilePrimary.length + (mobileSecondary.length > 0 ? 1 : 0);
 
   return (
     <div className="app-shell" data-page={activeKey}>
@@ -193,30 +257,25 @@ export const AppShell = memo(function AppShell() {
         </section>
       </main>
 
-      <nav
-        className="mobile-nav"
-        aria-label="Мобільна навігація"
-        style={{ '--mobile-nav-count': mobileNavCount } as React.CSSProperties}
-      >
-        {mobilePrimary.map((key) => {
-          const Icon = icons[key];
-          return (
-            <NavLink
-              key={key}
-              to={pages[key].path}
-              onPointerDown={() => warmPage(key)}
-              onFocus={() => warmPage(key)}
-              className={({ isActive }) => `mobile-nav-item${isActive ? ' is-active' : ''}`}
-            >
-              <Icon size={20} strokeWidth={1.9} />
-              <span>{pages[key].shortTitle}</span>
-            </NavLink>
-          );
-        })}
+      <nav className="mobile-nav legacy-mobile-nav" aria-label="Мобільна навігація">
+        {navigation.includes('schedule') ? (
+          <MobilePageLink pageKey="schedule" slot="schedule" />
+        ) : null}
+
+        {mobileRoleKey ? (
+          <MobilePageLink pageKey={mobileRoleKey} slot="role" />
+        ) : null}
+
+        <MobilePageLink pageKey="today" slot="home" home />
+
+        {navigation.includes('menu') ? (
+          <MobilePageLink pageKey="menu" slot="menu" />
+        ) : null}
+
         {mobileSecondary.length > 0 ? (
           <button
             type="button"
-            className={`mobile-nav-item mobile-nav-more${moreContainsActive || moreOpen ? ' is-active' : ''}`}
+            className={`mobile-nav-item mobile-nav-more mobile-slot-more${moreContainsActive || moreOpen ? ' is-active' : ''}`}
             onClick={() => setMoreOpen(true)}
             aria-expanded={moreOpen}
             aria-haspopup="dialog"
