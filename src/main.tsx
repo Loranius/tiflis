@@ -12,6 +12,7 @@ import './legacy-navigation.css';
 import './reserve-mobile.css';
 import './modal-runtime.css';
 import './mobile-operations-fixes.css';
+import './mobile-operations-critical.css';
 
 const BUILD_ID = import.meta.env.VITE_BUILD_ID || 'development';
 const RUNTIME_VERSION_KEY = 'tiflis.runtime.version';
