@@ -31,7 +31,7 @@
     <script>
       (() => {
         const rawBuildId = '%VITE_BUILD_ID%';
-        const buildId = rawBuildId.startsWith('%') ? 'development' : rawBuildId;
+        const buildId = rawBuildId.startsWith('%') ? 'stable-runtime' : rawBuildId;
         const recoveryKey = `tiflis.asset-recovery.${buildId}`;
         let appStarted = false;
 
@@ -115,11 +115,14 @@
       <div>
         <div class="boot-mark" aria-hidden="true">თ</div>
         <strong>Завантажуємо Тифліс</strong>
-        <span class="boot-message">Готуємо актуальну версію порталу без переривання роботи.</span>
+        <span class="boot-message">Готуємо актуальну перевірену версію порталу без переривання роботи.</span>
         <div class="boot-loader" aria-hidden="true"></div>
         <button type="button" onclick="location.reload()">Перезапустити портал</button>
       </div>
     </div>
-    <script type="module" src="/src/main.tsx"></script>
+    <!-- TIFLIS_RAW_RUNTIME_START -->
+    <script type="module" src="./stable-runtime/loader.js"></script>
+    <!-- TIFLIS_RAW_RUNTIME_END -->
+    <!-- TIFLIS_VITE_ENTRY -->
   </body>
 </html>
