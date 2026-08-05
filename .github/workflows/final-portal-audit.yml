@@ -1,0 +1,74 @@
+name: Final portal audit
+
+on:
+  push:
+    branches:
+      - audit/portal-final-20260805
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-portal-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+  VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+  VITE_BUILD_ID: ${{ github.sha }}
+
+jobs:
+  audit:
+    name: Audit source, server and live portal
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm install --no-fund
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check every Edge Function
+        run: |
+          set -euo pipefail
+          count=0
+          for file in supabase/functions/*/index.ts; do
+            echo "::group::Deno check $file"
+            deno check --node-modules-dir=auto "$file"
+            echo "::endgroup::"
+            count=$((count + 1))
+          done
+          test "$count" -gt 0
+          echo "Checked $count Edge Functions."
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production artifact
+        run: npm run build
+
+      - name: Check bundle performance budget
+        run: npm run perf:budget
+
+      - name: Smoke-test production artifact
+        run: npm run smoke:dist
+
+      - name: Audit repository and live Pages
+        run: node scripts/final-portal-audit.mjs
