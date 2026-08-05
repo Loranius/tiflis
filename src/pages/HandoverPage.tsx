@@ -1,9 +1,9 @@
 import { Sparkles } from 'lucide-react';
-import { PersistentDutyPlannerPage } from '../components/PersistentDutyPlannerPage';
+import { DutyPlannerPage } from '../components/DutyPlannerPage';
 
 export function HandoverPage() {
   return (
-    <PersistentDutyPlannerPage
+    <DutyPlannerPage
       planType="handover"
       eyebrow="Щовівторка"
       title="Здача зміни"
