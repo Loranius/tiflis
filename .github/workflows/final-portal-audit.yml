@@ -1,16 +1,13 @@
-name: Final portal audit
+name: Full portal audit
 
 on:
-  push:
-    branches:
-      - audit/portal-final-20260805
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: final-portal-audit-${{ github.ref }}
+  group: full-portal-audit
   cancel-in-progress: true
 
 env:
@@ -71,4 +68,4 @@ jobs:
         run: npm run smoke:dist
 
       - name: Audit repository and live Pages
-        run: node scripts/final-portal-audit.mjs
+        run: npm run audit:portal
