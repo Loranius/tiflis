@@ -112,7 +112,7 @@ export function RegistrationAdminPanel() {
             <article key={item.id} className="registration-request-v4">
               <div className="registration-person-v4">
                 <span>{item.display_name.slice(0, 1).toUpperCase()}</span>
-                <div><strong>{item.display_name}</strong><small>Логін: {item.login} · {formatDate(item.requested_at)}</small></div>
+                <div><strong>{item.display_name}</strong><small>{item.display_name === item.login ? 'Ім’я та логін' : `Логін: ${item.login}`} · {formatDate(item.requested_at)}</small></div>
               </div>
               <label><span>Роль після підтвердження</span><select value={roles[item.id] || 'waiter'} onChange={(event) => setRoles({ ...roles, [item.id]: event.target.value })}>{ROLE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <div className="registration-actions-v4">
@@ -126,7 +126,7 @@ export function RegistrationAdminPanel() {
       ) : null}
 
       {!loading && history.length > 0 ? (
-        <div className="registration-history-v4"><h4>Останні рішення</h4>{history.map((item) => <div key={item.id}><span className={`status-${item.status}`}>{item.status === 'approved' ? 'Погоджено' : 'Відхилено'}</span><strong>{item.display_name}</strong><small>{item.login} · {item.decided_by || 'Адміністратор'} · {formatDate(item.decided_at)}</small></div>)}</div>
+        <div className="registration-history-v4"><h4>Останні рішення</h4>{history.map((item) => <div key={item.id}><span className={`status-${item.status}`}>{item.status === 'approved' ? 'Погоджено' : 'Відхилено'}</span><strong>{item.display_name}</strong><small>{item.display_name === item.login ? 'Ім’я та логін збігаються' : `Логін: ${item.login}`} · {item.decided_by || 'Адміністратор'} · {formatDate(item.decided_at)}</small></div>)}</div>
       ) : null}
     </section>
   );

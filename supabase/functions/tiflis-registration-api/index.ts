@@ -46,11 +46,11 @@ function cleanText(value: unknown, maxLength: number): string {
 }
 
 function cleanLogin(value: unknown): string {
-  return cleanText(value, 40).normalize("NFKC");
+  return cleanText(value, 40).normalize("NFKC").replace(/\s+/g, " ");
 }
 
 function validLogin(value: string): boolean {
-  return /^[\p{L}\p{N}._-]{2,40}$/u.test(value);
+  return /^(?=.{2,40}$)[\p{L}\p{N}._-]+(?: [\p{L}\p{N}._-]+)*$/u.test(value);
 }
 
 function validPassword(value: string): boolean {
@@ -128,13 +128,12 @@ async function sendTelegram(destination: unknown, text: string): Promise<boolean
   return response.ok;
 }
 
-async function notifyAdmins(displayName: string, login: string): Promise<void> {
+async function notifyAdmins(login: string): Promise<void> {
   const { data, error } = await admin.from("users").select("display_name,login,role,role2,tg_id,chat_id,fired").or("fired.is.null,fired.eq.false");
   if (error) return;
   const message = [
     "🆕 <b>Нова заявка на реєстрацію</b>",
-    `Ім’я: <b>${displayName.replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</b>`,
-    `Логін: <code>${login.replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</code>`,
+    `Ім’я / логін: <b>${login.replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</b>`,
     "Погодити або відхилити заявку можна в розділі «Управління» порталу.",
   ].join("\n");
   await Promise.allSettled((data ?? []).filter((row: any) => ADMIN_ROLES.has(String(row.role)) || ADMIN_ROLES.has(String(row.role2))).map((row: any) => sendTelegram(row.chat_id || row.tg_id, message)));
@@ -171,12 +170,12 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (action === "register") {
-      const displayName = cleanText(body.display_name, 120);
       const login = cleanLogin(body.login);
+      const displayName = login;
       const password = String(body.password || "");
       const confirmation = String(body.password_confirm || "");
-      if (!displayName || !validLogin(login) || !validPassword(password) || password !== confirmation) {
-        return json(req, { ok: false, error: "Перевірте ім’я, логін і пароль. Пароль має містити щонайменше 8 символів, літеру та цифру." }, 400);
+      if (!validLogin(login) || !validPassword(password) || password !== confirmation) {
+        return json(req, { ok: false, error: "Перевірте ім’я / логін і пароль. Пароль має містити щонайменше 8 символів, літеру та цифру." }, 400);
       }
       if (!await consumeRate(req, action, login, 4)) return json(req, { ok: false, error: "Забагато спроб. Повторіть пізніше." }, 429);
 
@@ -209,7 +208,7 @@ Deno.serve(async (req: Request) => {
         throw requestError;
       }
 
-      await notifyAdmins(displayName, login);
+      await notifyAdmins(login);
       return json(req, { ok: true, status: "pending", message: "Заявку надіслано адміністратору. Після підтвердження можна буде увійти з цим логіном і паролем." }, 201);
     }
 
