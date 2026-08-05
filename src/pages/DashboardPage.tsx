@@ -6,7 +6,9 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { useKyivDay } from '../hooks/useKyivDay';
 import { supabase } from '../lib/supabase';
+import { formatKyivDateKey } from '../lib/time';
 import './dashboard.css';
 import './dashboard-cleanup.css';
 import './dashboard-practical.css';
@@ -19,7 +21,6 @@ interface ScheduleRow {
   shift: string | null;
 }
 
-const KYIV_OFFSET_MS = 3 * 60 * 60 * 1000;
 const DAILY_WISHES = [
   'Нехай сьогодні все складається спокійно, чітко й без зайвого поспіху.',
   'Бажаємо легкої комунікації, вдячних гостей і гарного командного ритму.',
@@ -35,39 +36,25 @@ const DAILY_WISHES = [
   'Бажаємо теплого дня, взаємної поваги та спокійної робочої атмосфери.',
 ];
 
-function kyivDateKey(now = new Date()): string {
-  return new Date(now.getTime() + KYIV_OFFSET_MS).toISOString().slice(0, 10);
-}
-
-function millisecondsUntilKyivMidnight(now = new Date()): number {
-  const shifted = new Date(now.getTime() + KYIV_OFFSET_MS);
-  const nextShiftedMidnight = Date.UTC(
-    shifted.getUTCFullYear(),
-    shifted.getUTCMonth(),
-    shifted.getUTCDate() + 1,
-  );
-  return Math.max(1000, nextShiftedMidnight - shifted.getTime() + 100);
-}
-
 function dailyWishFor(dayKey: string): string {
   const hash = [...dayKey].reduce((sum, char) => ((sum * 31) + char.charCodeAt(0)) >>> 0, 0);
   return DAILY_WISHES[hash % DAILY_WISHES.length] ?? 'Бажаємо гарного дня.';
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('uk-UA', {
+  return formatKyivDateKey(value, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
-  }).format(new Date(`${value}T12:00:00`));
+  });
 }
 
 function formatToday(dayKey: string): string {
-  const value = new Intl.DateTimeFormat('uk-UA', {
+  const value = formatKyivDateKey(dayKey, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-  }).format(new Date(`${dayKey}T12:00:00`));
+  });
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
@@ -91,23 +78,11 @@ function statusFor(shift: string | null): { label: string; off: boolean } {
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const [dayKey, setDayKey] = useState(() => kyivDateKey());
+  const dayKey = useKyivDay();
   const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
   const [todayShift, setTodayShift] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [operationsReady, setOperationsReady] = useState(false);
-
-  useEffect(() => {
-    let handle = 0;
-    const scheduleNext = () => {
-      handle = window.setTimeout(() => {
-        setDayKey(kyivDateKey());
-        scheduleNext();
-      }, millisecondsUntilKyivMidnight());
-    };
-    scheduleNext();
-    return () => window.clearTimeout(handle);
-  }, []);
 
   useEffect(() => {
     const idleWindow = window as Window & {
