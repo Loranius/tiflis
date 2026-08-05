@@ -22,16 +22,24 @@ function portalEntryPlugin(): Plugin {
   };
 }
 
+function portalVendorChunk(id: string): string | undefined {
+  if (id.includes('/node_modules/@supabase/')) return 'supabase-vendor';
+  if (
+    id.includes('/node_modules/react/')
+    || id.includes('/node_modules/react-dom/')
+    || id.includes('/node_modules/react-router/')
+    || id.includes('/node_modules/scheduler/')
+  ) return 'react-vendor';
+  return undefined;
+}
+
 export default defineConfig({
   base: './',
   plugins: [portalEntryPlugin(), react()],
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router'],
-          'supabase-vendor': ['@supabase/supabase-js'],
-        },
+        manualChunks: portalVendorChunk,
       },
     },
   },
