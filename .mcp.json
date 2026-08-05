@@ -1,5 +1,40 @@
 {
   "mcpServers": {
+    "tiflis-memory": {
+      "command": "npm",
+      "args": ["--prefix", "tools/tiflis-agent-core-mcp", "run", "memory"],
+      "env": {
+        "TIFLIS_MEMORY_FILE": ".agent-data/tiflis-memory.json"
+      }
+    },
+    "tiflis-brain": {
+      "command": "npm",
+      "args": ["--prefix", "tools/tiflis-agent-core-mcp", "run", "brain"],
+      "env": {
+        "TIFLIS_BRAIN_FILE": ".agent-data/tiflis-brain.json"
+      }
+    },
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "-p",
+        "3.13",
+        "serena-agent",
+        "start-mcp-server",
+        "--context",
+        "ide",
+        "--project-from-cwd"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--config",
+        "tools/tiflis-agent-stack/playwright.config.json"
+      ]
+    },
     "tiflis-visual": {
       "command": "npm",
       "args": ["--prefix", "tools/tiflis-visual-mcp", "start"],
@@ -7,8 +42,17 @@
         "TIFLIS_BASE_URL": "https://loranius.github.io/tiflis/",
         "TIFLIS_ALLOWED_ORIGINS": "https://loranius.github.io,http://localhost,http://127.0.0.1",
         "TIFLIS_HEADLESS": "true",
-        "TIFLIS_TIMEOUT_MS": "20000"
+        "TIFLIS_TIMEOUT_MS": "20000",
+        "TIFLIS_STORAGE_STATE": ".agent-data/tiflis-browser-state.json"
       }
+    },
+    "firecrawl": {
+      "type": "http",
+      "url": "https://mcp.firecrawl.dev/v2/mcp"
+    },
+    "mcp-compass": {
+      "command": "npx",
+      "args": ["-y", "@liuyoshio/mcp-compass"]
     }
   }
 }
