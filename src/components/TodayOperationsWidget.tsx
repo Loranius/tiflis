@@ -10,13 +10,14 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useKyivDay } from '../hooks/useKyivDay';
 import {
   loadDutyPlan,
   setPlannedDutyStatus,
   type DutyAssignment,
   type DutyPlanResponse,
 } from '../lib/dutyPlannerClient';
-import { localIso } from '../lib/operationsClient';
+import { isKyivWeekday } from '../lib/time';
 import './today-operations.css';
 
 function initials(name: string): string {
@@ -25,8 +26,8 @@ function initials(name: string): string {
 }
 
 export function TodayOperationsWidget() {
-  const date = useMemo(() => localIso(), []);
-  const isTuesday = useMemo(() => new Date(`${date}T12:00:00`).getDay() === 2, [date]);
+  const date = useKyivDay();
+  const isTuesday = useMemo(() => isKyivWeekday(date, 2), [date]);
   const [daily, setDaily] = useState<DutyPlanResponse | null>(null);
   const [handover, setHandover] = useState<DutyPlanResponse | null>(null);
   const [loading, setLoading] = useState(true);
