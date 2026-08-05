@@ -44,6 +44,9 @@ jobs:
       - name: Check duty planner Edge Function
         run: deno check --node-modules-dir=auto supabase/functions/tiflis-duty-planner-api/index.ts
 
+      - name: Check secure API Edge Function
+        run: deno check --node-modules-dir=auto supabase/functions/tiflis-secure-api/index.ts
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
