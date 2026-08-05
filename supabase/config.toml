@@ -10,6 +10,9 @@ verify_jwt = false
 [functions.tiflis-secure-api]
 verify_jwt = true
 
+[functions.tiflis-cash-anonymous-api]
+verify_jwt = true
+
 [functions.tiflis-menu-api]
 verify_jwt = true
 
