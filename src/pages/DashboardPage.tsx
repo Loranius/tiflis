@@ -32,6 +32,25 @@ export function DashboardPage() {
   const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [operationsReady, setOperationsReady] = useState(false);
+
+  useEffect(() => {
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    if (idleWindow.requestIdleCallback) {
+      const handle = idleWindow.requestIdleCallback(
+        () => setOperationsReady(true),
+        { timeout: 900 },
+      );
+      return () => idleWindow.cancelIdleCallback?.(handle);
+    }
+
+    const handle = window.setTimeout(() => setOperationsReady(true), 320);
+    return () => window.clearTimeout(handle);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -144,9 +163,11 @@ export function DashboardPage() {
         </article>
       </section>
 
-      <Suspense fallback={<div className="operations-deferred-placeholder route-skeleton-card" aria-label="Завантаження робочої зміни" />}>
-        <OperationsDashboard />
-      </Suspense>
+      {operationsReady ? (
+        <Suspense fallback={<div className="operations-deferred-placeholder route-skeleton-card" aria-label="Завантаження робочої зміни" />}>
+          <OperationsDashboard />
+        </Suspense>
+      ) : <div className="operations-deferred-placeholder route-skeleton-card" aria-hidden="true" />}
     </div>
   );
 }
