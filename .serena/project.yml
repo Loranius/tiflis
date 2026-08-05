@@ -1,0 +1,45 @@
+project_name: "tiflis"
+
+language_servers:
+  - typescript
+
+ignore_all_files_in_gitignore: true
+
+ignored_paths:
+  - "stable-runtime/**"
+  - "dist/**"
+  - "node_modules/**"
+  - ".agent-data/**"
+  - "tools/**/node_modules/**"
+
+read_only: false
+excluded_tools: []
+included_optional_tools: []
+
+initial_prompt: |
+  Work on the Tiflis staff portal as a mobile-first production application.
+  Use symbol-level retrieval before reading whole files. Prefer find_symbol,
+  get_symbols_overview, find_referencing_symbols, rename_symbol and symbolic
+  editing over repeated grep or broad text replacement.
+
+  Preserve these project invariants:
+  - React + TypeScript + Vite frontend.
+  - Supabase Edge Functions remain the server-side security boundary.
+  - Never expose restricted cash totals or credentials in client code.
+  - Pixel 8 Pro at 448 x 998 CSS pixels is the primary mobile viewport.
+  - Run typecheck, production build, bundle budget and smoke tests after changes.
+  - For visual work, reproduce and verify the result with Playwright or
+    tiflis-visual MCP instead of reasoning from source code alone.
+  - Record verified architecture decisions and fixed regressions in
+    tiflis-memory MCP.
+
+encoding: utf-8
+fixed_tools: []
+read_only_memory_patterns: []
+ignored_memory_patterns: []
+ls_specific_settings: {}
+ls_workspace_folders:
+  - "."
+ls_additional_workspace_folders: []
+activation_command:
+activation_command_timeout: 180.0
