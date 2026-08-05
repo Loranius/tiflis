@@ -4,6 +4,7 @@ import App from './App';
 import { AuthProvider } from './auth/AuthProvider';
 import './styles.css';
 import './performance.css';
+import './design-system.css';
 
 const LEGACY_MARKER = 'tiflis-v2-react-runtime-ready';
 
