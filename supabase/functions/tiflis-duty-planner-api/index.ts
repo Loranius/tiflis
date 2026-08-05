@@ -32,6 +32,8 @@ const DAILY_DUTIES = [
   { key: "daily_sets", title: "Сети" },
   { key: "daily_drawer_third", title: "Дровер на 3-й позиції (чистота і фраже)" },
   { key: "daily_new_hall", title: "Новий зал (столи, стільці, спецовниці)" },
+  { key: "daily_summer_terrace_cleaning", title: "Прибирання літньої тераси" },
+  { key: "daily_evening_flower_watering", title: "Полив квітів ввечері" },
 ] as const;
 
 const HANDOVER_DUTIES = [
@@ -232,11 +234,7 @@ async function writeAudit(
   if (error) console.error("duty planner audit failed", error);
 }
 
-async function loadPlan(
-  service: any,
-  type: PlanType,
-  date: string,
-) {
+async function loadPlan(service: any, type: PlanType, date: string) {
   const [usersResult, scheduleResult, dutiesResult, zonesResult, publicationResult] = await Promise.all([
     service.from("users")
       .select("id,login,display_name,role,role2,avatar,tg_id,chat_id,fired")
@@ -495,11 +493,8 @@ Deno.serve(async (req: Request) => {
         if (!user) continue;
         const name = user.display_name || user.login;
         const lines: string[] = [];
-        if (type === "daily") {
-          lines.push(`☀️ <b>Обов’язки та зона · ${dateLabel}</b>`);
-        } else {
-          lines.push(`🔄 <b>Здача зміни · ${dateLabel}</b>`);
-        }
+        if (type === "daily") lines.push(`☀️ <b>Обов’язки та зона · ${dateLabel}</b>`);
+        else lines.push(`🔄 <b>Здача зміни · ${dateLabel}</b>`);
         lines.push(`\nПривіт, <b>${escapeHtml(name)}</b>!`);
         if (personal.duties.length) {
           lines.push("\n🧹 <b>Твої обов’язки:</b>");
@@ -516,9 +511,7 @@ Deno.serve(async (req: Request) => {
         if (delivered) {
           sent += 1;
           recipients.push(name);
-        } else {
-          skipped += 1;
-        }
+        } else skipped += 1;
       }
 
       const { error: publicationError } = await service.from("ops_plan_publications").upsert({
