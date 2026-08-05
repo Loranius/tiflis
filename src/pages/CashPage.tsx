@@ -7,7 +7,6 @@ import {
   Coins,
   Crown,
   Edit3,
-  Medal,
   RefreshCw,
   Sparkles,
   Star,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { CashLeaderboard } from '../components/CashLeaderboard';
 import { secureApi } from '../lib/secureApi';
 import './cash.css';
 
@@ -58,6 +58,9 @@ interface LeaderboardRow {
   total: number | null;
   relative: number;
   mine: boolean;
+  avatar: string | null;
+  role: string;
+  role2: string | null;
 }
 
 interface RatingComment {
@@ -428,15 +431,16 @@ export function CashPage() {
         </div>
       </section> : null}
 
-      {!loading && data && tab === 'leaderboard' ? <section className="cash-leaderboard-card-v2">
-        <div className="cash-section-heading-v2"><div><span className="eyebrow">Командна динаміка</span><h3>Топ каси</h3></div><Medal size={24} /></div>
-        <div className="cash-leaderboard-periods-v3" role="group" aria-label="Період топу каси">
-          {([['first', '1–14 + ставка 15'], ['second', `15–${daysInMonth}`], ['month', 'Увесь місяць'], ['year', String(monthDate.getFullYear())]] as const).map(([key, label]) => <button type="button" key={key} className={leaderboardPeriod === key ? 'is-active' : ''} onClick={() => setLeaderboardPeriod(key)}>{label}</button>)}
-        </div>
-        <p className="cash-period-explain-v3">{leaderboardPeriod === 'first' ? '4% каси за 1–14 число + ставки за робочі дні 1–15.' : leaderboardPeriod === 'second' ? `4% каси за 15–${daysInMonth} число + ставки за робочі дні 16–${daysInMonth}.` : leaderboardPeriod === 'year' ? 'Загальна розрахункова виплата за вибраний рік.' : 'Повна розрахункова виплата за місяць.'}</p>
-        <div className="cash-leaderboard-list-v2">{data.leaderboard.map((row) => <article className={`${row.mine ? 'is-mine' : ''} ${row.rank === 1 ? 'is-leader' : ''}`} key={row.userId}><span className="cash-rank-v2">{row.rank <= 3 ? ['🥇', '🥈', '🥉'][row.rank - 1] : `#${row.rank}`}</span><span className="cash-leader-avatar-v2">{initials(row.name)}</span><div><strong>{row.name}{row.mine ? ' · ви' : ''}</strong><span><i style={{ width: `${Math.max(4, row.relative)}%` }} /></span></div><b>{row.total === null ? 'позиція' : money(row.total)}</b></article>)}</div>
-        {!data.me.canViewAll ? <p className="cash-privacy-note-v2">Суми інших працівників приховані — видно лише позицію.</p> : null}
-      </section> : null}
+      {!loading && data && tab === 'leaderboard' ? (
+        <CashLeaderboard
+          rows={data.leaderboard}
+          period={leaderboardPeriod}
+          daysInMonth={daysInMonth}
+          year={monthDate.getFullYear()}
+          canViewAll={data.me.canViewAll}
+          onPeriodChange={setLeaderboardPeriod}
+        />
+      ) : null}
 
       {!loading && data && tab === 'team' ? <section className="cash-team-rating-v2">
         <div className="cash-section-heading-v2"><div><span className="eyebrow">Сервіс і командна робота</span><h3>Рейтинг персоналу</h3></div><Star size={24} /></div>

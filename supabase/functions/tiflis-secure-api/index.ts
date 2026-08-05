@@ -336,7 +336,7 @@ Deno.serve(async (req: Request) => {
       const viewStaff = isAdmin(profile) && requestedStaff ? requestedStaff : currentStaff;
 
       const [cashResult, extrasResult, leaderboardCashResult, leaderboardExtrasResult, ratingsResult, commentsResult] = await Promise.all([
-        serviceClient.from("cash").select("id,user_id,date,cash,tips,first_cash").gte("date", range.start).lt("date", range.end).order("date", { ascending: true }),
+        serviceClient.from("cash").select("id,user_id,date,cash,tips,first_cash").eq("user_id", viewStaff.id).gte("date", range.start).lt("date", range.end).order("date", { ascending: true }),
         serviceClient.from("extra_wages").select("id,user_id,date,amount,description").eq("user_id", viewStaff.id).gte("date", range.start).lt("date", range.end).order("date", { ascending: true }),
         serviceClient.from("cash").select("id,user_id,date,cash,tips,first_cash").gte("date", leaderboardStart).lt("date", leaderboardEnd).order("date", { ascending: true }),
         serviceClient.from("extra_wages").select("id,user_id,date,amount,description").gte("date", leaderboardStart).lt("date", leaderboardEnd).order("date", { ascending: true }),
@@ -384,14 +384,25 @@ Deno.serve(async (req: Request) => {
         return { staff, total: cashForPercent * 0.04 + workDays * 200 + extras };
       }).sort((left, right) => right.total - left.total || (left.staff.display_name || left.staff.login).localeCompare(right.staff.display_name || right.staff.login, "uk"));
       const maxTotal = totals[0]?.total || 0;
-      const leaderboard = totals.map(({ staff, total }, index) => ({
-        userId: staff.id,
-        name: staff.display_name || staff.login,
-        rank: index + 1,
-        total: isAdmin(profile) || staff.id === profile.legacy_user_id ? Math.round(total * 100) / 100 : null,
-        relative: maxTotal > 0 ? Math.round((total / maxTotal) * 1000) / 10 : 0,
-        mine: staff.id === profile.legacy_user_id,
-      }));
+      const adminView = isAdmin(profile);
+      const leaderboard = totals.map(({ staff, total }, index) => {
+        const mine = staff.id === profile.legacy_user_id;
+        const exactRelative = maxTotal > 0 ? Math.round((total / maxTotal) * 1000) / 10 : 0;
+        const relative = adminView || mine
+          ? exactRelative
+          : Math.max(0, Math.min(100, Math.round(exactRelative / 5) * 5));
+        return {
+          userId: staff.id,
+          name: staff.display_name || staff.login,
+          rank: index + 1,
+          total: adminView || mine ? Math.round(total * 100) / 100 : null,
+          relative,
+          mine,
+          avatar: staff.avatar,
+          role: normalizeRole(staff.role),
+          role2: staff.role2 ? normalizeRole(staff.role2) : null,
+        };
+      });
 
       const ratingMap = new Map(((ratingsResult.data ?? []) as RatingRow[]).map((rating) => [rating.user_id || "", rating.score || 0]));
       const commentsByUser = new Map<string, RatingCommentRow[]>();
