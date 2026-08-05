@@ -3,16 +3,26 @@ name: Tiflis v2 CI
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - rewrite/react-foundation
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: tiflis-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+  VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+  VITE_BUILD_ID: ${{ github.sha }}
+
 jobs:
   build:
+    name: Validate production portal
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -24,7 +34,7 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-fund
 
       - name: Setup Deno
         uses: denoland/setup-deno@v2
@@ -40,8 +50,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Build
+      - name: Build production artifact
         run: npm run build
 
-      - name: Bundle performance budget
+      - name: Check bundle performance budget
         run: npm run perf:budget
+
+      - name: Smoke-test built portal
+        run: npm run smoke:dist
