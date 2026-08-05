@@ -12,7 +12,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { accessiblePages, pages, type PageKey } from '../lib/acl';
@@ -64,6 +64,13 @@ export const AppShell = memo(function AppShell() {
     () => navigation.find((key) => location.pathname.startsWith(pages[key].path)) || 'today',
     [location.pathname, navigation],
   );
+  const previousActiveRef = useRef<PageKey>(activeKey);
+  const previousIndex = navigation.indexOf(previousActiveRef.current);
+  const activeIndex = navigation.indexOf(activeKey);
+  const transitionDirection = previousIndex >= 0 && activeIndex >= 0 && activeIndex < previousIndex
+    ? 'backward'
+    : 'forward';
+
   const mobilePrimary = useMemo(
     () => mobilePriority.filter((key) => navigation.includes(key)).slice(0, 4),
     [navigation],
@@ -73,6 +80,10 @@ export const AppShell = memo(function AppShell() {
     [mobilePrimary, navigation],
   );
   const moreContainsActive = mobileSecondary.includes(activeKey);
+
+  useEffect(() => {
+    previousActiveRef.current = activeKey;
+  }, [activeKey]);
 
   useEffect(() => {
     if (!user) return;
@@ -161,7 +172,7 @@ export const AppShell = memo(function AppShell() {
         <header className="topbar">
           <div>
             <span className="eyebrow">Тифліс · робочий портал</span>
-            <h1>{pages[activeKey].title}</h1>
+            <h1 key={activeKey} className="topbar-title-transition">{pages[activeKey].title}</h1>
           </div>
           <div className="topbar-profile">
             <div className="avatar avatar-small">{user.displayName.slice(0, 1).toUpperCase()}</div>
@@ -172,7 +183,13 @@ export const AppShell = memo(function AppShell() {
           </div>
         </header>
         <section className="page-content">
-          <Outlet />
+          <div
+            key={location.pathname}
+            className="route-transition"
+            data-direction={transitionDirection}
+          >
+            <Outlet />
+          </div>
         </section>
       </main>
 
