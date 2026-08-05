@@ -125,14 +125,46 @@ Deno.serve(async (req: Request) => {
       .map((row) => row && typeof row === "object" ? row as Record<string, unknown> : {})
       .filter((item) => typeof item.userId === "string" && positiveCashUsers.has(item.userId))
       .sort((left, right) => Number(left.rank || 0) - Number(right.rank || 0))
-      .map((item, index) => ({ rank: index + 1, mine: item.mine === true }));
+      .map((item, index) => {
+        const rank = index + 1;
+        const name = typeof item.name === "string" && item.name.trim()
+          ? item.name.trim()
+          : `Працівник #${rank}`;
+        const avatar = typeof item.avatar === "string" && item.avatar.trim()
+          ? item.avatar.trim()
+          : null;
+        const role = typeof item.role === "string" && item.role.trim()
+          ? item.role.trim()
+          : "staff";
+        const role2 = typeof item.role2 === "string" && item.role2.trim()
+          ? item.role2.trim()
+          : null;
+        const total = typeof item.total === "number" && Number.isFinite(item.total)
+          ? item.total
+          : null;
+        const relativeValue = Number(item.relative ?? 0);
+        const relative = Number.isFinite(relativeValue) ? relativeValue : 0;
+
+        return {
+          userId: item.userId,
+          name,
+          rank,
+          total,
+          relative,
+          mine: item.mine === true,
+          avatar,
+          role,
+          role2,
+        };
+      });
 
     return json(req, {
       ...payload,
       leaderboard,
-      leaderboardPrivacy: "anonymous-positive-cash-ranks-only",
+      leaderboardPrivacy: "named-staff-with-protected-totals",
     });
-  } catch {
+  } catch (error) {
+    console.error("tiflis-cash-anonymous-api failed", error);
     return json(req, { ok: false, error: "Cash service unavailable" }, 502);
   }
 });
