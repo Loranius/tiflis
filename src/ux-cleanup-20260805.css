@@ -1,0 +1,4 @@
+/* Final interface cleanup requested during the August practical UX pass. */
+.admin-tabs-v2>button:nth-child(5){display:none!important}
+.today-emblem-v3{display:none!important}
+.today-hero-v3{grid-template-columns:minmax(0,1fr)!important}
