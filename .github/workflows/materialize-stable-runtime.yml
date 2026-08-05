@@ -1,0 +1,91 @@
+name: Materialize stable Pages runtime
+
+on:
+  push:
+    branches:
+      - fix/stable-runtime-fallback
+  workflow_run:
+    workflows:
+      - Tiflis v2 CI
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stable-pages-runtime-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  materialize:
+    name: Commit verified browser runtime
+    if: >-
+      (github.event_name == 'push' && !contains(github.event.head_commit.message, '[stable-runtime]')) ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       !contains(github.event.workflow_run.head_commit.message, '[stable-runtime]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      TARGET_BRANCH: ${{ github.event_name == 'workflow_run' && 'main' || github.ref_name }}
+      VITE_BUILD_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      STABLE_SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+    steps:
+      - name: Checkout verified source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm install --no-fund
+
+      - name: Build verified portal
+        run: npm run build
+
+      - name: Verify production artifact
+        run: |
+          npm run perf:budget
+          npm run smoke:dist
+
+      - name: Materialize stable runtime
+        run: npm run stable:materialize
+
+      - name: Verify fallback files
+        run: |
+          test -s stable-runtime/loader.js
+          test -s stable-runtime/version.json
+          test -n "$(find stable-runtime/assets -type f -print -quit)"
+          grep -q "$SOURCE_SHA" stable-runtime/version.json
+
+      - name: Commit stable runtime
+        run: |
+          remote_sha=$(git ls-remote origin "refs/heads/${TARGET_BRANCH}" | awk '{print $1}')
+          if [ "$remote_sha" != "$SOURCE_SHA" ]; then
+            echo "Branch advanced from $SOURCE_SHA to $remote_sha; stale runtime commit skipped."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A stable-runtime .nojekyll
+
+          if git diff --cached --quiet; then
+            echo "Stable runtime is already current."
+            exit 0
+          fi
+
+          git commit -m "chore: refresh stable Pages runtime [stable-runtime]"
+          git push origin "HEAD:refs/heads/${TARGET_BRANCH}"
