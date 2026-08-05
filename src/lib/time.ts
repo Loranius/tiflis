@@ -64,39 +64,10 @@ export function formatKyivDateKey(
 }
 
 export function isKyivWeekday(value: string, weekday: number): boolean {
-  const date = dateKeyToStableDate(value);
-  const day = Number(new Intl.DateTimeFormat('en-US', {
-    timeZone: KYIV_TIME_ZONE,
-    weekday: 'short',
-  }).format(date) === 'Sun'
-    ? 0
-    : new Intl.DateTimeFormat('en-US', {
-      timeZone: KYIV_TIME_ZONE,
-      weekday: 'short',
-    }).format(date) === 'Mon'
-      ? 1
-      : new Intl.DateTimeFormat('en-US', {
-        timeZone: KYIV_TIME_ZONE,
-        weekday: 'short',
-      }).format(date) === 'Tue'
-        ? 2
-        : new Intl.DateTimeFormat('en-US', {
-          timeZone: KYIV_TIME_ZONE,
-          weekday: 'short',
-        }).format(date) === 'Wed'
-          ? 3
-          : new Intl.DateTimeFormat('en-US', {
-            timeZone: KYIV_TIME_ZONE,
-            weekday: 'short',
-          }).format(date) === 'Thu'
-            ? 4
-            : new Intl.DateTimeFormat('en-US', {
-              timeZone: KYIV_TIME_ZONE,
-              weekday: 'short',
-            }).format(date) === 'Fri'
-              ? 5
-              : 6);
-  return day === weekday;
+  if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+    throw new Error(`Некоректний день тижня: ${weekday}`);
+  }
+  return dateKeyToStableDate(value).getUTCDay() === weekday;
 }
 
 export function millisecondsUntilNextKyivDay(now = new Date()): number {
