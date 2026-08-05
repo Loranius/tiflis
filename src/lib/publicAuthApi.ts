@@ -7,11 +7,14 @@ interface PublicAuthResponse {
   status?: string;
 }
 
-async function request(body: Record<string, unknown>): Promise<PublicAuthResponse> {
+async function request(
+  functionName: 'tiflis-registration-api' | 'tiflis-password-reset-api',
+  body: Record<string, unknown>,
+): Promise<PublicAuthResponse> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 20_000);
   try {
-    const response = await fetch(edgeFunctionUrl('tiflis-registration-api'), {
+    const response = await fetch(edgeFunctionUrl(functionName), {
       method: 'POST',
       headers: {
         apikey: supabasePublishableKey,
@@ -39,7 +42,7 @@ export function registerPortalUser(input: {
   password: string;
   passwordConfirm: string;
 }) {
-  return request({
+  return request('tiflis-registration-api', {
     action: 'register',
     display_name: input.login,
     login: input.login,
@@ -49,7 +52,7 @@ export function registerPortalUser(input: {
 }
 
 export function requestPasswordReset(login: string) {
-  return request({ action: 'reset_request', login });
+  return request('tiflis-password-reset-api', { action: 'reset_request', login });
 }
 
 export function confirmPasswordReset(input: {
@@ -58,7 +61,7 @@ export function confirmPasswordReset(input: {
   password: string;
   passwordConfirm: string;
 }) {
-  return request({
+  return request('tiflis-password-reset-api', {
     action: 'reset_confirm',
     login: input.login,
     code: input.code,
