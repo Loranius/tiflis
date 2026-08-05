@@ -1,0 +1,94 @@
+@media (max-width: 700px) {
+  .duty-planner-table-wrap-v1 {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .duty-planner-table-v1,
+  .duty-planner-table-v1 tbody,
+  .duty-planner-table-v1 tr,
+  .duty-planner-table-v1 td {
+    display: block;
+    width: 100%;
+  }
+
+  .duty-planner-table-v1 {
+    min-width: 0;
+    border-collapse: separate;
+  }
+
+  .duty-planner-table-v1 thead {
+    display: none;
+  }
+
+  .duty-planner-table-v1 tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .duty-planner-table-v1 tr {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: linear-gradient(145deg, var(--surface-2), var(--surface));
+  }
+
+  .duty-planner-table-v1 td {
+    display: grid;
+    gap: 8px;
+    padding: 13px 14px;
+    border: 0;
+    text-align: left;
+  }
+
+  .duty-planner-table-v1 td + td {
+    border-top: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.018);
+  }
+
+  .duty-planner-table-v1 td::before {
+    display: block;
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+
+  .duty-planner-table-v1:not(.is-zones) td:first-child::before {
+    content: 'Обов’язок';
+  }
+
+  .duty-planner-table-v1:not(.is-zones) td:nth-child(2)::before {
+    content: 'Відповідальний офіціант';
+  }
+
+  .duty-planner-table-v1.is-zones td:first-child::before {
+    content: 'Зона';
+  }
+
+  .duty-planner-table-v1.is-zones td:nth-child(2)::before {
+    content: 'Офіціанти';
+  }
+
+  .duty-planner-table-v1 td:first-child {
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .duty-planner-table-v1 select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .duty-planner-zone-selects-v1 {
+    grid-template-columns: 1fr;
+  }
+
+  .duty-planner-person-v1 {
+    width: 100%;
+    justify-content: space-between;
+    border-radius: 12px;
+  }
+}
