@@ -1,9 +1,11 @@
 name: Deploy GitHub Pages
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - Tiflis v2 CI
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -13,20 +15,27 @@ permissions:
 
 concurrency:
   group: github-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
   VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+  VITE_BUILD_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   build:
-    name: Build Pages artifact
+    name: Build verified Pages artifact
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout
+      - name: Checkout verified commit
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -38,7 +47,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-fund
 
       - name: Build production site
         run: npm run build
@@ -46,21 +55,25 @@ jobs:
       - name: Check bundle budget
         run: npm run perf:budget
 
-      - name: Upload Pages artifact
+      - name: Smoke-test exact deployment artifact
+        run: npm run smoke:dist
+
+      - name: Upload verified Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
           path: ./dist
 
   deploy:
-    name: Deploy to GitHub Pages
+    name: Atomically deploy GitHub Pages
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - name: Deploy Pages
+      - name: Deploy verified artifact
         id: deployment
         uses: actions/deploy-pages@v4
