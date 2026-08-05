@@ -28,6 +28,18 @@ const icons: Record<PageKey, LucideIcon> = {
   admin: Settings,
 };
 
+const roleNames: Record<string, string> = {
+  sysadmin: 'Системний адміністратор',
+  admin: 'Адміністратор',
+  chef: 'Шеф-кухар',
+  cook: 'Кухар',
+  waiter: 'Офіціант',
+  bar: 'Бар',
+  hostess: 'Хостес',
+  runner: 'Ранер',
+  staff: 'Працівник',
+};
+
 const preferredWarmOrder: PageKey[] = ['schedule', 'menu', 'reserve', 'cash', 'staff', 'admin'];
 const mobilePriority: PageKey[] = ['today', 'schedule', 'menu', 'reserve', 'cash', 'staff', 'admin'];
 
@@ -100,7 +112,7 @@ export const AppShell = memo(function AppShell() {
 
   if (!user) return null;
 
-  const roleLabel = user.role === 'sysadmin' ? 'Системний адміністратор' : user.role;
+  const roleLabel = roleNames[user.role] || user.role;
   const mobileNavCount = mobilePrimary.length + (mobileSecondary.length > 0 ? 1 : 0);
 
   return (
@@ -190,6 +202,7 @@ export const AppShell = memo(function AppShell() {
             className={`mobile-nav-item mobile-nav-more${moreContainsActive || moreOpen ? ' is-active' : ''}`}
             onClick={() => setMoreOpen(true)}
             aria-expanded={moreOpen}
+            aria-haspopup="dialog"
             aria-controls="mobile-more-sheet"
           >
             <MoreHorizontal size={21} strokeWidth={1.9} />
@@ -198,61 +211,59 @@ export const AppShell = memo(function AppShell() {
         ) : null}
       </nav>
 
-      <div
-        className={`mobile-more-backdrop${moreOpen ? ' is-open' : ''}`}
-        onMouseDown={() => setMoreOpen(false)}
-        aria-hidden={!moreOpen}
-      >
-        <section
-          id="mobile-more-sheet"
-          className="mobile-more-sheet"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Додаткові розділи"
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          <div className="mobile-more-heading">
-            <div>
-              <span className="eyebrow">Навігація</span>
-              <h2>Ще</h2>
+      {moreOpen ? (
+        <div className="mobile-more-backdrop is-open" onMouseDown={() => setMoreOpen(false)}>
+          <section
+            id="mobile-more-sheet"
+            className="mobile-more-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Додаткові розділи"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="mobile-more-heading">
+              <div>
+                <span className="eyebrow">Навігація</span>
+                <h2>Ще</h2>
+              </div>
+              <button className="mobile-more-close" type="button" onClick={() => setMoreOpen(false)} aria-label="Закрити">
+                <X size={20} />
+              </button>
             </div>
-            <button className="mobile-more-close" type="button" onClick={() => setMoreOpen(false)} aria-label="Закрити">
-              <X size={20} />
+
+            <div className="mobile-more-profile">
+              <div className="avatar">{user.displayName.slice(0, 1).toUpperCase()}</div>
+              <div className="mobile-more-profile-copy">
+                <strong>{user.displayName}</strong>
+                <span>{roleLabel}</span>
+              </div>
+            </div>
+
+            <nav className="mobile-more-links" aria-label="Додаткові розділи порталу">
+              {mobileSecondary.map((key) => {
+                const Icon = icons[key];
+                return (
+                  <NavLink
+                    key={key}
+                    to={pages[key].path}
+                    onPointerDown={() => warmPage(key)}
+                    className={({ isActive }) => `mobile-more-link${isActive ? ' is-active' : ''}`}
+                  >
+                    <Icon size={20} strokeWidth={1.9} />
+                    <span>{pages[key].title}</span>
+                    <ChevronRight size={17} />
+                  </NavLink>
+                );
+              })}
+            </nav>
+
+            <button className="mobile-more-logout" type="button" onClick={() => void logout()}>
+              <LogOut size={18} />
+              Вийти з порталу
             </button>
-          </div>
-
-          <div className="mobile-more-profile">
-            <div className="avatar">{user.displayName.slice(0, 1).toUpperCase()}</div>
-            <div className="mobile-more-profile-copy">
-              <strong>{user.displayName}</strong>
-              <span>{roleLabel}</span>
-            </div>
-          </div>
-
-          <nav className="mobile-more-links" aria-label="Додаткові розділи порталу">
-            {mobileSecondary.map((key) => {
-              const Icon = icons[key];
-              return (
-                <NavLink
-                  key={key}
-                  to={pages[key].path}
-                  onPointerDown={() => warmPage(key)}
-                  className={({ isActive }) => `mobile-more-link${isActive ? ' is-active' : ''}`}
-                >
-                  <Icon size={20} strokeWidth={1.9} />
-                  <span>{pages[key].title}</span>
-                  <ChevronRight size={17} />
-                </NavLink>
-              );
-            })}
-          </nav>
-
-          <button className="mobile-more-logout" type="button" onClick={() => void logout()}>
-            <LogOut size={18} />
-            Вийти з порталу
-          </button>
-        </section>
-      </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 });
