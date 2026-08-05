@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './auth/AuthProvider';
 import { ModalRuntime } from './components/ModalRuntime';
+import { PortalWarmup } from './components/PortalWarmup';
 import { RootErrorBoundary } from './components/RootErrorBoundary';
 import './styles.css';
 import './performance.css';
@@ -120,6 +121,7 @@ createRoot(root).render(
     <RootErrorBoundary>
       <ModalRuntime />
       <AuthProvider>
+        <PortalWarmup />
         <App />
       </AuthProvider>
     </RootErrorBoundary>
