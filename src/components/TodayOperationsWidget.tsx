@@ -2,10 +2,12 @@ import {
   CheckCircle2,
   Circle,
   ClipboardCheck,
+  Clock3,
   MapPinned,
   RefreshCw,
   RotateCcw,
   TriangleAlert,
+  UsersRound,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -16,6 +18,11 @@ import {
 } from '../lib/dutyPlannerClient';
 import { localIso } from '../lib/operationsClient';
 import './today-operations.css';
+
+function initials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '').join('');
+}
 
 export function TodayOperationsWidget() {
   const date = useMemo(() => localIso(), []);
@@ -57,6 +64,18 @@ export function TodayOperationsWidget() {
     () => new Map((daily?.zones || []).map((item) => [item.key, item.title])),
     [daily],
   );
+  const zonesByWaiter = useMemo(() => {
+    const result = new Map<string, string[]>();
+    if (!daily?.publication) return result;
+
+    daily.zoneAssignments.forEach((assignment) => {
+      const title = zoneDefinitions.get(assignment.zone_key) || assignment.zone_key;
+      const current = result.get(assignment.assignee_id) || [];
+      if (!current.includes(title)) current.push(title);
+      result.set(assignment.assignee_id, current);
+    });
+    return result;
+  }, [daily, zoneDefinitions]);
 
   const dailyAssignments = daily?.publication
     ? daily.assignments.filter((item) => item.assignee_id === daily.me.id)
@@ -101,9 +120,53 @@ export function TodayOperationsWidget() {
   }
 
   const hasPublishedWork = dailyAssignments.length > 0 || personalZones.length > 0 || handoverAssignments.length > 0;
+  const workingWaiters = daily?.workingWaiters || [];
 
   return (
     <section className="today-operations-v4">
+      <section className="today-shift-team-v4" aria-labelledby="today-shift-team-title">
+        <header>
+          <div>
+            <span className="eyebrow">Команда сьогодні</span>
+            <h3 id="today-shift-team-title">Офіціанти на зміні</h3>
+            <p>Актуальний склад зміни та робочі зони після публікації розподілу.</p>
+          </div>
+          <span className="today-shift-team-count-v4"><UsersRound size={18} /><strong>{loading ? '…' : workingWaiters.length}</strong></span>
+        </header>
+
+        {!loading && workingWaiters.length > 0 ? (
+          <div className="today-shift-team-grid-v4">
+            {workingWaiters.map((waiter) => {
+              const zones = zonesByWaiter.get(waiter.id) || [];
+              const own = waiter.id === daily?.me.id;
+              return (
+                <article key={waiter.id} className={own ? 'is-own' : ''}>
+                  <span className="today-shift-avatar-v4">
+                    {waiter.avatar ? <img src={waiter.avatar} alt="" loading="lazy" /> : <span>{initials(waiter.name)}</span>}
+                  </span>
+                  <div className="today-shift-person-v4">
+                    <strong>{waiter.name}{own ? ' · ви' : ''}</strong>
+                    <span><Clock3 size={13} /> Зміна {waiter.shift}</span>
+                    <small className={zones.length ? 'has-zone' : ''}>
+                      <MapPinned size={13} />
+                      {zones.length ? zones.join(' · ') : daily?.publication ? 'Зону не призначено' : 'Зони ще не опубліковані'}
+                    </small>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {!loading && workingWaiters.length === 0 ? (
+          <div className="today-shift-team-empty-v4">
+            <UsersRound size={24} />
+            <strong>Офіціантів на сьогодні не знайдено</strong>
+            <span>Список з’явиться після заповнення графіка.</span>
+          </div>
+        ) : null}
+      </section>
+
       <header className="today-operations-heading-v4">
         <div>
           <span className="eyebrow">Операційна зміна</span>
