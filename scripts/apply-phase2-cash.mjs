@@ -10,12 +10,7 @@ function replaceOnce(source, before, after, label) {
 const cashPath = 'src/pages/CashPage.tsx';
 let cash = await readFile(cashPath, 'utf8');
 
-cash = replaceOnce(
-  cash,
-  "  Medal,\n",
-  '',
-  'remove obsolete Medal import',
-);
+cash = replaceOnce(cash, "  Medal,\n", '', 'remove obsolete Medal import');
 
 cash = replaceOnce(
   cash,
@@ -117,22 +112,4 @@ secure = replaceOnce(
 );
 
 await writeFile(securePath, secure, 'utf8');
-
-const ciPath = '.github/workflows/ci.yml';
-let ci = await readFile(ciPath, 'utf8');
-ci = replaceOnce(
-  ci,
-  `      - name: Check duty planner Edge Function
-        run: deno check --node-modules-dir=auto supabase/functions/tiflis-duty-planner-api/index.ts
-`,
-  `      - name: Check duty planner Edge Function
-        run: deno check --node-modules-dir=auto supabase/functions/tiflis-duty-planner-api/index.ts
-
-      - name: Check secure API Edge Function
-        run: deno check --node-modules-dir=auto supabase/functions/tiflis-secure-api/index.ts
-`,
-  'secure API CI check',
-);
-await writeFile(ciPath, ci, 'utf8');
-
 console.log('Phase 2 cash privacy patch applied successfully.');
