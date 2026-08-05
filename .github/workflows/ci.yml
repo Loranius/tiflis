@@ -26,6 +26,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check duty planner Edge Function
+        run: deno check --node-modules-dir=auto supabase/functions/tiflis-duty-planner-api/index.ts
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
