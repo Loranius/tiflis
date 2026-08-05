@@ -40,10 +40,7 @@ interface MenuItem {
 
 interface MenuBootstrapResponse {
   ok: true;
-  permissions: {
-    canToggleStop: boolean;
-    canEdit: boolean;
-  };
+  permissions: { canToggleStop: boolean; canEdit: boolean };
   items: MenuItem[];
 }
 
@@ -69,6 +66,13 @@ interface MenuEditorState {
   sortOrder: number;
 }
 
+interface VisibleCategory {
+  key: string;
+  section: string;
+  category: string;
+  items: MenuItem[];
+}
+
 const SECTION_META: Record<string, { label: string; icon: string; order: number }> = {
   main: { label: 'Основне меню', icon: '🍽️', order: 1 },
   bar: { label: 'Бар', icon: '🍸', order: 2 },
@@ -78,6 +82,21 @@ const SECTION_META: Record<string, { label: string; icon: string; order: number 
   banquet: { label: 'Банкетне', icon: '🎉', order: 6 },
   lean: { label: 'Пісне', icon: '🕊️', order: 7 },
 };
+
+const MAIN_CATEGORY_ORDER = [
+  'Холодні закуски',
+  'Салати',
+  'Перші страви',
+  'Мангал',
+  'Основні страви',
+  'Хінкалі',
+  'Гарніри',
+  'Хлібобулочні',
+  'Десерти',
+  'До пива',
+] as const;
+
+const LUNCH_CATEGORY_ORDER = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пятниця'] as const;
 
 const ALLERGENS = [
   'Глютен', 'Молоко', 'Яйця', 'Горіхи', 'Риба', 'Морепродукти', 'Соя',
@@ -92,14 +111,33 @@ function sectionIcon(section: string): string {
   return SECTION_META[section]?.icon || '𐃯';
 }
 
+function sectionOrder(section: string): number {
+  return SECTION_META[section]?.order ?? 999;
+}
+
+function categoryOrder(section: string, category: string): number {
+  if (section === 'main') {
+    const index = MAIN_CATEGORY_ORDER.indexOf(category as (typeof MAIN_CATEGORY_ORDER)[number]);
+    return index >= 0 ? index : 999;
+  }
+  if (section === 'lunch') {
+    const index = LUNCH_CATEGORY_ORDER.indexOf(category as (typeof LUNCH_CATEGORY_ORDER)[number]);
+    return index >= 0 ? index : 999;
+  }
+  return 999;
+}
+
+function compareCategories(section: string, left: string, right: string): number {
+  return categoryOrder(section, left) - categoryOrder(section, right)
+    || left.localeCompare(right, 'uk');
+}
+
 function money(value: number | string | null): string {
   if (value === null || value === '') return 'Ціну не вказано';
   const amount = Number(value);
   if (!Number.isFinite(amount)) return 'Ціну не вказано';
   return new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'UAH',
-    maximumFractionDigits: 0,
+    style: 'currency', currency: 'UAH', maximumFractionDigits: 0,
   }).format(amount);
 }
 
@@ -108,11 +146,7 @@ function formatUpdatedAt(value: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Не вказано';
   return new Intl.DateTimeFormat('uk-UA', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
   }).format(date);
 }
 
@@ -142,12 +176,8 @@ function createEditor(item?: MenuItem): MenuEditorState {
     description: item?.description || '',
     photo: item?.photo || '',
     allergens: item?.allergens || [],
-    cookTimeNormal: item?.cook_time_normal === null || item?.cook_time_normal === undefined
-      ? ''
-      : String(item.cook_time_normal),
-    cookTimeBusy: item?.cook_time_busy === null || item?.cook_time_busy === undefined
-      ? ''
-      : String(item.cook_time_busy),
+    cookTimeNormal: item?.cook_time_normal === null || item?.cook_time_normal === undefined ? '' : String(item.cook_time_normal),
+    cookTimeBusy: item?.cook_time_busy === null || item?.cook_time_busy === undefined ? '' : String(item.cook_time_busy),
     emoji: item?.emoji || '',
     stopped: item?.stopped || false,
     sortOrder: item?.sort_order || 0,
@@ -168,7 +198,7 @@ export function MenuPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [activeSection, setActiveSection] = useState('all');
+  const [activeSection, setActiveSection] = useState('main');
   const [activeCategory, setActiveCategory] = useState('all');
   const [busyMode, setBusyMode] = useState(false);
   const [selected, setSelected] = useState<MenuItem | null>(null);
@@ -178,10 +208,7 @@ export function MenuPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await secureApi<MenuBootstrapResponse>(
-        { action: 'menu_bootstrap' },
-        'tiflis-menu-api',
-      );
+      const response = await secureApi<MenuBootstrapResponse>({ action: 'menu_bootstrap' }, 'tiflis-menu-api');
       setData(response);
       setItems(response.items);
     } catch (reason) {
@@ -196,20 +223,20 @@ export function MenuPage() {
   const sections = useMemo(() => {
     const counts = new Map<string, number>();
     items.forEach((item) => counts.set(item.section, (counts.get(item.section) || 0) + 1));
-    return [...counts.entries()].sort(([left], [right]) => {
-      const leftOrder = SECTION_META[left]?.order ?? 999;
-      const rightOrder = SECTION_META[right]?.order ?? 999;
-      return leftOrder - rightOrder || sectionLabel(left).localeCompare(sectionLabel(right), 'uk');
-    });
+    return [...counts.entries()].sort(([left], [right]) => (
+      sectionOrder(left) - sectionOrder(right)
+      || sectionLabel(left).localeCompare(sectionLabel(right), 'uk')
+    ));
   }, [items]);
 
   const categories = useMemo(() => {
-    const scoped = activeSection === 'all'
-      ? items
-      : items.filter((item) => item.section === activeSection);
+    const scoped = activeSection === 'all' ? items : items.filter((item) => item.section === activeSection);
     const counts = new Map<string, number>();
     scoped.forEach((item) => counts.set(item.category, (counts.get(item.category) || 0) + 1));
-    return [...counts.entries()].sort(([left], [right]) => left.localeCompare(right, 'uk'));
+    return [...counts.entries()].sort(([left], [right]) => {
+      if (activeSection !== 'all') return compareCategories(activeSection, left, right);
+      return left.localeCompare(right, 'uk');
+    });
   }, [activeSection, items]);
 
   useEffect(() => {
@@ -223,26 +250,34 @@ export function MenuPage() {
     return items.filter((item) => {
       if (activeSection !== 'all' && item.section !== activeSection) return false;
       if (activeCategory !== 'all' && item.category !== activeCategory) return false;
-      if (query && !itemSearchText(item).includes(query)) return false;
-      return true;
+      return !query || itemSearchText(item).includes(query);
     });
   }, [activeCategory, activeSection, items, search]);
 
-  const metrics = useMemo(() => {
-    const stopped = items.filter((item) => item.stopped).length;
-    const photographed = items.filter((item) => item.photo).length;
-    const timed = items.filter((item) => item.cook_time_normal !== null).length;
-    return { stopped, photographed, timed };
-  }, [items]);
+  const metrics = useMemo(() => ({
+    photographed: items.filter((item) => item.photo).length,
+    timed: items.filter((item) => item.cook_time_normal !== null).length,
+  }), [items]);
 
-  const visibleCategories = useMemo(() => {
-    const groups = new Map<string, MenuItem[]>();
+  const visibleCategories = useMemo<VisibleCategory[]>(() => {
+    const groups = new Map<string, VisibleCategory>();
     filtered.forEach((item) => {
-      const group = groups.get(item.category) || [];
-      group.push(item);
-      groups.set(item.category, group);
+      const key = `${item.section}::${item.category}`;
+      const current = groups.get(key) || { key, section: item.section, category: item.category, items: [] };
+      current.items.push(item);
+      groups.set(key, current);
     });
-    return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right, 'uk'));
+    return [...groups.values()]
+      .map((group) => ({
+        ...group,
+        items: [...group.items].sort((left, right) => (
+          left.sort_order - right.sort_order || left.name.localeCompare(right.name, 'uk')
+        )),
+      }))
+      .sort((left, right) => (
+        sectionOrder(left.section) - sectionOrder(right.section)
+        || compareCategories(left.section, left.category, right.category)
+      ));
   }, [filtered]);
 
   async function saveItem() {
@@ -286,10 +321,7 @@ export function MenuPage() {
     setSaving(true);
     setError(null);
     try {
-      await secureApi<{ ok: true }>(
-        { action: 'menu_delete_item', id: editor.id },
-        'tiflis-menu-api',
-      );
+      await secureApi<{ ok: true }>({ action: 'menu_delete_item', id: editor.id }, 'tiflis-menu-api');
       setItems((current) => current.filter((item) => item.id !== editor.id));
       setEditor(null);
       setSelected(null);
@@ -305,8 +337,8 @@ export function MenuPage() {
       <section className="menu-hero-v2">
         <div>
           <span className="eyebrow">Каталог ресторану</span>
-          <h2>Меню, яке працює під час сервісу</h2>
-          <p>Швидкий пошук по 315 позиціях, фото, склад, алергени та час кухні без зайвих службових перемикачів.</p>
+          <h2>Меню ресторану</h2>
+          <p>Основне меню відкривається першим, а категорії йдуть у робочій черзі подачі.</p>
         </div>
         <div className="menu-hero-mark"><ChefHat size={36} /></div>
       </section>
@@ -314,11 +346,7 @@ export function MenuPage() {
       <section className="menu-command-v2">
         <label className="menu-search-v2">
           <Search size={19} />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Страва, напій, склад або алерген…"
-          />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Страва, напій, склад або алерген…" />
           {search ? <button type="button" onClick={() => setSearch('')} aria-label="Очистити пошук"><X size={16} /></button> : null}
         </label>
         <div className="menu-command-actions-v2">
@@ -336,7 +364,11 @@ export function MenuPage() {
       <section className="menu-browser-v2">
         <div className="menu-section-tabs-v2" role="tablist" aria-label="Розділи меню">
           <button type="button" role="tab" aria-selected={activeSection === 'all'} className={activeSection === 'all' ? 'is-active' : ''} onClick={() => setActiveSection('all')}><Sparkles size={16} /> Усе <span>{items.length}</span></button>
-          {sections.map(([section, count]) => <button type="button" role="tab" aria-selected={activeSection === section} className={activeSection === section ? 'is-active' : ''} onClick={() => setActiveSection(section)} key={section}><span className="menu-tab-symbol">{sectionIcon(section)}</span>{sectionLabel(section)} <span>{count}</span></button>)}
+          {sections.map(([section, count]) => (
+            <button type="button" role="tab" aria-selected={activeSection === section} className={activeSection === section ? 'is-active' : ''} onClick={() => setActiveSection(section)} key={section}>
+              <span className="menu-tab-symbol">{sectionIcon(section)}</span>{sectionLabel(section)} <span>{count}</span>
+            </button>
+          ))}
         </div>
 
         <div className="menu-category-tabs-v2">
@@ -346,25 +378,18 @@ export function MenuPage() {
 
         {error ? <div className="menu-alert-v2" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
         {loading ? <div className="menu-loading-v2"><RefreshCw size={24} className="is-spinning" /><span>Готуємо каталог…</span></div> : null}
-
         {!loading && filtered.length === 0 ? <div className="menu-empty-v2"><Search size={30} /><strong>Нічого не знайдено</strong><span>Змініть секцію, категорію або пошуковий запит.</span></div> : null}
 
         {!loading ? <div className="menu-category-groups-v2">
-          {visibleCategories.map(([category, categoryItems]) => <section key={category} className="menu-category-group-v2">
-            <div className="menu-category-heading-v2"><div><span className="eyebrow">{activeSection === 'all' ? sectionLabel(categoryItems[0]?.section || '') : sectionLabel(activeSection)}</span><h3>{category}</h3></div><span>{categoryItems.length} позицій</span></div>
-            <div className="menu-table-v3" aria-label={`Категорія: ${category}`}>
+          {visibleCategories.map((group) => <section key={group.key} className="menu-category-group-v2">
+            <div className="menu-category-heading-v2"><div><span className="eyebrow">{sectionLabel(group.section)}</span><h3>{group.category}</h3></div><span>{group.items.length} позицій</span></div>
+            <div className="menu-table-v3" aria-label={`Категорія: ${group.category}`}>
               <div className="menu-table-heading-v3" aria-hidden="true"><span>Позиція</span><span>Ціна / вага</span></div>
-              {categoryItems.map((item) => {
+              {group.items.map((item) => {
                 const shownTime = busyMode ? item.cook_time_busy : item.cook_time_normal;
                 const allergenCount = (item.allergens || []).length;
                 return (
-                  <button
-                    type="button"
-                    className={`menu-table-row-v3 ${item.stopped ? 'is-stopped' : ''}`}
-                    key={item.id}
-                    onClick={() => setSelected(item)}
-                    aria-label={`${item.name}, ${money(item.price)}${item.weight ? `, ${item.weight}` : ''}`}
-                  >
+                  <button type="button" className={`menu-table-row-v3 ${item.stopped ? 'is-stopped' : ''}`} key={item.id} onClick={() => setSelected(item)} aria-label={`${item.name}, ${money(item.price)}${item.weight ? `, ${item.weight}` : ''}`}>
                     <span className="menu-table-name-v3">
                       <i><SectionSymbol section={item.section} /></i>
                       <span>
@@ -378,10 +403,7 @@ export function MenuPage() {
                         </small>
                       </span>
                     </span>
-                    <span className="menu-table-value-v3">
-                      <strong>{money(item.price)}</strong>
-                      <small>{item.weight || 'Вагу не вказано'}</small>
-                    </span>
+                    <span className="menu-table-value-v3"><strong>{money(item.price)}</strong><small>{item.weight || 'Вагу не вказано'}</small></span>
                   </button>
                 );
               })}
@@ -398,20 +420,11 @@ export function MenuPage() {
           <div className="menu-detail-price-v2"><strong>{money(selected.price)}</strong>{selected.weight ? <span>{selected.weight}</span> : null}</div>
           <p>{selected.description || 'Опис позиції не додано.'}</p>
           <div className="menu-detail-facts-v3">
-            <span><b>Розділ</b>{sectionLabel(selected.section)}</span>
-            <span><b>Категорія</b>{selected.category}</span>
-            <span><b>Статус</b>{selected.stopped ? 'У стопі' : 'Доступна'}</span>
-            <span><b>Фото</b>{selected.photo ? 'Додано' : 'Відсутнє'}</span>
-            <span><b>ID позиції</b>#{selected.id}</span>
-            <span><b>Порядок</b>{selected.sort_order}</span>
-            <span className="is-wide"><b>Останнє оновлення</b>{formatUpdatedAt(selected.updated_at)}</span>
+            <span><b>Розділ</b>{sectionLabel(selected.section)}</span><span><b>Категорія</b>{selected.category}</span><span><b>Статус</b>{selected.stopped ? 'У стопі' : 'Доступна'}</span><span><b>Фото</b>{selected.photo ? 'Додано' : 'Відсутнє'}</span><span><b>ID позиції</b>#{selected.id}</span><span><b>Порядок</b>{selected.sort_order}</span><span className="is-wide"><b>Останнє оновлення</b>{formatUpdatedAt(selected.updated_at)}</span>
           </div>
           <div className="menu-detail-times-v2"><span><Clock3 size={17} /><b>Звичайно</b>{selected.cook_time_normal !== null ? `${selected.cook_time_normal} хв` : 'не вказано'}</span><span><AlertTriangle size={17} /><b>При завантаженні</b>{selected.cook_time_busy !== null ? `${selected.cook_time_busy} хв` : 'не вказано'}</span></div>
           {(selected.allergens || []).length > 0 ? <div className="menu-detail-allergens-v2"><strong>Алергени</strong><div>{(selected.allergens || []).map((allergen) => <span key={allergen}>{allergen}</span>)}</div></div> : null}
-          <div className="menu-detail-actions-v2">
-            <span />
-            {data?.permissions.canEdit ? <button type="button" className="is-edit" onClick={() => { setEditor(createEditor(selected)); setSelected(null); }}><Edit3 size={17} /> Редагувати</button> : null}
-          </div>
+          <div className="menu-detail-actions-v2"><span />{data?.permissions.canEdit ? <button type="button" className="is-edit" onClick={() => { setEditor(createEditor(selected)); setSelected(null); }}><Edit3 size={17} /> Редагувати</button> : null}</div>
         </div>
       </section></div> : null}
 
