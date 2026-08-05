@@ -7,6 +7,7 @@ import './performance.css';
 import './design-system.css';
 import './route-transitions.css';
 import './legacy-navigation.css';
+import './reserve-mobile.css';
 
 const LEGACY_MARKER = 'tiflis-v2-react-runtime-ready';
 
