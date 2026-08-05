@@ -95,5 +95,6 @@ export function canPerform(user: StaffUser, action: ActionKey): boolean {
 }
 
 export function accessiblePages(user: StaffUser): PageKey[] {
-  return (Object.keys(pages) as PageKey[]).filter((key) => canAccessPage(user, key));
+  return (Object.keys(pages) as PageKey[])
+    .filter((key) => key !== 'handover' && canAccessPage(user, key));
 }
