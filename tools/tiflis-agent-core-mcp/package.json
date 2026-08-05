@@ -1,0 +1,21 @@
+{
+  "name": "@tiflis/agent-core-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Project-specific Brain and Memory MCP servers for Tiflis.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "brain": "node src/index.mjs brain",
+    "memory": "node src/index.mjs memory",
+    "check": "node --check src/index.mjs",
+    "inspect:brain": "npx @modelcontextprotocol/inspector node src/index.mjs brain",
+    "inspect:memory": "npx @modelcontextprotocol/inspector node src/index.mjs memory"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "zod": "^4.0.0"
+  }
+}
