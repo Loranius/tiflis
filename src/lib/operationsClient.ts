@@ -1,4 +1,10 @@
 import { secureApi } from './secureApi';
+import {
+  addDaysToDateKey,
+  formatKyivDateKey,
+  getKyivDateKey,
+  KYIV_TIME_ZONE,
+} from './time';
 
 export type TaskStatus = 'pending' | 'done' | 'skipped';
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
@@ -83,19 +89,20 @@ export const ROLE_OPTIONS = [
 ] as const;
 
 export function localIso(date = new Date()): string {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  return getKyivDateKey(date);
 }
 
 export function addDays(value: string, amount: number): string {
-  const date = new Date(`${value}T12:00:00`);
-  date.setDate(date.getDate() + amount);
-  return localIso(date);
+  return addDaysToDateKey(value, amount);
 }
 
 export function formatDate(value: string, withYear = false): string {
-  return new Intl.DateTimeFormat('uk-UA', {
-    weekday: 'long', day: 'numeric', month: 'long', ...(withYear ? { year: 'numeric' as const } : {}),
-  }).format(new Date(`${value}T12:00:00`));
+  return formatKyivDateKey(value, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    ...(withYear ? { year: 'numeric' as const } : {}),
+  });
 }
 
 export function formatMoment(value: string | null): string {
@@ -103,7 +110,11 @@ export function formatMoment(value: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('uk-UA', {
-    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+    timeZone: KYIV_TIME_ZONE,
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
   }).format(date);
 }
 
