@@ -41,6 +41,8 @@ export function PortalWarmup() {
     let cancelled = false;
     let secondaryTimer: number | null = null;
     const idleWindow = window as IdleWindow;
+    const requestIdle = idleWindow.requestIdleCallback;
+    const cancelIdle = idleWindow.cancelIdleCallback;
 
     const warmPrimary = () => {
       if (cancelled) return;
@@ -87,18 +89,16 @@ export function PortalWarmup() {
       }, 1400);
     };
 
-    let idleHandle: number;
-    if (idleWindow.requestIdleCallback) {
-      idleHandle = idleWindow.requestIdleCallback(warmPrimary, { timeout: 650 });
-    } else {
-      idleHandle = window.setTimeout(warmPrimary, 220);
-    }
+    const usedIdleCallback = Boolean(requestIdle);
+    const idleHandle = requestIdle
+      ? requestIdle(warmPrimary, { timeout: 650 })
+      : window.setTimeout(warmPrimary, 220);
 
     return () => {
       cancelled = true;
       if (secondaryTimer !== null) window.clearTimeout(secondaryTimer);
-      if (idleWindow.cancelIdleCallback && idleWindow.requestIdleCallback) {
-        idleWindow.cancelIdleCallback(idleHandle);
+      if (usedIdleCallback && cancelIdle) {
+        cancelIdle(idleHandle);
       } else {
         window.clearTimeout(idleHandle);
       }
