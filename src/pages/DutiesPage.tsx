@@ -1,9 +1,9 @@
 import { ClipboardCheck } from 'lucide-react';
-import { PersistentDutyPlannerPage } from '../components/PersistentDutyPlannerPage';
+import { DutyPlannerPage } from '../components/DutyPlannerPage';
 
 export function DutiesPage() {
   return (
-    <PersistentDutyPlannerPage
+    <DutyPlannerPage
       planType="daily"
       eyebrow="Робота на день"
       title="Щоденні обов’язки"
