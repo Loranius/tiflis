@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "tiflis-visual": {
+      "command": "npm",
+      "args": ["--prefix", "tools/tiflis-visual-mcp", "start"],
+      "env": {
+        "TIFLIS_BASE_URL": "https://loranius.github.io/tiflis/",
+        "TIFLIS_ALLOWED_ORIGINS": "https://loranius.github.io,http://localhost,http://127.0.0.1",
+        "TIFLIS_HEADLESS": "true",
+        "TIFLIS_TIMEOUT_MS": "20000"
+      }
+    }
+  }
+}
