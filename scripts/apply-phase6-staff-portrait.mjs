@@ -38,7 +38,7 @@ page = replaceOnce(
         <footer className="staff-portrait-copy-v3">
           <span className="eyebrow">{portrait.displayRole || [roleLabel(portrait.role), portrait.role2 ? roleLabel(portrait.role2) : null].filter(Boolean).join(' · ')}</span>
           <h3>{portrait.displayName}</h3>
-          <blockquote>{portrait.credo ? `“${portrait.credo}”` : 'Життєве кредо не вказано.'}</blockquote>
+          <blockquote>{portrait.credo ? '“' + portrait.credo + '”' : 'Життєве кредо не вказано.'}</blockquote>
         </footer>
       </section></div> : null}
 
