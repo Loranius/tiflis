@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { access, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
 const distDir = path.resolve('dist');
 const indexPath = path.join(distDir, 'index.html');
+const viteCli = path.resolve('node_modules/vite/bin/vite.js');
 const previewUrl = 'http://127.0.0.1:4173/';
 
 function fail(message) {
@@ -49,7 +51,7 @@ async function assertArtifact() {
     if (!info?.isFile() || info.size === 0) fail(`missing or empty local asset: ${reference}`);
   }
 
-  return { html, references };
+  return references;
 }
 
 async function waitForPreview(child) {
@@ -70,9 +72,24 @@ async function waitForPreview(child) {
   fail(`preview server did not become ready: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 }
 
+async function stopPreview(child) {
+  if (child.exitCode !== null) return;
+  const exited = once(child, 'exit');
+  child.kill('SIGTERM');
+
+  const stopped = await Promise.race([
+    exited.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 2000)),
+  ]);
+
+  if (!stopped && child.exitCode === null) {
+    child.kill('SIGKILL');
+    await once(child, 'exit').catch(() => undefined);
+  }
+}
+
 async function assertHttp(references) {
-  const command = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const child = spawn(command, ['run', 'preview', '--', '--host', '127.0.0.1', '--port', '4173', '--strictPort'], {
+  const child = spawn(process.execPath, [viteCli, 'preview', '--host', '127.0.0.1', '--port', '4173', '--strictPort'], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -101,10 +118,10 @@ async function assertHttp(references) {
     if (output.trim()) console.error(output.trim());
     throw error;
   } finally {
-    child.kill('SIGTERM');
+    await stopPreview(child);
   }
 }
 
-const { references } = await assertArtifact();
+const references = await assertArtifact();
 await assertHttp(references);
 console.log(`[smoke:dist] OK — ${references.length} compiled assets verified through Vite preview.`);
