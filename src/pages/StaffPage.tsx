@@ -171,6 +171,7 @@ export function StaffPage() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [showArchived, setShowArchived] = useState(false);
   const [selected, setSelected] = useState<StaffMember | null>(null);
+  const [portrait, setPortrait] = useState<StaffMember | null>(null);
   const [editor, setEditor] = useState<StaffEditor | null>(null);
   const [credential, setCredential] = useState<CredentialResult | null>(null);
   const [copied, setCopied] = useState(false);
@@ -373,12 +374,24 @@ export function StaffPage() {
       </section> : null}
 
       {selected ? <div className="staff-sheet-backdrop-v2" onMouseDown={() => setSelected(null)}><section className="staff-detail-sheet-v2" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="staff-detail-hero-v2"><div className="staff-detail-avatar-v2">{selected.avatar ? <img src={selected.avatar} alt={selected.displayName} /> : <span>{initials(selected.displayName)}</span>}</div><div><span className="eyebrow">{selected.displayRole || roleLabel(selected.role)}</span><h3>{selected.displayName}</h3><p>@{selected.login}{selected.nick ? ` · «${selected.nick}»` : ''}</p></div><button type="button" onClick={() => setSelected(null)}><X size={19} /></button></div>
+        <div className="staff-detail-hero-v2"><button type="button" className="staff-detail-avatar-v2" onClick={() => setPortrait(selected)} aria-label={`Відкрити фото ${selected.displayName} на весь екран`}>{selected.avatar ? <img src={selected.avatar} alt={selected.displayName} /> : <span>{initials(selected.displayName)}</span>}<i>Розгорнути</i></button><div><span className="eyebrow">{selected.displayRole || roleLabel(selected.role)}</span><h3>{selected.displayName}</h3><p>@{selected.login}{selected.nick ? ` · «${selected.nick}»` : ''}</p></div><button type="button" onClick={() => setSelected(null)}><X size={19} /></button></div>
         <div className="staff-detail-status-v2"><span className={selected.authLinked ? 'is-ok' : 'is-warn'}>{selected.authLinked ? <BadgeCheck size={16} /> : <LockKeyhole size={16} />}{selected.authLinked ? 'Захищений Auth-акаунт' : 'Очікує першого входу'}</span><span>{selected.fired ? 'В архіві' : 'Активний працівник'}</span></div>
         <div className="staff-detail-grid-v2"><article><CalendarDays size={18} /><span>Наступна зміна</span><strong>{formatShift(selected.nextShift)}</strong></article><article><BriefcaseBusiness size={18} /><span>За місяць</span><strong>{selected.monthShiftCount} змін</strong></article><article><Cake size={18} /><span>День народження</span><strong>{formatDate(selected.birthday)}</strong></article><article><Sparkles size={18} /><span>У команді</span><strong>{tenure(selected.createdAt)}</strong></article></div>
         {selected.credo ? <blockquote>“{selected.credo}”</blockquote> : null}
         <div className="staff-socials-v2">{selected.telegramUsername ? <span><MessageCircle size={15} /> @{selected.telegramUsername}</span> : null}{selected.instagram ? <span><span aria-hidden="true">IG</span> @{selected.instagram}</span> : null}{!selected.telegramUsername && !selected.instagram ? <span>Соцмережі не вказані</span> : null}</div>
         <div className="staff-detail-actions-v2">{data?.me.canManage && selected.id !== 'sysadmin' ? <button type="button" className={selected.fired ? 'is-activate' : 'is-archive'} onClick={() => void setActive(selected, selected.fired)} disabled={saving}>{selected.fired ? <UserCheck size={17} /> : <UserRoundX size={17} />}{selected.fired ? 'Повернути в команду' : 'Перенести в архів'}</button> : <span />}{data?.me.canManage && selected.authLinked ? <button type="button" className="is-key" onClick={() => void resetPassword(selected)} disabled={saving}><KeyRound size={17} /> Скинути пароль</button> : null}{canEditSelected ? <button type="button" className="is-edit" onClick={() => { setEditor(createEditor(selected)); setSelected(null); }}><Edit3 size={17} /> Редагувати</button> : null}</div>
+      </section></div> : null}
+
+      {portrait ? <div className="staff-portrait-backdrop-v3" onMouseDown={() => setPortrait(null)}><section className="staff-portrait-sheet-v3" role="dialog" aria-modal="true" aria-label={`Фото ${portrait.displayName}`} onMouseDown={(event) => event.stopPropagation()}>
+        <button type="button" className="staff-portrait-close-v3" onClick={() => setPortrait(null)} aria-label="Закрити фото"><X size={22} /></button>
+        <div className={`staff-portrait-media-v3 ${portrait.avatar ? 'has-photo' : 'has-initials'}`}>
+          {portrait.avatar ? <img src={portrait.avatar} alt={portrait.displayName} /> : <span>{initials(portrait.displayName)}</span>}
+        </div>
+        <footer className="staff-portrait-copy-v3">
+          <span className="eyebrow">{portrait.displayRole || [roleLabel(portrait.role), portrait.role2 ? roleLabel(portrait.role2) : null].filter(Boolean).join(' · ')}</span>
+          <h3>{portrait.displayName}</h3>
+          <blockquote>{portrait.credo ? '“' + portrait.credo + '”' : 'Життєве кредо не вказано.'}</blockquote>
+        </footer>
       </section></div> : null}
 
       {editor ? <div className="staff-sheet-backdrop-v2" onMouseDown={() => !saving && setEditor(null)}><section className="staff-editor-sheet-v2" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
