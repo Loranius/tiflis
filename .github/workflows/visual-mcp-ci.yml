@@ -1,0 +1,42 @@
+name: Tiflis Visual MCP CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/tiflis-visual-mcp/**'
+      - '.mcp.json'
+      - '.agents/skills/tiflis-visual-audit/**'
+      - '.github/workflows/visual-mcp-ci.yml'
+  pull_request:
+    paths:
+      - 'tools/tiflis-visual-mcp/**'
+      - '.mcp.json'
+      - '.agents/skills/tiflis-visual-audit/**'
+      - '.github/workflows/visual-mcp-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Install MCP dependencies
+        working-directory: tools/tiflis-visual-mcp
+        run: npm install --no-fund
+      - name: Syntax check
+        working-directory: tools/tiflis-visual-mcp
+        run: npm run check
+      - name: Verify MCP server boots
+        working-directory: tools/tiflis-visual-mcp
+        run: timeout 5s npm start 2>server.log || test $? -eq 124
+      - name: Show server startup log
+        if: always()
+        working-directory: tools/tiflis-visual-mcp
+        run: cat server.log || true
