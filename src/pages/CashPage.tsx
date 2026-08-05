@@ -8,7 +8,6 @@ import {
   Crown,
   Edit3,
   Medal,
-  Plus,
   RefreshCw,
   Sparkles,
   Star,
@@ -23,6 +22,7 @@ import { secureApi } from '../lib/secureApi';
 import './cash.css';
 
 type CashTab = 'overview' | 'entries' | 'leaderboard' | 'team';
+type LeaderboardPeriod = 'first' | 'second' | 'month' | 'year';
 
 type NumericValue = number | string | null;
 
@@ -91,6 +91,7 @@ interface CashBootstrapResponse {
   entries: CashEntry[];
   extraWages: ExtraWage[];
   leaderboard: LeaderboardRow[];
+  leaderboardPeriod?: LeaderboardPeriod;
   ratings: StaffRating[];
 }
 
@@ -173,15 +174,28 @@ function scoreTone(score: number): string {
   return 'neutral';
 }
 
-function summarize(entries: CashEntry[], extras: ExtraWage[], month: string, fromDay: number, toDay: number) {
-  const from = dateForDay(month, fromDay);
-  const to = dateForDay(month, toDay);
-  const scopedEntries = entries.filter((entry) => entry.date >= from && entry.date <= to);
-  const scopedExtras = extras.filter((entry) => entry.date >= from && entry.date <= to);
-  const cash = scopedEntries.reduce((sum, entry) => sum + asNumber(entry.cash), 0);
-  const tips = scopedEntries.reduce((sum, entry) => sum + asNumber(entry.tips), 0);
+function inDayRange(value: string, month: string, fromDay: number, toDay: number): boolean {
+  return value >= dateForDay(month, fromDay) && value <= dateForDay(month, toDay);
+}
+
+function summarizePayroll(
+  entries: CashEntry[],
+  extras: ExtraWage[],
+  month: string,
+  cashFrom: number,
+  cashTo: number,
+  baseFrom: number,
+  baseTo: number,
+  extraFrom = baseFrom,
+  extraTo = baseTo,
+) {
+  const cashEntries = entries.filter((entry) => inDayRange(entry.date, month, cashFrom, cashTo));
+  const baseEntries = entries.filter((entry) => inDayRange(entry.date, month, baseFrom, baseTo));
+  const scopedExtras = extras.filter((entry) => inDayRange(entry.date, month, extraFrom, extraTo));
+  const cash = cashEntries.reduce((sum, entry) => sum + asNumber(entry.cash), 0);
+  const tips = cashEntries.reduce((sum, entry) => sum + asNumber(entry.tips), 0);
   const extra = scopedExtras.reduce((sum, entry) => sum + asNumber(entry.amount), 0);
-  const workDays = scopedEntries.filter((entry) => asNumber(entry.cash) > 0 || asNumber(entry.tips) > 0).length;
+  const workDays = baseEntries.filter((entry) => asNumber(entry.cash) > 0 || asNumber(entry.tips) > 0).length;
   return { cash, tips, extra, workDays, wage: cash * 0.04 + workDays * 200 + extra };
 }
 
@@ -190,13 +204,21 @@ export function CashPage() {
   const [month, setMonth] = useState(() => monthKey(new Date()));
   const [viewUserId, setViewUserId] = useState(user?.id || '');
   const [tab, setTab] = useState<CashTab>('overview');
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>('first');
   const [data, setData] = useState<CashBootstrapResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editor, setEditor] = useState<DayEditorState | null>(null);
+  const [editor, setEditor] = useState<DayEditorState>(() => {
+    const now = new Date();
+    return {
+      date: `${monthKey(now)}-${String(now.getDate()).padStart(2, '0')}`,
+      cash: '', tips: '', extra: '', note: '',
+    };
+  });
   const [ratingEditor, setRatingEditor] = useState<RatingEditorState | null>(null);
   const requestId = useRef(0);
+  const quickEntryRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (user && !viewUserId) setViewUserId(user.id);
@@ -209,7 +231,7 @@ export function CashPage() {
     setError(null);
     try {
       const response = await secureApi<CashBootstrapResponse>({
-        action: 'cash_bootstrap', month, user_id: viewUserId,
+        action: 'cash_bootstrap', month, user_id: viewUserId, leaderboard_period: leaderboardPeriod,
       });
       if (requestId.current !== id) return;
       setData(response);
@@ -221,7 +243,7 @@ export function CashPage() {
     } finally {
       if (requestId.current === id) setLoading(false);
     }
-  }, [month, viewUserId]);
+  }, [leaderboardPeriod, month, viewUserId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -238,14 +260,18 @@ export function CashPage() {
   const extras = data?.extraWages || [];
   const entryByDate = useMemo(() => new Map(entries.map((entry) => [entry.date, entry])), [entries]);
   const extraByDate = useMemo(() => new Map(extras.map((entry) => [entry.date, entry])), [extras]);
-  const fullMonth = useMemo(() => summarize(entries, extras, month, 1, daysInMonth), [daysInMonth, entries, extras, month]);
-  const firstHalf = useMemo(() => summarize(entries, extras, month, 1, Math.min(14, daysInMonth)), [daysInMonth, entries, extras, month]);
-  const secondHalf = useMemo(() => summarize(entries, extras, month, 15, daysInMonth), [daysInMonth, entries, extras, month]);
+  const fullMonth = useMemo(() => summarizePayroll(entries, extras, month, 1, daysInMonth, 1, daysInMonth), [daysInMonth, entries, extras, month]);
+  const firstHalf = useMemo(() => summarizePayroll(entries, extras, month, 1, Math.min(14, daysInMonth), 1, Math.min(15, daysInMonth), 1, Math.min(15, daysInMonth)), [daysInMonth, entries, extras, month]);
+  const secondHalf = useMemo(() => summarizePayroll(entries, extras, month, 15, daysInMonth, Math.min(16, daysInMonth), daysInMonth, Math.min(16, daysInMonth), daysInMonth), [daysInMonth, entries, extras, month]);
   const selectedStaff = data?.users.find((staff) => staff.id === data.viewUserId) || null;
   const sortedEntries = useMemo(() => [...entries].sort((a, b) => b.date.localeCompare(a.date)), [entries]);
   const canEdit = Boolean(data && (data.me.canEditAll || data.viewUserId === data.me.legacyUserId));
   const currentMonth = monthKey(new Date());
   const defaultDate = month === currentMonth ? dateForDay(month, new Date().getDate()) : dateForDay(month, 1);
+
+  useEffect(() => {
+    if (!editor.date.startsWith(`${month}-`)) openDay(defaultDate);
+  }, [defaultDate, month]);
 
   function openDay(date: string) {
     const entry = entryByDate.get(date);
@@ -259,8 +285,13 @@ export function CashPage() {
     });
   }
 
+  function selectDay(date: string) {
+    openDay(date);
+    window.requestAnimationFrame(() => quickEntryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
   async function saveDay() {
-    if (!editor || !data) return;
+    if (!data) return;
     setSaving(true);
     setError(null);
     try {
@@ -268,7 +299,6 @@ export function CashPage() {
         action: 'cash_save_day', user_id: data.viewUserId, date: editor.date,
         cash: editor.cash, tips: editor.tips, extra_amount: editor.extra, extra_note: editor.note,
       });
-      setEditor(null);
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Запис не збережено.');
@@ -278,14 +308,14 @@ export function CashPage() {
   }
 
   async function deleteDay() {
-    if (!editor || !data) return;
+    if (!data) return;
     setSaving(true);
     setError(null);
     try {
       await secureApi<{ ok: true }>({
         action: 'cash_delete_day', user_id: data.viewUserId, date: editor.date,
       });
-      setEditor(null);
+      setEditor({ ...editor, cash: '', tips: '', extra: '', note: '' });
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Запис не видалено.');
@@ -328,9 +358,27 @@ export function CashPage() {
         </div>
         <div className="cash-toolbar-actions">
           {data?.me.canViewAll ? <label className="cash-user-select"><span>Працівник</span><select value={viewUserId} onChange={(event) => setViewUserId(event.target.value)}>{data.users.map((staff) => <option value={staff.id} key={staff.id}>{staff.name}</option>)}</select></label> : null}
-          {canEdit ? <button type="button" className="cash-add-button" onClick={() => openDay(defaultDate)}><Plus size={18} /> Внести день</button> : null}
         </div>
       </section>
+
+      {!loading && data && canEdit ? (
+        <section className="cash-quick-entry-v3" ref={quickEntryRef}>
+          <header>
+            <div><span className="eyebrow">Денний запис</span><h3>{formatDay(editor.date)}</h3><p>{selectedStaff?.name || 'Моя каса'} · базова ставка 200 ₴ за робочий день</p></div>
+            <label><span>Дата</span><input type="date" value={editor.date} min={`${month}-01`} max={`${month}-${String(daysInMonth).padStart(2, '0')}`} onChange={(event) => openDay(event.target.value)} /></label>
+          </header>
+          <div className="cash-quick-fields-v3">
+            <label><span>Каса, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.cash} onChange={(event) => setEditor({ ...editor, cash: event.target.value })} placeholder="0" /></label>
+            <label><span>Чайові, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.tips} onChange={(event) => setEditor({ ...editor, tips: event.target.value })} placeholder="0" /></label>
+            <label><span>Додаткова ставка / доплата, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.extra} onChange={(event) => setEditor({ ...editor, extra: event.target.value })} placeholder="0" /></label>
+            <label className="is-wide"><span>Причина доплати</span><input type="text" maxLength={300} value={editor.note} onChange={(event) => setEditor({ ...editor, note: event.target.value })} placeholder="Банкет, підміна, додаткові години…" /></label>
+          </div>
+          <footer>
+            <div><span>Орієнтовно за день</span><strong>{money(asNumber(editor.cash) * 0.04 + (asNumber(editor.cash) > 0 || asNumber(editor.tips) > 0 ? 200 : 0) + asNumber(editor.extra))}</strong></div>
+            <div className="cash-quick-actions-v3">{entryByDate.has(editor.date) || extraByDate.has(editor.date) ? <button type="button" className="is-danger" onClick={() => void deleteDay()} disabled={saving}><Trash2 size={17} /> Очистити</button> : null}<button type="button" className="is-primary" onClick={() => void saveDay()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти день</button></div>
+          </footer>
+        </section>
+      ) : null}
 
       <nav className="cash-tabs-v2" aria-label="Розділи каси">
         {([['overview', 'Огляд'], ['entries', 'Записи'], ['leaderboard', 'Топ каси'], ['team', 'Рейтинг команди']] as const)
@@ -363,7 +411,7 @@ export function CashPage() {
               const entry = entryByDate.get(date);
               const extra = extraByDate.get(date);
               const weekend = [0, 6].includes(new Date(`${date}T12:00:00`).getDay());
-              return <button type="button" key={date} className={`${entry || extra ? 'has-data' : ''} ${weekend ? 'is-weekend' : ''}`} onClick={() => canEdit && openDay(date)} disabled={!canEdit}><span>{day}</span>{entry ? <strong>{money(asNumber(entry.cash))}</strong> : <small>{extra ? `+${money(asNumber(extra.amount))}` : '—'}</small>}{entry && asNumber(entry.tips) > 0 ? <em>чайові {money(asNumber(entry.tips))}</em> : null}</button>;
+              return <button type="button" key={date} className={`${entry || extra ? 'has-data' : ''} ${weekend ? 'is-weekend' : ''}`} onClick={() => canEdit && selectDay(date)} disabled={!canEdit}><span>{day}</span>{entry ? <strong>{money(asNumber(entry.cash))}</strong> : <small>{extra ? `+${money(asNumber(extra.amount))}` : '—'}</small>}{entry && asNumber(entry.tips) > 0 ? <em>чайові {money(asNumber(entry.tips))}</em> : null}</button>;
             })}
           </div>
         </section>
@@ -375,13 +423,17 @@ export function CashPage() {
           {sortedEntries.length === 0 ? <div className="cash-empty-v2"><CalendarDays size={28} /><strong>Записів ще немає</strong><span>Додайте перший робочий день.</span></div> : null}
           {sortedEntries.map((entry) => {
             const extra = extraByDate.get(entry.date);
-            return <button type="button" key={entry.id} onClick={() => canEdit && openDay(entry.date)} disabled={!canEdit}><span className="cash-entry-date"><CalendarDays size={17} /><span><strong>{formatDay(entry.date)}</strong><small>{extra?.description || 'Звичайна зміна'}</small></span></span><span className="cash-entry-values"><strong>{money(asNumber(entry.cash))}</strong><small>чайові {money(asNumber(entry.tips))}{extra ? ` · доплата ${money(asNumber(extra.amount))}` : ''}</small></span>{canEdit ? <Edit3 size={16} /> : null}</button>;
+            return <button type="button" key={entry.id} onClick={() => canEdit && selectDay(entry.date)} disabled={!canEdit}><span className="cash-entry-date"><CalendarDays size={17} /><span><strong>{formatDay(entry.date)}</strong><small>{extra?.description || 'Звичайна зміна'}</small></span></span><span className="cash-entry-values"><strong>{money(asNumber(entry.cash))}</strong><small>чайові {money(asNumber(entry.tips))}{extra ? ` · доплата ${money(asNumber(extra.amount))}` : ''}</small></span>{canEdit ? <Edit3 size={16} /> : null}</button>;
           })}
         </div>
       </section> : null}
 
       {!loading && data && tab === 'leaderboard' ? <section className="cash-leaderboard-card-v2">
-        <div className="cash-section-heading-v2"><div><span className="eyebrow">Командна динаміка</span><h3>Топ каси за місяць</h3></div><Medal size={24} /></div>
+        <div className="cash-section-heading-v2"><div><span className="eyebrow">Командна динаміка</span><h3>Топ каси</h3></div><Medal size={24} /></div>
+        <div className="cash-leaderboard-periods-v3" role="group" aria-label="Період топу каси">
+          {([['first', '1–14 + ставка 15'], ['second', `15–${daysInMonth}`], ['month', 'Увесь місяць'], ['year', String(monthDate.getFullYear())]] as const).map(([key, label]) => <button type="button" key={key} className={leaderboardPeriod === key ? 'is-active' : ''} onClick={() => setLeaderboardPeriod(key)}>{label}</button>)}
+        </div>
+        <p className="cash-period-explain-v3">{leaderboardPeriod === 'first' ? '4% каси за 1–14 число + ставки за робочі дні 1–15.' : leaderboardPeriod === 'second' ? `4% каси за 15–${daysInMonth} число + ставки за робочі дні 16–${daysInMonth}.` : leaderboardPeriod === 'year' ? 'Загальна розрахункова виплата за вибраний рік.' : 'Повна розрахункова виплата за місяць.'}</p>
         <div className="cash-leaderboard-list-v2">{data.leaderboard.map((row) => <article className={`${row.mine ? 'is-mine' : ''} ${row.rank === 1 ? 'is-leader' : ''}`} key={row.userId}><span className="cash-rank-v2">{row.rank <= 3 ? ['🥇', '🥈', '🥉'][row.rank - 1] : `#${row.rank}`}</span><span className="cash-leader-avatar-v2">{initials(row.name)}</span><div><strong>{row.name}{row.mine ? ' · ви' : ''}</strong><span><i style={{ width: `${Math.max(4, row.relative)}%` }} /></span></div><b>{row.total === null ? 'позиція' : money(row.total)}</b></article>)}</div>
         {!data.me.canViewAll ? <p className="cash-privacy-note-v2">Суми інших працівників приховані — видно лише позицію.</p> : null}
       </section> : null}
@@ -390,8 +442,6 @@ export function CashPage() {
         <div className="cash-section-heading-v2"><div><span className="eyebrow">Сервіс і командна робота</span><h3>Рейтинг персоналу</h3></div><Star size={24} /></div>
         <div className="cash-rating-grid-v2">{data.ratings.map((rating) => <article key={rating.userId} className={`tone-${scoreTone(rating.score)}`}><div className="cash-rating-person-v2"><span>{initials(rating.name)}</span><div><strong>{rating.name}</strong><small>{roleLabel(rating.role)}</small></div><b>{rating.score > 0 ? '+' : ''}{rating.score}</b></div><div className="cash-score-track-v2"><i style={{ left: '50%', width: `${Math.abs(rating.score) / 2}%`, transform: rating.score < 0 ? 'translateX(-100%)' : undefined }} /></div><div className="cash-rating-comments-v2">{rating.comments.length === 0 ? <span>Останніх коментарів немає</span> : rating.comments.slice(0, 2).map((comment) => <p key={comment.id}><strong>{comment.delta && comment.delta > 0 ? '+' : ''}{comment.delta || 0}</strong><span>{comment.comment || 'Зміна оцінки'} · {comment.author}</span></p>)}</div>{data.me.canEditRatings ? <button type="button" onClick={() => setRatingEditor({ userId: rating.userId, name: rating.name, score: rating.score, comment: '' })}><Edit3 size={15} /> Оновити оцінку</button> : null}</article>)}</div>
       </section> : null}
-
-      {editor ? <div className="cash-sheet-backdrop-v2" onMouseDown={() => !saving && setEditor(null)}><section className="cash-sheet-v2" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="cash-sheet-heading-v2"><div><span className="eyebrow">Денний запис</span><h3>{formatDay(editor.date)}</h3><p>{selectedStaff?.name}</p></div><button type="button" onClick={() => setEditor(null)} disabled={saving}><X size={19} /></button></div><div className="cash-editor-grid-v2"><label><span>Каса, ₴</span><input type="number" min="0" value={editor.cash} onChange={(event) => setEditor({ ...editor, cash: event.target.value })} placeholder="0" /></label><label><span>Чайові, ₴</span><input type="number" min="0" value={editor.tips} onChange={(event) => setEditor({ ...editor, tips: event.target.value })} placeholder="0" /></label><label><span>Доплата, ₴</span><input type="number" min="0" value={editor.extra} onChange={(event) => setEditor({ ...editor, extra: event.target.value })} placeholder="0" /></label><label className="is-wide"><span>Причина доплати</span><input type="text" maxLength={300} value={editor.note} onChange={(event) => setEditor({ ...editor, note: event.target.value })} placeholder="Банкет, підміна, додаткові години…" /></label></div><div className="cash-live-preview-v2"><span>Орієнтовно до виплати за день</span><strong>{money(asNumber(editor.cash) * 0.04 + (asNumber(editor.cash) > 0 || asNumber(editor.tips) > 0 ? 200 : 0) + asNumber(editor.extra))}</strong></div><div className="cash-sheet-actions-v2">{entryByDate.has(editor.date) || extraByDate.has(editor.date) ? <button type="button" className="is-danger" onClick={() => void deleteDay()} disabled={saving}><Trash2 size={17} /> Очистити день</button> : <span />}<button type="button" className="is-primary" onClick={() => void saveDay()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти</button></div></section></div> : null}
 
       {ratingEditor ? <div className="cash-sheet-backdrop-v2" onMouseDown={() => !saving && setRatingEditor(null)}><section className="cash-sheet-v2 cash-rating-sheet-v2" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="cash-sheet-heading-v2"><div><span className="eyebrow">Оцінка персоналу</span><h3>{ratingEditor.name}</h3><p>Шкала від −100 до +100</p></div><button type="button" onClick={() => setRatingEditor(null)} disabled={saving}><X size={19} /></button></div><div className="cash-rating-control-v2"><output className={`tone-${scoreTone(ratingEditor.score)}`}>{ratingEditor.score > 0 ? '+' : ''}{ratingEditor.score}</output><input type="range" min="-100" max="100" value={ratingEditor.score} onChange={(event) => setRatingEditor({ ...ratingEditor, score: Number(event.target.value) })} /><div>{[-10, -5, -1, 1, 5, 10].map((delta) => <button type="button" key={delta} onClick={() => setRatingEditor({ ...ratingEditor, score: Math.max(-100, Math.min(100, ratingEditor.score + delta)) })}>{delta > 0 ? '+' : ''}{delta}</button>)}</div><label><span>Короткий коментар</span><textarea maxLength={500} value={ratingEditor.comment} onChange={(event) => setRatingEditor({ ...ratingEditor, comment: event.target.value })} placeholder="За що змінюється оцінка" /></label></div><div className="cash-sheet-actions-v2"><span /><button type="button" className="is-primary" onClick={() => void saveRating()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Crown size={17} />} Оновити</button></div></section></div> : null}
     </div>
