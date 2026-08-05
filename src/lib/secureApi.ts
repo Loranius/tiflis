@@ -97,17 +97,20 @@ export function secureApi<T extends SecureApiEnvelope>(
   options: SecureApiOptions = {},
 ): Promise<T> {
   const action = typeof body.action === 'string' ? body.action : '';
+  const resolvedFunctionSlug = functionSlug === 'tiflis-secure-api' && action === 'cash_bootstrap'
+    ? 'tiflis-cash-anonymous-api'
+    : functionSlug;
   const shouldDedupe = options.dedupe ?? action.endsWith('_bootstrap');
 
   if (!shouldDedupe || options.signal) {
-    return executeSecureApi<T>(body, functionSlug, options);
+    return executeSecureApi<T>(body, resolvedFunctionSlug, options);
   }
 
-  const key = requestKey(functionSlug, body);
+  const key = requestKey(resolvedFunctionSlug, body);
   const existing = inFlightRequests.get(key);
   if (existing) return existing as Promise<T>;
 
-  const request = executeSecureApi<T>(body, functionSlug, options);
+  const request = executeSecureApi<T>(body, resolvedFunctionSlug, options);
   inFlightRequests.set(key, request);
   void request.then(
     () => inFlightRequests.delete(key),
