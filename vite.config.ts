@@ -7,15 +7,17 @@ const VITE_ENTRY_MARKER = '<!-- TIFLIS_VITE_ENTRY -->';
 function portalEntryPlugin(): Plugin {
   return {
     name: 'tiflis-portal-entry',
-    enforce: 'pre',
-    transformIndexHtml(html) {
-      if (!html.includes(VITE_ENTRY_MARKER)) {
-        throw new Error('Tiflis Vite entry marker is missing from index.html');
-      }
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html) {
+        if (!html.includes(VITE_ENTRY_MARKER)) {
+          throw new Error('Tiflis Vite entry marker is missing from index.html');
+        }
 
-      return html
-        .replace(RAW_RUNTIME_PATTERN, '\n')
-        .replace(VITE_ENTRY_MARKER, '<script type="module" src="/src/main.tsx"></script>');
+        return html
+          .replace(RAW_RUNTIME_PATTERN, '\n')
+          .replace(VITE_ENTRY_MARKER, '<script type="module" src="/src/main.tsx"></script>');
+      },
     },
   };
 }
