@@ -1,7 +1,6 @@
 import {
   ArrowUpRight,
   Banknote,
-  BellRing,
   CalendarCheck2,
   CalendarDays,
   ClipboardList,
@@ -17,20 +16,12 @@ import { canAccessPage, pages, type PageKey } from '../lib/acl';
 import { supabase } from '../lib/supabase';
 import './dashboard.css';
 
-const OperationsDashboard = lazy(() => import('../components/OperationsDashboard')
-  .then((module) => ({ default: module.OperationsDashboard })));
+const TodayOperationsWidget = lazy(() => import('../components/TodayOperationsWidget')
+  .then((module) => ({ default: module.TodayOperationsWidget })));
 
 interface ScheduleRow {
   date: string;
   shift: string | null;
-}
-
-interface NotificationRow {
-  id: number;
-  title: string;
-  body: string | null;
-  priority: string | null;
-  created_at: string | null;
 }
 
 interface QuickAction {
@@ -42,7 +33,7 @@ interface QuickAction {
 
 const QUICK_ACTIONS: QuickAction[] = [
   { page: 'schedule', title: 'Графік', description: 'Перевірити зміни команди', icon: CalendarDays },
-  { page: 'menu', title: 'Меню', description: 'Стоп-лист і склад позицій', icon: Soup },
+  { page: 'menu', title: 'Меню', description: 'Склад і подача позицій', icon: Soup },
   { page: 'reserve', title: 'Резерви', description: 'Столи та таймлайн сервісу', icon: ClipboardList },
   { page: 'cash', title: 'Каса', description: 'Виручка й особистий результат', icon: Banknote },
   { page: 'staff', title: 'Команда', description: 'Профілі та ролі працівників', icon: ShieldCheck },
@@ -80,7 +71,6 @@ function formatToday(): string {
 export function DashboardPage() {
   const { user } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
-  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [operationsReady, setOperationsReady] = useState(false);
 
@@ -89,15 +79,10 @@ export function DashboardPage() {
       requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
       cancelIdleCallback?: (handle: number) => void;
     };
-
     if (idleWindow.requestIdleCallback) {
-      const handle = idleWindow.requestIdleCallback(
-        () => setOperationsReady(true),
-        { timeout: 900 },
-      );
+      const handle = idleWindow.requestIdleCallback(() => setOperationsReady(true), { timeout: 900 });
       return () => idleWindow.cancelIdleCallback?.(handle);
     }
-
     const handle = window.setTimeout(() => setOperationsReady(true), 320);
     return () => window.clearTimeout(handle);
   }, []);
@@ -105,30 +90,18 @@ export function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    const userId = user.id;
     const today = new Date().toISOString().slice(0, 10);
 
     async function load() {
-      const [scheduleResult, notificationsResult] = await Promise.all([
-        supabase
-          .from('schedule')
-          .select('date,shift')
-          .eq('user_id', userId)
-          .gte('date', today)
-          .order('date', { ascending: true })
-          .limit(7),
-        supabase
-          .from('notifications')
-          .select('id,title,body,priority,created_at')
-          .order('created_at', { ascending: false })
-          .limit(3),
-      ]);
-
+      const result = await supabase
+        .from('schedule')
+        .select('date,shift')
+        .eq('user_id', user.id)
+        .gte('date', today)
+        .order('date', { ascending: true })
+        .limit(3);
       if (cancelled) return;
-      if (!scheduleResult.error) setSchedule((scheduleResult.data || []) as ScheduleRow[]);
-      if (!notificationsResult.error) {
-        setNotifications((notificationsResult.data || []) as NotificationRow[]);
-      }
+      if (!result.error) setSchedule((result.data || []) as ScheduleRow[]);
       setLoading(false);
     }
 
@@ -159,21 +132,13 @@ export function DashboardPage() {
         <div className="today-hero-copy-v3">
           <span className="today-date-v3"><Sparkles size={15} /> {formatToday()}</span>
           <h2>Гарної зміни, {firstName}</h2>
-          <p>Тут зібрано все, що потрібно сьогодні: найближчий графік, повідомлення команди, обов’язки та передача зміни.</p>
-
+          <p>Тут залишено тільки те, що потрібно сьогодні: три найближчі дні графіка та ваші робочі обов’язки.</p>
           <div className="today-shift-pill-v3">
             <CalendarCheck2 size={19} />
-            <div className="today-shift-pill-copy-v3">
-              <span>Наступна зміна</span>
-              <strong>{nextShiftLabel}</strong>
-            </div>
+            <div className="today-shift-pill-copy-v3"><span>Наступна зміна</span><strong>{nextShiftLabel}</strong></div>
           </div>
         </div>
-
-        <div className="today-emblem-v3" aria-hidden="true">
-          <span>თ</span>
-          <small>team</small>
-        </div>
+        <div className="today-emblem-v3" aria-hidden="true"><span>თ</span><small>team</small></div>
       </section>
 
       {quickActions.length > 0 ? (
@@ -183,10 +148,7 @@ export function DashboardPage() {
             return (
               <Link className="today-quick-v3" to={pages[action.page].path} key={action.page}>
                 <Icon size={22} />
-                <span className="today-quick-copy-v3">
-                  <strong>{action.title}</strong>
-                  <span>{action.description}</span>
-                </span>
+                <span className="today-quick-copy-v3"><strong>{action.title}</strong><span>{action.description}</span></span>
                 <ArrowUpRight size={17} />
               </Link>
             );
@@ -197,82 +159,27 @@ export function DashboardPage() {
       <section className="today-metric-row-v3">
         <article className="today-metric-v3">
           <span className="today-metric-icon-v3"><CalendarCheck2 size={20} /></span>
-          <span className="today-metric-copy-v3">
-            <span>Наступна зміна</span>
-            <strong>{nextShiftLabel}</strong>
-          </span>
-        </article>
-        <article className="today-metric-v3">
-          <span className="today-metric-icon-v3"><BellRing size={20} /></span>
-          <span className="today-metric-copy-v3">
-            <span>Повідомлення</span>
-            <strong>{loading ? 'Завантаження…' : `${notifications.length} нових`}</strong>
-          </span>
+          <span className="today-metric-copy-v3"><span>Наступна зміна</span><strong>{nextShiftLabel}</strong></span>
         </article>
         <article className="today-metric-v3">
           <span className="today-metric-icon-v3"><ShieldCheck size={20} /></span>
-          <span className="today-metric-copy-v3">
-            <span>Роль у порталі</span>
-            <strong>{roleLabel}</strong>
-          </span>
+          <span className="today-metric-copy-v3"><span>Роль у порталі</span><strong>{roleLabel}</strong></span>
         </article>
       </section>
 
       <section className="today-content-grid-v3">
         <article className="today-panel-v3">
           <div className="today-panel-heading-v3">
-            <div>
-              <span className="eyebrow">Найближчі дні</span>
-              <h3>Мій графік</h3>
-            </div>
-            {user && canAccessPage(user, 'schedule') ? (
-              <Link className="today-panel-link-v3" to={pages.schedule.path}>Відкрити <ArrowUpRight size={14} /></Link>
-            ) : null}
+            <div><span className="eyebrow">Три найближчі дні</span><h3>Мій графік</h3></div>
+            {user && canAccessPage(user, 'schedule') ? <Link className="today-panel-link-v3" to={pages.schedule.path}>Відкрити <ArrowUpRight size={14} /></Link> : null}
           </div>
-
           <div className="today-schedule-v3">
             {loading ? <div className="today-empty-v3"><span>Завантажуємо найближчі зміни…</span></div> : null}
             {!loading && schedule.length === 0 ? (
-              <div className="today-empty-v3">
-                <CalendarDays size={27} />
-                <strong>Графік поки порожній</strong>
-                <span>Коли зміни будуть призначені, вони одразу з’являться тут.</span>
-              </div>
+              <div className="today-empty-v3"><CalendarDays size={27} /><strong>Графік поки порожній</strong><span>Коли зміни будуть призначені, вони з’являться тут.</span></div>
             ) : null}
             {!loading ? schedule.map((row) => (
-              <div className="today-schedule-row-v3" key={row.date}>
-                <span>{formatDate(row.date)}</span>
-                <strong>{row.shift || 'Вихідний'}</strong>
-              </div>
-            )) : null}
-          </div>
-        </article>
-
-        <article className="today-panel-v3">
-          <div className="today-panel-heading-v3">
-            <div>
-              <span className="eyebrow">Команда</span>
-              <h3>Повідомлення</h3>
-            </div>
-          </div>
-
-          <div className="today-notifications-v3">
-            {loading ? <div className="today-empty-v3"><span>Оновлюємо повідомлення…</span></div> : null}
-            {!loading && notifications.length === 0 ? (
-              <div className="today-empty-v3">
-                <BellRing size={27} />
-                <strong>Усе спокійно</strong>
-                <span>Нових оголошень для команди зараз немає.</span>
-              </div>
-            ) : null}
-            {!loading ? notifications.map((item) => (
-              <div className="today-notification-v3" key={item.id}>
-                <span className={`priority-dot priority-${item.priority || 'medium'}`} />
-                <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.body || 'Без додаткового тексту'}</p>
-                </div>
-              </div>
+              <div className="today-schedule-row-v3" key={row.date}><span>{formatDate(row.date)}</span><strong>{row.shift || 'Вихідний'}</strong></div>
             )) : null}
           </div>
         </article>
@@ -280,7 +187,7 @@ export function DashboardPage() {
 
       {operationsReady ? (
         <Suspense fallback={<div className="operations-deferred-placeholder route-skeleton-card" aria-label="Завантаження робочої зміни" />}>
-          <OperationsDashboard />
+          <TodayOperationsWidget />
         </Suspense>
       ) : <div className="operations-deferred-placeholder route-skeleton-card" aria-hidden="true" />}
     </div>
