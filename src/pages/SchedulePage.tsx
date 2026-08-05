@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { canPerform } from '../lib/acl';
 import { secureApi } from '../lib/secureApi';
@@ -243,12 +244,41 @@ export function SchedulePage() {
 
   function openPicker(staff: ScheduleStaff, date: string, target: HTMLButtonElement) {
     if (!canEditStaff(staff)) return;
+
     const rect = target.getBoundingClientRect();
-    const width = Math.min(360, window.innerWidth - 24);
-    const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left + rect.width / 2 - width / 2));
-    const preferredTop = rect.bottom + 8;
-    const top = Math.max(12, Math.min(window.innerHeight - 330, preferredTop));
-    setPicker({ staff, date, value: entries[cellKey(staff.id, date)] || '', anchor: { left, top } });
+    const viewportWidth = window.visualViewport?.width || window.innerWidth;
+    const viewportHeight = window.visualViewport?.height || window.innerHeight;
+    const viewportLeft = window.visualViewport?.offsetLeft || 0;
+    const viewportTop = window.visualViewport?.offsetTop || 0;
+    const edge = 12;
+    const gap = 8;
+    const width = Math.min(360, viewportWidth - edge * 2);
+    const estimatedHeight = Math.min(420, viewportHeight - edge * 2);
+    const left = Math.max(
+      viewportLeft + edge,
+      Math.min(
+        viewportLeft + viewportWidth - width - edge,
+        rect.left + rect.width / 2 - width / 2,
+      ),
+    );
+    const belowTop = rect.bottom + gap;
+    const aboveTop = rect.top - estimatedHeight - gap;
+    const spaceBelow = viewportTop + viewportHeight - rect.bottom - edge;
+    const spaceAbove = rect.top - viewportTop - edge;
+    const preferredTop = spaceBelow >= estimatedHeight || spaceBelow >= spaceAbove
+      ? belowTop
+      : aboveTop;
+    const top = Math.max(
+      viewportTop + edge,
+      Math.min(viewportTop + viewportHeight - estimatedHeight - edge, preferredTop),
+    );
+
+    setPicker({
+      staff,
+      date,
+      value: entries[cellKey(staff.id, date)] || '',
+      anchor: { left, top },
+    });
   }
 
   async function applyShift(code: ShiftCode) {
@@ -353,9 +383,16 @@ export function SchedulePage() {
         <div className="schedule-legend-v2">{shiftDefinitions.filter((item) => item.code).map((item) => <span key={item.code} className={`tone-${item.tone}`}><b>{item.code}</b> {item.label}</span>)}</div>
       </section>
 
-      {picker ? (
-        <div className="schedule-picker-backdrop" role="presentation" onMouseDown={() => setPicker(null)}>
-          <section className="schedule-picker-sheet" style={{ left: picker.anchor.left, top: picker.anchor.top }} role="dialog" aria-modal="true" aria-labelledby="schedule-picker-title" onMouseDown={(event) => event.stopPropagation()}>
+      {picker ? createPortal(
+        <div className="schedule-picker-backdrop" role="presentation" onPointerDown={() => setPicker(null)}>
+          <section
+            className="schedule-picker-sheet"
+            style={{ left: picker.anchor.left, top: picker.anchor.top }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="schedule-picker-title"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
             <div className="schedule-picker-heading"><div><span className="eyebrow">Зміна</span><h3 id="schedule-picker-title">{picker.staff.name}</h3><p>{new Intl.DateTimeFormat('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${picker.date}T12:00:00`))}</p></div><button type="button" onClick={() => setPicker(null)} aria-label="Закрити"><X size={19} /></button></div>
             <div className="schedule-picker-grid">{shiftDefinitions.map((item) => (
               <button type="button" key={item.code || 'empty'} className={`tone-${item.tone} ${picker.value === item.code ? 'is-active' : ''}`} onClick={() => void applyShift(item.code)}>
@@ -363,7 +400,8 @@ export function SchedulePage() {
               </button>
             ))}</div>
           </section>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
