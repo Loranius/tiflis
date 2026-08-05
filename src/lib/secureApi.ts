@@ -9,13 +9,62 @@ interface SecureApiOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   dedupe?: boolean;
+  cacheTtlMs?: number;
+  forceRefresh?: boolean;
 }
 
-const inFlightRequests = new Map<string, Promise<unknown>>();
-let accessTokenRequest: Promise<string> | null = null;
+interface ResponseCacheEntry {
+  expiresAt: number;
+  generation: number;
+  value: SecureApiEnvelope;
+}
 
-function requestKey(functionSlug: string, body: Record<string, unknown>): string {
-  return `${functionSlug}:${JSON.stringify(body)}`;
+const DEFAULT_BOOTSTRAP_CACHE_TTL_MS = 15_000;
+const MAX_RESPONSE_CACHE_ENTRIES = 24;
+const inFlightRequests = new Map<string, Promise<unknown>>();
+const responseCache = new Map<string, ResponseCacheEntry>();
+let accessTokenRequest: Promise<string> | null = null;
+let cacheGeneration = 0;
+
+function requestKey(functionSlug: string, body: Record<string, unknown>, token: string): string {
+  const sessionFingerprint = token.slice(-18);
+  return `${sessionFingerprint}:${functionSlug}:${JSON.stringify(body)}`;
+}
+
+function invalidateResponseCache() {
+  cacheGeneration += 1;
+  responseCache.clear();
+  inFlightRequests.clear();
+}
+
+function pruneResponseCache(now = Date.now()) {
+  for (const [key, entry] of responseCache) {
+    if (entry.expiresAt <= now || entry.generation !== cacheGeneration) {
+      responseCache.delete(key);
+    }
+  }
+
+  while (responseCache.size > MAX_RESPONSE_CACHE_ENTRIES) {
+    const oldestKey = responseCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    responseCache.delete(oldestKey);
+  }
+}
+
+function rememberResponse(
+  key: string,
+  value: SecureApiEnvelope,
+  ttlMs: number,
+  generation: number,
+) {
+  if (ttlMs <= 0 || generation !== cacheGeneration) return;
+  responseCache.delete(key);
+  responseCache.set(key, {
+    expiresAt: Date.now() + ttlMs,
+    generation,
+    value,
+  });
+  pruneResponseCache();
 }
 
 async function getAccessToken(): Promise<string> {
@@ -40,6 +89,7 @@ async function executeSecureApi<T extends SecureApiEnvelope>(
   body: Record<string, unknown>,
   functionSlug: string,
   options: SecureApiOptions,
+  initialToken: string,
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), options.timeoutMs ?? 20_000);
@@ -58,7 +108,7 @@ async function executeSecureApi<T extends SecureApiEnvelope>(
   });
 
   try {
-    let response = await post(await getAccessToken());
+    let response = await post(initialToken);
 
     if (response.status === 401 && !controller.signal.aborted) {
       const { data, error } = await supabase.auth.refreshSession();
@@ -91,30 +141,58 @@ async function executeSecureApi<T extends SecureApiEnvelope>(
   }
 }
 
-export function secureApi<T extends SecureApiEnvelope>(
+export async function secureApi<T extends SecureApiEnvelope>(
   body: Record<string, unknown>,
   functionSlug = 'tiflis-secure-api',
   options: SecureApiOptions = {},
 ): Promise<T> {
   const action = typeof body.action === 'string' ? body.action : '';
+  const isBootstrap = action.endsWith('_bootstrap');
   const resolvedFunctionSlug = functionSlug === 'tiflis-secure-api' && action === 'cash_bootstrap'
     ? 'tiflis-cash-anonymous-api'
     : functionSlug;
-  const shouldDedupe = options.dedupe ?? action.endsWith('_bootstrap');
 
-  if (!shouldDedupe || options.signal) {
-    return executeSecureApi<T>(body, resolvedFunctionSlug, options);
+  if (!isBootstrap) invalidateResponseCache();
+
+  const token = await getAccessToken();
+  const key = requestKey(resolvedFunctionSlug, body, token);
+  const cacheTtlMs = isBootstrap
+    ? Math.max(0, options.cacheTtlMs ?? DEFAULT_BOOTSTRAP_CACHE_TTL_MS)
+    : 0;
+  const shouldCache = cacheTtlMs > 0 && !options.signal;
+  const shouldDedupe = options.dedupe ?? isBootstrap;
+
+  if (shouldCache && !options.forceRefresh) {
+    pruneResponseCache();
+    const cached = responseCache.get(key);
+    if (cached && cached.expiresAt > Date.now() && cached.generation === cacheGeneration) {
+      responseCache.delete(key);
+      responseCache.set(key, cached);
+      return cached.value as T;
+    }
   }
 
-  const key = requestKey(resolvedFunctionSlug, body);
+  if (!shouldDedupe || options.signal) {
+    const generation = cacheGeneration;
+    const payload = await executeSecureApi<T>(body, resolvedFunctionSlug, options, token);
+    if (shouldCache) rememberResponse(key, payload, cacheTtlMs, generation);
+    return payload;
+  }
+
   const existing = inFlightRequests.get(key);
   if (existing) return existing as Promise<T>;
 
-  const request = executeSecureApi<T>(body, resolvedFunctionSlug, options);
+  const generation = cacheGeneration;
+  const request = executeSecureApi<T>(body, resolvedFunctionSlug, options, token);
   inFlightRequests.set(key, request);
   void request.then(
-    () => inFlightRequests.delete(key),
-    () => inFlightRequests.delete(key),
+    (payload) => {
+      if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
+      if (shouldCache) rememberResponse(key, payload, cacheTtlMs, generation);
+    },
+    () => {
+      if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
+    },
   );
   return request;
 }
