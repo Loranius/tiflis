@@ -1,3 +1,4 @@
+// Verifies the exact production artifact before GitHub Pages can publish it.
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { access, readFile, stat } from 'node:fs/promises';
