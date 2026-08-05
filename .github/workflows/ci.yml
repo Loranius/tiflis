@@ -21,7 +21,7 @@ jobs:
   build:
     name: Validate production portal
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
 
     steps:
       - name: Checkout
@@ -41,11 +41,18 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Check duty planner Edge Function
-        run: deno check --node-modules-dir=auto supabase/functions/tiflis-duty-planner-api/index.ts
-
-      - name: Check secure API Edge Function
-        run: deno check --node-modules-dir=auto supabase/functions/tiflis-secure-api/index.ts
+      - name: Check every Edge Function
+        run: |
+          set -euo pipefail
+          count=0
+          for file in supabase/functions/*/index.ts; do
+            echo "::group::Deno check $file"
+            deno check --node-modules-dir=auto "$file"
+            echo "::endgroup::"
+            count=$((count + 1))
+          done
+          test "$count" -gt 0
+          echo "Checked $count Edge Functions."
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
