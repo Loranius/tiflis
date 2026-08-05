@@ -1,13 +1,14 @@
+import type { User } from '@supabase/supabase-js';
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
-import type { User } from '@supabase/supabase-js';
 import { edgeFunctionUrl, supabase, supabasePublishableKey } from '../lib/supabase';
 import type { LegacyAuthResponse, StaffRole, StaffUser } from '../types';
 
@@ -18,7 +19,16 @@ interface AuthContextValue {
   logout: () => Promise<void>;
 }
 
+interface CachedProfile {
+  authUserId: string;
+  cachedAt: number;
+  profile: StaffUser;
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null);
+const PROFILE_CACHE_KEY = 'tiflis-v2.staff-profile';
+const PROFILE_CACHE_TTL = 15 * 60 * 1000;
+const profileRequests = new Map<string, Promise<StaffUser>>();
 
 function normalizeRole(role: string | null | undefined): StaffRole {
   const aliases: Record<string, StaffRole> = {
@@ -53,7 +63,45 @@ function mapLegacyUser(data: NonNullable<LegacyAuthResponse['user']>): StaffUser
   };
 }
 
-async function loadStaffProfile(authUser: User): Promise<StaffUser> {
+function readCachedProfile(authUserId: string): StaffUser | null {
+  try {
+    const raw = sessionStorage.getItem(PROFILE_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as CachedProfile;
+    if (
+      cached.authUserId !== authUserId
+      || Date.now() - cached.cachedAt > PROFILE_CACHE_TTL
+      || !cached.profile?.id
+      || !cached.profile.active
+    ) {
+      sessionStorage.removeItem(PROFILE_CACHE_KEY);
+      return null;
+    }
+    return cached.profile;
+  } catch {
+    sessionStorage.removeItem(PROFILE_CACHE_KEY);
+    return null;
+  }
+}
+
+function writeCachedProfile(authUserId: string, profile: StaffUser) {
+  try {
+    const cached: CachedProfile = { authUserId, cachedAt: Date.now(), profile };
+    sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cached));
+  } catch {
+    // Storage can be unavailable in strict privacy modes; auth remains functional without it.
+  }
+}
+
+function clearCachedProfile() {
+  try {
+    sessionStorage.removeItem(PROFILE_CACHE_KEY);
+  } catch {
+    // Ignore storage failures during sign-out.
+  }
+}
+
+async function fetchStaffProfile(authUser: User): Promise<StaffUser> {
   const { data, error } = await supabase
     .from('staff_profiles')
     .select('legacy_user_id,display_name,role,role2,active,can_notify')
@@ -76,78 +124,146 @@ async function loadStaffProfile(authUser: User): Promise<StaffUser> {
   };
 }
 
+function loadStaffProfile(authUser: User): Promise<StaffUser> {
+  const existing = profileRequests.get(authUser.id);
+  if (existing) return existing;
+
+  const request = fetchStaffProfile(authUser).then((profile) => {
+    writeCachedProfile(authUser.id, profile);
+    return profile;
+  });
+  profileRequests.set(authUser.id, request);
+  void request.then(
+    () => profileRequests.delete(authUser.id),
+    () => profileRequests.delete(authUser.id),
+  );
+  return request;
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<StaffUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const userRef = useRef<StaffUser | null>(null);
+  const authUserIdRef = useRef<string | null>(null);
+
+  const applyUser = useCallback((next: StaffUser | null, authUserId: string | null = null) => {
+    userRef.current = next;
+    authUserIdRef.current = authUserId;
+    setUser(next);
+  }, []);
 
   const restore = useCallback(async () => {
-    const { data } = await supabase.auth.getSession();
-    if (!data.session?.user) {
-      setUser(null);
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session?.user) {
+      clearCachedProfile();
+      applyUser(null);
       setLoading(false);
       return;
     }
 
-    try {
-      const profile = await loadStaffProfile(data.session.user);
-      if (!profile.active) throw new Error('Доступ заблоковано');
-      setUser(profile);
-    } catch {
-      await supabase.auth.signOut();
-      setUser(null);
-    } finally {
+    const authUser = data.session.user;
+    const cached = readCachedProfile(authUser.id);
+    if (cached) {
+      applyUser(cached, authUser.id);
       setLoading(false);
     }
-  }, []);
+
+    try {
+      const profile = await loadStaffProfile(authUser);
+      if (!profile.active) throw new Error('Доступ заблоковано');
+      applyUser(profile, authUser.id);
+    } catch {
+      clearCachedProfile();
+      await supabase.auth.signOut();
+      applyUser(null);
+    } finally {
+      if (!cached) setLoading(false);
+    }
+  }, [applyUser]);
 
   useEffect(() => {
     void restore();
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') return;
+
       if (event === 'SIGNED_OUT' || !session?.user) {
-        setUser(null);
+        clearCachedProfile();
+        applyUser(null);
         setLoading(false);
         return;
       }
+
+      if (authUserIdRef.current === session.user.id && userRef.current) return;
+
+      setLoading(true);
       void loadStaffProfile(session.user)
-        .then(setUser)
+        .then((profile) => {
+          if (!profile.active) throw new Error('Доступ заблоковано');
+          applyUser(profile, session.user.id);
+        })
         .catch(async () => {
+          clearCachedProfile();
           await supabase.auth.signOut();
-          setUser(null);
+          applyUser(null);
         })
         .finally(() => setLoading(false));
     });
     return () => data.subscription.unsubscribe();
-  }, [restore]);
+  }, [applyUser, restore]);
 
   const login = useCallback(async (loginValue: string, password: string) => {
-    const response = await fetch(edgeFunctionUrl('tiflis-auth-migrate'), {
-      method: 'POST',
-      headers: {
-        apikey: supabasePublishableKey,
-        Authorization: `Bearer ${supabasePublishableKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'login', login: loginValue, password }),
-    });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
 
-    const payload = (await response.json()) as LegacyAuthResponse;
-    if (!response.ok || !payload.ok || !payload.session || !payload.user) {
-      throw new Error(payload.error || 'Не вдалося увійти');
+    try {
+      const response = await fetch(edgeFunctionUrl('tiflis-auth-migrate'), {
+        method: 'POST',
+        headers: {
+          apikey: supabasePublishableKey,
+          Authorization: `Bearer ${supabasePublishableKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'login', login: loginValue, password }),
+        signal: controller.signal,
+      });
+
+      let payload: LegacyAuthResponse;
+      try {
+        payload = (await response.json()) as LegacyAuthResponse;
+      } catch {
+        throw new Error('Сервер повернув некоректну відповідь.');
+      }
+
+      if (!response.ok || !payload.ok || !payload.session || !payload.user) {
+        throw new Error(payload.error || 'Не вдалося увійти');
+      }
+
+      const { data, error } = await supabase.auth.setSession({
+        access_token: payload.session.access_token,
+        refresh_token: payload.session.refresh_token,
+      });
+      if (error) throw error;
+
+      const mapped = mapLegacyUser(payload.user);
+      const authUserId = data.session?.user.id || null;
+      if (authUserId) writeCachedProfile(authUserId, mapped);
+      applyUser(mapped, authUserId);
+      setLoading(false);
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === 'AbortError') {
+        throw new Error('Сервер відповідає надто довго. Спробуйте ще раз.');
+      }
+      throw reason;
+    } finally {
+      window.clearTimeout(timeout);
     }
-
-    const { error } = await supabase.auth.setSession({
-      access_token: payload.session.access_token,
-      refresh_token: payload.session.refresh_token,
-    });
-    if (error) throw error;
-
-    setUser(mapLegacyUser(payload.user));
-  }, []);
+  }, [applyUser]);
 
   const logout = useCallback(async () => {
+    clearCachedProfile();
     await supabase.auth.signOut();
-    setUser(null);
-  }, []);
+    applyUser(null);
+  }, [applyUser]);
 
   const value = useMemo<AuthContextValue>(
     () => ({ user, loading, login, logout }),
