@@ -1,0 +1,36 @@
+name: Apply Phase 4 schedule patch
+
+on:
+  push:
+    branches:
+      - fix/schedule-mobile-role-labels-20260805
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase4-schedule-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[phase4-applied]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout patch branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/schedule-mobile-role-labels-20260805
+
+      - name: Apply exact source patch
+        run: node scripts/apply-phase4-schedule.mjs
+
+      - name: Commit patched source files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/SchedulePage.tsx src/pages/schedule.css
+          git commit -m "fix: improve mobile schedule scrolling and role labels [phase4-applied]"
+          git push origin HEAD:fix/schedule-mobile-role-labels-20260805
