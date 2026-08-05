@@ -1,0 +1,205 @@
+.today-operations-v4 {
+  color: var(--text);
+  border-color: var(--border);
+  background:
+    radial-gradient(circle at 88% 5%, rgba(215, 182, 108, 0.1), transparent 26%),
+    linear-gradient(145deg, #17231c, #101812);
+  box-shadow: var(--shadow);
+}
+
+.today-shift-team-v4 {
+  border-color: var(--border);
+}
+
+.today-shift-team-v4 h3,
+.today-operations-heading-v4 h3,
+.today-shift-team-empty-v4 strong,
+.today-operations-empty-v4 strong {
+  color: var(--text);
+}
+
+.today-shift-team-v4 p,
+.today-operations-heading-v4 p,
+.today-shift-team-empty-v4,
+.today-operations-empty-v4,
+.today-operations-loading-v4 {
+  color: var(--muted);
+}
+
+.today-shift-team-count-v4,
+.today-operations-progress-v4 {
+  border: 1px solid rgba(215, 182, 108, 0.2);
+  background: var(--gold-soft);
+  color: var(--gold-bright, var(--gold));
+}
+
+.today-shift-team-grid-v4 article {
+  border-color: var(--border);
+  background: linear-gradient(145deg, rgba(28, 42, 33, 0.96), rgba(18, 29, 22, 0.98));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.018);
+}
+
+.today-shift-team-grid-v4 article.is-own {
+  border-color: rgba(215, 182, 108, 0.38);
+  box-shadow:
+    inset 3px 0 0 var(--gold),
+    inset 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.today-shift-avatar-v4 {
+  border-color: rgba(215, 182, 108, 0.18);
+  background: linear-gradient(145deg, #315f45, #183d2a);
+}
+
+.today-shift-person-v4 strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+}
+
+.today-shift-name-v4 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-shift-own-badge-v4 {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid rgba(215, 182, 108, 0.3);
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: var(--gold-bright, var(--gold));
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.today-shift-person-v4 > span,
+.today-shift-person-v4 > small {
+  color: var(--muted);
+}
+
+.today-shift-person-v4 > small.has-zone {
+  color: #8ed5a8;
+}
+
+.today-shift-zones-status-v4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(215, 182, 108, 0.17);
+  border-radius: 13px;
+  background: rgba(215, 182, 108, 0.055);
+  color: #c9bc91;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.today-operation-row-v4 {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.022);
+  color: var(--text);
+}
+
+.today-operation-row-v4 small {
+  color: var(--muted);
+}
+
+.today-operation-row-v4.status-done {
+  border-color: rgba(79, 180, 119, 0.2);
+  background: rgba(79, 180, 119, 0.09);
+  color: #91d7a9;
+}
+
+.today-zones-v4 {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.today-zones-v4 header,
+.today-tuesday-handover-v4 > header {
+  color: var(--gold-bright, var(--gold));
+}
+
+.today-zones-v4 > div span {
+  border-color: rgba(215, 182, 108, 0.18);
+  background: var(--gold-soft);
+  color: var(--gold-bright, var(--gold));
+}
+
+.today-tuesday-handover-v4 {
+  border-color: var(--border);
+}
+
+.today-tuesday-handover-v4 .today-operation-row-v4 {
+  border-color: rgba(215, 182, 108, 0.17);
+  background: rgba(215, 182, 108, 0.045);
+}
+
+.today-operations-alert-v4 {
+  border: 1px solid rgba(239, 124, 124, 0.24);
+  background: rgba(239, 124, 124, 0.09);
+  color: #ffb5b5;
+}
+
+@media (max-width: 640px) {
+  .today-operations-v4 {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .today-operations-heading-v4 {
+    order: 1;
+  }
+
+  .today-operations-alert-v4 {
+    order: 2;
+  }
+
+  .today-operations-loading-v4 {
+    order: 3;
+  }
+
+  .today-operations-list-v4,
+  .today-operations-empty-v4 {
+    order: 4;
+  }
+
+  .today-shift-team-v4 {
+    order: 5;
+    padding-top: 18px;
+    padding-bottom: 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
+  }
+
+  .today-shift-team-v4 > header,
+  .today-operations-heading-v4 {
+    align-items: flex-start;
+  }
+
+  .today-shift-team-v4 > header > div,
+  .today-operations-heading-v4 > div {
+    min-width: 0;
+  }
+
+  .today-shift-team-grid-v4 article {
+    grid-template-columns: 46px minmax(0, 1fr);
+    padding: 11px;
+  }
+
+  .today-shift-avatar-v4 {
+    width: 44px;
+    height: 44px;
+  }
+
+  .today-operation-row-v4 {
+    padding: 12px;
+  }
+}
