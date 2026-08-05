@@ -1,4 +1,4 @@
-import { access, readFile, readdir, stat } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -80,7 +80,7 @@ if (!modalRuntime.includes('visualViewport') || !modalRuntime.includes('Mutation
 
 const mainSource = await read('src/main.tsx');
 for (const insecureKey of ['tiflis_saved_password', 'tiflis_tg_token']) {
-  if (!mainSource.includes(`localStorage.removeItem(key)`) || !mainSource.includes(insecureKey)) {
+  if (!mainSource.includes('localStorage.removeItem(key)') || !mainSource.includes(insecureKey)) {
     fail(`Legacy insecure key retirement is missing for ${insecureKey}.`);
   }
 }
@@ -107,7 +107,7 @@ notes.push(`${stableAssets.length} stable runtime asset(s) present.`);
 const temporaryFiles = [
   ...await filesUnder('.github/workflows', ['.yml', '.yaml']),
   ...await filesUnder('scripts', ['.mjs', '.js']),
-].filter((file) => /apply-phase|final-portal-audit/i.test(file) && !file.endsWith('final-portal-audit.mjs'));
+].filter((file) => /apply-phase/i.test(file));
 if (temporaryFiles.length) fail(`Temporary patch machinery remains: ${temporaryFiles.join(', ')}`);
 
 const packageJson = JSON.parse(await read('package.json'));
