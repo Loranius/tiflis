@@ -1,0 +1,46 @@
+name: Operations modules
+
+on:
+  push:
+    branches:
+      - feature/duties-handover-v1
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/duties-handover-v1
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Apply routes and backend changes
+        run: python .github/scripts/apply_operations_modules.py
+      - name: Check operations edge function
+        run: deno check --node-modules-dir=auto supabase/functions/tiflis-operations-api/index.ts
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Commit generated module wiring
+        run: |
+          rm .github/workflows/operations-modules.yml
+          rm .github/scripts/apply_operations_modules.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/App.tsx src/lib/acl.ts src/lib/pageLoaders.ts src/components/AppShell.tsx supabase/functions/tiflis-operations-api/index.ts .github/workflows/operations-modules.yml .github/scripts/apply_operations_modules.py
+          git commit -m "Wire daily duties and Tuesday handover modules"
+          git push origin HEAD:feature/duties-handover-v1
