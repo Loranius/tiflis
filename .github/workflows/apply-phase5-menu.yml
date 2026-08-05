@@ -1,0 +1,36 @@
+name: Apply Phase 5 menu patch
+
+on:
+  push:
+    branches:
+      - fix/menu-table-details-20260805
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase5-menu-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[phase5-applied]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout patch branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/menu-table-details-20260805
+
+      - name: Apply exact source patch
+        run: node scripts/apply-phase5-menu.mjs
+
+      - name: Commit patched source files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/MenuPage.tsx src/pages/menu.css
+          git commit -m "feat: rebuild menu as two-column table [phase5-applied]"
+          git push origin HEAD:fix/menu-table-details-20260805
