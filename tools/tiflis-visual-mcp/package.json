@@ -1,0 +1,21 @@
+{
+  "name": "@tiflis/visual-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Restricted Playwright MCP server for visually inspecting the Tiflis portal.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "check": "node --check src/index.mjs",
+    "install:browser": "playwright install chromium",
+    "inspect": "npx @modelcontextprotocol/inspector node src/index.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "playwright": "^1.55.0",
+    "zod": "^4.0.0"
+  }
+}
