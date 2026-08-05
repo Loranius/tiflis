@@ -82,6 +82,15 @@ jobs:
           await browser.close();
           NODE
 
+      - name: Upload snapshot artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: tiflis-live-pixel8pro
+          path: |
+            visual-reports/latest-pixel8pro.jpg
+            visual-reports/latest-pixel8pro.json
+          retention-days: 7
+
       - name: Commit latest snapshot
         run: |
           git config user.name 'github-actions[bot]'
