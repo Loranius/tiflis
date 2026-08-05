@@ -103,6 +103,19 @@ function money(value: number | string | null): string {
   }).format(amount);
 }
 
+function formatUpdatedAt(value: string | null): string {
+  if (!value) return 'Не вказано';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Не вказано';
+  return new Intl.DateTimeFormat('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 function normalizeSearch(value: string): string {
   return value.trim().toLocaleLowerCase('uk-UA');
 }
@@ -339,29 +352,38 @@ export function MenuPage() {
         {!loading ? <div className="menu-category-groups-v2">
           {visibleCategories.map(([category, categoryItems]) => <section key={category} className="menu-category-group-v2">
             <div className="menu-category-heading-v2"><div><span className="eyebrow">{activeSection === 'all' ? sectionLabel(categoryItems[0]?.section || '') : sectionLabel(activeSection)}</span><h3>{category}</h3></div><span>{categoryItems.length} позицій</span></div>
-            <div className="menu-card-grid-v2">
+            <div className="menu-table-v3" aria-label={`Категорія: ${category}`}>
+              <div className="menu-table-heading-v3" aria-hidden="true"><span>Позиція</span><span>Ціна / вага</span></div>
               {categoryItems.map((item) => {
                 const shownTime = busyMode ? item.cook_time_busy : item.cook_time_normal;
-                return <article className={`menu-card-v2 ${item.stopped ? 'is-stopped' : ''}`} key={item.id}>
-                  <button type="button" className="menu-card-main-v2" onClick={() => setSelected(item)}>
-                    <div className="menu-card-media-v2">
-                      {item.photo ? <img src={item.photo} alt="" loading="lazy" /> : <span>{item.emoji || sectionIcon(item.section)}</span>}
-                      {item.stopped ? <b><AlertTriangle size={14} /> Стоп</b> : null}
+                const allergenCount = (item.allergens || []).length;
+                return (
+                  <button
+                    type="button"
+                    className={`menu-table-row-v3 ${item.stopped ? 'is-stopped' : ''}`}
+                    key={item.id}
+                    onClick={() => setSelected(item)}
+                    aria-label={`${item.name}, ${money(item.price)}${item.weight ? `, ${item.weight}` : ''}`}
+                  >
+                    <span className="menu-table-name-v3">
                       <i><SectionSymbol section={item.section} /></i>
-                    </div>
-                    <div className="menu-card-copy-v2">
-                      <span>{item.category}</span>
-                      <h4>{item.name}</h4>
-                      <p>{item.description || 'Опис позиції не додано.'}</p>
-                      <div className="menu-card-meta-v2">
-                        <strong>{money(item.price)}</strong>
-                        {item.weight ? <span>{item.weight}</span> : null}
-                        {shownTime !== null ? <span><Clock3 size={13} /> {shownTime} хв</span> : null}
-                      </div>
-                      {(item.allergens || []).length > 0 ? <div className="menu-card-allergens-v2">{(item.allergens || []).slice(0, 3).map((allergen) => <span key={allergen}>{allergen}</span>)}{(item.allergens || []).length > 3 ? <span>+{(item.allergens || []).length - 3}</span> : null}</div> : null}
-                    </div>
+                      <span>
+                        <strong>{item.name}</strong>
+                        <small>
+                          {item.stopped ? <b><AlertTriangle size={12} /> Стоп</b> : null}
+                          {item.photo ? <em><ImageIcon size={12} /> Фото</em> : null}
+                          {shownTime !== null ? <em><Clock3 size={12} /> {shownTime} хв</em> : null}
+                          {allergenCount > 0 ? <em>{allergenCount} алергенів</em> : null}
+                          {!item.stopped && !item.photo && shownTime === null && allergenCount === 0 ? <em>{item.category}</em> : null}
+                        </small>
+                      </span>
+                    </span>
+                    <span className="menu-table-value-v3">
+                      <strong>{money(item.price)}</strong>
+                      <small>{item.weight || 'Вагу не вказано'}</small>
+                    </span>
                   </button>
-                </article>;
+                );
               })}
             </div>
           </section>)}
@@ -375,6 +397,15 @@ export function MenuPage() {
           <h3>{selected.name}</h3>
           <div className="menu-detail-price-v2"><strong>{money(selected.price)}</strong>{selected.weight ? <span>{selected.weight}</span> : null}</div>
           <p>{selected.description || 'Опис позиції не додано.'}</p>
+          <div className="menu-detail-facts-v3">
+            <span><b>Розділ</b>{sectionLabel(selected.section)}</span>
+            <span><b>Категорія</b>{selected.category}</span>
+            <span><b>Статус</b>{selected.stopped ? 'У стопі' : 'Доступна'}</span>
+            <span><b>Фото</b>{selected.photo ? 'Додано' : 'Відсутнє'}</span>
+            <span><b>ID позиції</b>#{selected.id}</span>
+            <span><b>Порядок</b>{selected.sort_order}</span>
+            <span className="is-wide"><b>Останнє оновлення</b>{formatUpdatedAt(selected.updated_at)}</span>
+          </div>
           <div className="menu-detail-times-v2"><span><Clock3 size={17} /><b>Звичайно</b>{selected.cook_time_normal !== null ? `${selected.cook_time_normal} хв` : 'не вказано'}</span><span><AlertTriangle size={17} /><b>При завантаженні</b>{selected.cook_time_busy !== null ? `${selected.cook_time_busy} хв` : 'не вказано'}</span></div>
           {(selected.allergens || []).length > 0 ? <div className="menu-detail-allergens-v2"><strong>Алергени</strong><div>{(selected.allergens || []).map((allergen) => <span key={allergen}>{allergen}</span>)}</div></div> : null}
           <div className="menu-detail-actions-v2">
