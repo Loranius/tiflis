@@ -17,8 +17,91 @@ import {
   type DutyAssignment,
   type DutyPlanResponse,
 } from '../lib/dutyPlannerClient';
+import { secureApi } from '../lib/secureApi';
 import { isKyivWeekday } from '../lib/time';
 import './today-operations.css';
+
+interface ScheduleStaff {
+  id: string;
+  name: string;
+  role: string;
+  role2: string | null;
+  avatar: string | null;
+}
+
+interface ScheduleEntry {
+  user_id: string;
+  date: string;
+  shift: string | null;
+}
+
+interface ScheduleBootstrapResponse {
+  ok: true;
+  users: ScheduleStaff[];
+  entries: ScheduleEntry[];
+}
+
+interface WorkingStaff extends ScheduleStaff {
+  shift: string;
+}
+
+const ROLE_ORDER = [
+  'admin',
+  'sysadmin',
+  'waiter',
+  'sommelier',
+  'bar',
+  'hostess',
+  'runner',
+  'chef',
+  'cook',
+  'trainee',
+  'staff',
+];
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Адміністратор',
+  sysadmin: 'Системний адміністратор',
+  waiter: 'Офіціант',
+  sommelier: 'Сомельє',
+  bar: 'Бармен',
+  hostess: 'Хостес',
+  runner: 'Ранер',
+  chef: 'Шеф-кухар',
+  cook: 'Кухар',
+  trainee: 'Стажер',
+  staff: 'Працівник',
+};
+
+function normalizeRole(value: string | null | undefined): string {
+  if (value === 'barman' || value === 'bartender') return 'bar';
+  return value || 'staff';
+}
+
+function staffRoles(staff: ScheduleStaff): string[] {
+  return [normalizeRole(staff.role), normalizeRole(staff.role2)]
+    .filter((role, index, roles) => Boolean(role) && roles.indexOf(role) === index);
+}
+
+function staffRoleTitle(staff: ScheduleStaff): string {
+  const roles = staffRoles(staff);
+  if (roles.includes('waiter') && roles.includes('bar')) return 'Бармен-офіціант';
+  if (roles.includes('waiter') && roles.includes('sommelier')) return 'Сомельє-офіціант';
+  if (roles.includes('waiter') && roles.includes('hostess')) return 'Хостес-офіціант';
+  if (roles.includes('waiter') && roles.includes('runner')) return 'Ранер-офіціант';
+  return roles.map((role) => ROLE_LABELS[role] || role).join(' · ') || 'Працівник';
+}
+
+function staffRoleRank(staff: ScheduleStaff): number {
+  return Math.min(...staffRoles(staff).map((role) => {
+    const index = ROLE_ORDER.indexOf(role);
+    return index === -1 ? ROLE_ORDER.length : index;
+  }));
+}
+
+function isWorkingShift(shift: string | null | undefined): boolean {
+  return Boolean(shift && !['Х', 'О'].includes(shift));
+}
 
 function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2)
@@ -30,13 +113,16 @@ export function TodayOperationsWidget() {
   const isTuesday = useMemo(() => isKyivWeekday(date, 2), [date]);
   const [daily, setDaily] = useState<DutyPlanResponse | null>(null);
   const [handover, setHandover] = useState<DutyPlanResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [workingTeam, setWorkingTeam] = useState<WorkingStaff[]>([]);
+  const [dutiesLoading, setDutiesLoading] = useState(true);
+  const [teamLoading, setTeamLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [dutiesError, setDutiesError] = useState<string | null>(null);
+  const [teamError, setTeamError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const loadDuties = useCallback(async () => {
+    setDutiesLoading(true);
+    setDutiesError(null);
     try {
       const [dailyResult, handoverResult] = await Promise.all([
         loadDutyPlan('daily', date),
@@ -45,13 +131,43 @@ export function TodayOperationsWidget() {
       setDaily(dailyResult);
       setHandover(handoverResult);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити обов’язки.');
+      setDutiesError(reason instanceof Error ? reason.message : 'Не вдалося завантажити обов’язки.');
     } finally {
-      setLoading(false);
+      setDutiesLoading(false);
     }
   }, [date, isTuesday]);
 
-  useEffect(() => { void load(); }, [load]);
+  const loadTeam = useCallback(async () => {
+    setTeamLoading(true);
+    setTeamError(null);
+    try {
+      const response = await secureApi<ScheduleBootstrapResponse>({
+        action: 'schedule_bootstrap',
+        month: date.slice(0, 7),
+      });
+      const shifts = new Map(
+        response.entries
+          .filter((entry) => entry.date === date && isWorkingShift(entry.shift))
+          .map((entry) => [entry.user_id, String(entry.shift)]),
+      );
+      const team = response.users
+        .filter((staff) => shifts.has(staff.id))
+        .map((staff) => ({ ...staff, shift: shifts.get(staff.id) || '' }))
+        .sort((left, right) => {
+          return staffRoleRank(left) - staffRoleRank(right)
+            || left.name.localeCompare(right.name, 'uk');
+        });
+      setWorkingTeam(team);
+    } catch (reason) {
+      setWorkingTeam([]);
+      setTeamError(reason instanceof Error ? reason.message : 'Не вдалося завантажити команду.');
+    } finally {
+      setTeamLoading(false);
+    }
+  }, [date]);
+
+  useEffect(() => { void loadDuties(); }, [loadDuties]);
+  useEffect(() => { void loadTeam(); }, [loadTeam]);
 
   const dailyDefinitions = useMemo(
     () => new Map((daily?.definitions || []).map((item) => [item.key, item.title])),
@@ -89,16 +205,20 @@ export function TodayOperationsWidget() {
     : [];
   const allAssignments = [...dailyAssignments, ...handoverAssignments];
   const doneCount = allAssignments.filter((item) => item.status === 'done').length;
+  const hasPublishedPlan = Boolean(daily?.publication || (isTuesday && handover?.publication));
+  const currentStaff = workingTeam.find((staff) => staff.id === daily?.me.id);
+  const currentIsWaiter = currentStaff ? staffRoles(currentStaff).includes('waiter') : true;
+  const hasWorkingShift = isWorkingShift(daily?.me.shift);
 
   async function toggleTask(task: DutyAssignment) {
     const next = task.status === 'done' ? 'pending' : 'done';
     setSavingId(task.id);
-    setError(null);
+    setDutiesError(null);
     try {
       await setPlannedDutyStatus(task.id, next);
-      await load();
+      await loadDuties();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Статус не оновлено.');
+      setDutiesError(reason instanceof Error ? reason.message : 'Статус не оновлено.');
     } finally {
       setSavingId(null);
     }
@@ -110,7 +230,7 @@ export function TodayOperationsWidget() {
       <button
         type="button"
         key={task.id}
-        className={`today-operation-row-v4 status-${task.status}`}
+        className={`today-operation-row-v5 status-${task.status}`}
         onClick={() => void toggleTask(task)}
         disabled={busy}
       >
@@ -120,45 +240,142 @@ export function TodayOperationsWidget() {
     );
   }
 
-  const hasPublishedWork = dailyAssignments.length > 0 || personalZones.length > 0 || handoverAssignments.length > 0;
-  const workingWaiters = daily?.workingWaiters || [];
-
   return (
-    <section className="today-operations-v4">
-      <section className="today-shift-team-v4" aria-labelledby="today-shift-team-title">
-        <header>
+    <section className="today-operations-v5">
+      <section className="today-personal-work-v5" aria-labelledby="today-personal-work-title">
+        <header className="today-personal-heading-v5">
           <div>
-            <span className="eyebrow">Команда сьогодні</span>
-            <h3 id="today-shift-team-title">Офіціанти на зміні</h3>
-            <p>Актуальний склад зміни та робочі зони після публікації розподілу.</p>
+            <span className="eyebrow">Моя зміна</span>
+            <h2 id="today-personal-work-title">Моя зона й обов’язки</h2>
+            <p>{daily?.me.shift ? `Зміна ${daily.me.shift}` : 'Робочу зміну на сьогодні не призначено'}</p>
           </div>
-          <span className="today-shift-team-count-v4"><UsersRound size={18} /><strong>{loading ? '…' : workingWaiters.length}</strong></span>
+          <div className="today-operations-progress-v5" aria-label={`Виконано ${doneCount} із ${allAssignments.length}`}>
+            <ClipboardCheck size={20} />
+            <strong>{doneCount}/{allAssignments.length}</strong>
+          </div>
         </header>
 
-        {!loading && workingWaiters.length > 0 && !daily?.publication ? (
-          <div className="today-shift-zones-status-v4">
-            <MapPinned size={15} />
-            <span>Розподіл зон ще не опубліковано.</span>
+        {dutiesError ? (
+          <div className="today-operations-alert-v5">
+            <TriangleAlert size={17} />
+            <span>{dutiesError}</span>
+            <button type="button" onClick={() => void loadDuties()} aria-label="Повторити завантаження">
+              <RotateCcw size={15} />
+            </button>
           </div>
         ) : null}
 
-        {!loading && workingWaiters.length > 0 ? (
-          <div className="today-shift-team-grid-v4">
-            {workingWaiters.map((waiter) => {
-              const zones = zonesByWaiter.get(waiter.id) || [];
-              const own = waiter.id === daily?.me.id;
+        {dutiesLoading ? (
+          <div className="today-operations-loading-v5">
+            <RefreshCw size={19} className="is-spinning" />
+            Завантажуємо вашу зміну…
+          </div>
+        ) : null}
+
+        {!dutiesLoading && !hasWorkingShift ? (
+          <div className="today-operations-empty-v5">
+            <ClipboardCheck size={26} />
+            <strong>Сьогодні у вас немає робочої зміни</strong>
+            <span>Зона й обов’язки з’являться тут у ваш робочий день.</span>
+          </div>
+        ) : null}
+
+        {!dutiesLoading && hasWorkingShift && hasPublishedPlan ? (
+          <div className="today-personal-list-v5">
+            {currentIsWaiter ? (
+              <div className={`today-zones-v5${personalZones.length ? '' : ' is-empty'}`}>
+                <header><MapPinned size={18} /><strong>Моя зона</strong></header>
+                <div>
+                  {personalZones.length
+                    ? personalZones.map((zone) => (
+                      <span key={zone.id}>{zoneDefinitions.get(zone.zone_key) || zone.zone_key}</span>
+                    ))
+                    : <span className="is-empty">Зону не призначено</span>}
+                </div>
+              </div>
+            ) : null}
+
+            {dailyAssignments.map((task) => taskRow(
+              task,
+              dailyDefinitions.get(task.duty_key) || task.duty_key,
+              'Щоденний обов’язок',
+            ))}
+
+            {isTuesday && handoverAssignments.length ? (
+              <div className="today-tuesday-handover-v5">
+                <header><span>Здача зміни</span><strong>{handoverAssignments.length}</strong></header>
+                {handoverAssignments.map((task) => taskRow(
+                  task,
+                  handoverDefinitions.get(task.duty_key) || task.duty_key,
+                  'Здача зміни',
+                ))}
+              </div>
+            ) : null}
+
+            {allAssignments.length === 0 ? (
+              <div className="today-no-personal-duties-v5">Особистих обов’язків на сьогодні не призначено.</div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!dutiesLoading && hasWorkingShift && !hasPublishedPlan ? (
+          <div className="today-operations-empty-v5">
+            <ClipboardCheck size={26} />
+            <strong>Розподіл ще не опубліковано</strong>
+            <span>Після публікації тут з’являться ваша зона та особисті обов’язки.</span>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="today-shift-team-v5" aria-labelledby="today-shift-team-title">
+        <header>
+          <div>
+            <span className="eyebrow">Команда сьогодні</span>
+            <h2 id="today-shift-team-title">Хто сьогодні працює</h2>
+            <p>Уся команда за графіком на поточний день.</p>
+          </div>
+          <span className="today-shift-team-count-v5">
+            <UsersRound size={18} />
+            <strong>{teamLoading ? '…' : workingTeam.length}</strong>
+          </span>
+        </header>
+
+        {teamError ? (
+          <div className="today-operations-alert-v5">
+            <TriangleAlert size={17} />
+            <span>{teamError}</span>
+            <button type="button" onClick={() => void loadTeam()} aria-label="Повторити завантаження">
+              <RotateCcw size={15} />
+            </button>
+          </div>
+        ) : null}
+
+        {teamLoading ? (
+          <div className="today-team-loading-v5">
+            <RefreshCw size={19} className="is-spinning" />
+            Завантажуємо команду…
+          </div>
+        ) : null}
+
+        {!teamLoading && workingTeam.length > 0 ? (
+          <div className="today-shift-team-grid-v5">
+            {workingTeam.map((staff) => {
+              const zones = zonesByWaiter.get(staff.id) || [];
+              const own = staff.id === daily?.me.id;
+              const waiter = staffRoles(staff).includes('waiter');
               return (
-                <article key={waiter.id} className={own ? 'is-own' : ''}>
-                  <span className="today-shift-avatar-v4">
-                    {waiter.avatar ? <img src={waiter.avatar} alt="" loading="lazy" /> : <span>{initials(waiter.name)}</span>}
+                <article key={staff.id} className={own ? 'is-own' : ''}>
+                  <span className="today-shift-avatar-v5">
+                    {staff.avatar ? <img src={staff.avatar} alt="" loading="lazy" /> : <span>{initials(staff.name)}</span>}
                   </span>
-                  <div className="today-shift-person-v4">
+                  <div className="today-shift-person-v5">
                     <strong>
-                      <span className="today-shift-name-v4">{waiter.name}</span>
-                      {own ? <span className="today-shift-own-badge-v4">Ви</span> : null}
+                      <span className="today-shift-name-v5">{staff.name}</span>
+                      {own ? <span className="today-shift-own-badge-v5">Ви</span> : null}
                     </strong>
-                    <span><Clock3 size={13} /> Зміна {waiter.shift}</span>
-                    {daily?.publication ? (
+                    <span>{staffRoleTitle(staff)}</span>
+                    <small><Clock3 size={13} /> Зміна {staff.shift}</small>
+                    {waiter && daily?.publication ? (
                       <small className={zones.length ? 'has-zone' : ''}>
                         <MapPinned size={13} />
                         {zones.length ? zones.join(' · ') : 'Зону не призначено'}
@@ -171,52 +388,14 @@ export function TodayOperationsWidget() {
           </div>
         ) : null}
 
-        {!loading && workingWaiters.length === 0 ? (
-          <div className="today-shift-team-empty-v4">
+        {!teamLoading && workingTeam.length === 0 ? (
+          <div className="today-shift-team-empty-v5">
             <UsersRound size={24} />
-            <strong>Офіціантів на сьогодні не знайдено</strong>
+            <strong>Працівників на сьогодні не знайдено</strong>
             <span>Список з’явиться після заповнення графіка.</span>
           </div>
         ) : null}
       </section>
-
-      <header className="today-operations-heading-v4">
-        <div>
-          <span className="eyebrow">Операційна зміна</span>
-          <h3>Мої обов’язки на сьогодні</h3>
-          <p>{daily?.me.shift ? `Ваша зміна: ${daily.me.shift}` : 'Робочу зміну на сьогодні не призначено'}</p>
-        </div>
-        <div className="today-operations-progress-v4"><ClipboardCheck size={20} /><strong>{doneCount}/{allAssignments.length}</strong></div>
-      </header>
-
-      {error ? <div className="today-operations-alert-v4"><TriangleAlert size={17} /><span>{error}</span><button type="button" onClick={() => void load()}><RotateCcw size={15} /></button></div> : null}
-      {loading ? <div className="today-operations-loading-v4"><RefreshCw size={19} className="is-spinning" /> Завантажуємо розподіл…</div> : null}
-
-      {!loading && hasPublishedWork ? (
-        <div className="today-operations-list-v4">
-          {dailyAssignments.map((task) => taskRow(task, dailyDefinitions.get(task.duty_key) || task.duty_key, 'Щоденний обов’язок'))}
-          {personalZones.length ? (
-            <div className="today-zones-v4">
-              <header><MapPinned size={18} /><strong>Моя зона роботи</strong></header>
-              <div>{personalZones.map((zone) => <span key={zone.id}>{zoneDefinitions.get(zone.zone_key) || zone.zone_key}</span>)}</div>
-            </div>
-          ) : null}
-          {isTuesday && handoverAssignments.length ? (
-            <div className="today-tuesday-handover-v4">
-              <header><span>Здача зміни · вівторок</span><strong>{handoverAssignments.length}</strong></header>
-              {handoverAssignments.map((task) => taskRow(task, handoverDefinitions.get(task.duty_key) || task.duty_key, 'Здача зміни'))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {!loading && !hasPublishedWork ? (
-        <div className="today-operations-empty-v4">
-          <ClipboardCheck size={26} />
-          <strong>На сьогодні розподіл не опубліковано</strong>
-          <span>Обов’язки й зони з’являться тут після того, як адміністратор заповнить таблицю та надішле її в Telegram.</span>
-        </div>
-      ) : null}
     </section>
   );
 }
