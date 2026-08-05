@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "perf:budget": "node scripts/check-bundle-budget.mjs",
-    "smoke:dist": "node scripts/smoke-dist.mjs"
+    "smoke:dist": "node scripts/smoke-dist.mjs",
+    "stable:materialize": "node scripts/materialize-stable-runtime.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
