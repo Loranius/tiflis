@@ -19,6 +19,7 @@ import { CashLeaderboard } from '../components/CashLeaderboard';
 import { secureApi } from '../lib/secureApi';
 import './cash.css';
 import './cash-practical.css';
+import './cash-identity.css';
 
 type CashTab = 'overview' | 'leaderboard';
 type LeaderboardPeriod = 'first' | 'second' | 'month' | 'year';
@@ -50,8 +51,15 @@ interface ExtraWage {
 }
 
 interface LeaderboardRow {
+  userId: string;
+  name: string;
   rank: number;
+  total: number | null;
+  relative: number;
   mine: boolean;
+  avatar: string | null;
+  role: string;
+  role2: string | null;
 }
 
 interface CashBootstrapResponse {
@@ -84,6 +92,19 @@ const MONTHS = [
   'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень',
 ];
 const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Адміністрація',
+  sysadmin: 'Системний адміністратор',
+  waiter: 'Офіціант',
+  bar: 'Бармен',
+  barman: 'Бармен',
+  bartender: 'Бармен',
+  hostess: 'Хостес',
+  runner: 'Ранер',
+  chef: 'Шеф-кухар',
+  cook: 'Кухня',
+  sommelier: 'Сомельє',
+};
 
 function monthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -123,14 +144,35 @@ function calendarMoney(value: number): string {
 
 function formatDay(value: string): string {
   return new Intl.DateTimeFormat('uk-UA', {
-    weekday: 'long', day: 'numeric', month: 'long',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
   }).format(new Date(`${value}T12:00:00`));
 }
 
 function formatCompactDay(value: string): string {
   return new Intl.DateTimeFormat('uk-UA', {
-    day: 'numeric', month: 'short',
+    day: 'numeric',
+    month: 'short',
   }).format(new Date(`${value}T12:00:00`));
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || '—';
+}
+
+function staffRole(staff: CashStaff | null): string {
+  if (!staff) return 'Працівник ресторану';
+  return [staff.role, staff.role2]
+    .filter((role): role is string => Boolean(role))
+    .map((role) => ROLE_LABELS[role] || role)
+    .filter((role, index, all) => all.indexOf(role) === index)
+    .join(' · ') || 'Працівник ресторану';
 }
 
 function inDayRange(value: string, month: string, fromDay: number, toDay: number): boolean {
@@ -180,7 +222,10 @@ export function CashPage() {
     const now = new Date();
     return {
       date: `${monthKey(now)}-${String(now.getDate()).padStart(2, '0')}`,
-      cash: '', tips: '', extra: '', note: '',
+      cash: '',
+      tips: '',
+      extra: '',
+      note: '',
     };
   });
 
@@ -230,7 +275,9 @@ export function CashPage() {
   const selectedStaff = data?.users.find((staff) => staff.id === data.viewUserId) || null;
   const canEdit = Boolean(data && (data.me.canEditAll || data.viewUserId === data.me.legacyUserId));
   const currentMonth = monthKey(new Date());
-  const defaultDate = month === currentMonth ? dateForDay(month, new Date().getDate()) : dateForDay(month, 1);
+  const defaultDate = month === currentMonth
+    ? dateForDay(month, new Date().getDate())
+    : dateForDay(month, 1);
   const selectedEntry = entryByDate.get(editor.date);
   const selectedExtra = extraByDate.get(editor.date);
   const selectedDayEstimate = asNumber(editor.cash) * 0.04
@@ -286,7 +333,9 @@ export function CashPage() {
     setError(null);
     try {
       await secureApi<{ ok: true }>({
-        action: 'cash_delete_day', user_id: data.viewUserId, date: editor.date,
+        action: 'cash_delete_day',
+        user_id: data.viewUserId,
+        date: editor.date,
       });
       setEditor({ ...editor, cash: '', tips: '', extra: '', note: '' });
       setOptionalOpen(false);
@@ -309,19 +358,47 @@ export function CashPage() {
         <div className="cash-hero-mark"><WalletCards size={35} /></div>
       </section>
 
-      {error ? <div className="cash-alert-v2" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
-      {loading ? <div className="cash-loading-v2"><RefreshCw className="is-spinning" size={24} /><span>Завантажуємо касу…</span></div> : null}
+      {error ? (
+        <div className="cash-alert-v2" role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)}><X size={16} /></button>
+        </div>
+      ) : null}
+      {loading ? (
+        <div className="cash-loading-v2">
+          <RefreshCw className="is-spinning" size={24} />
+          <span>Завантажуємо касу…</span>
+        </div>
+      ) : null}
 
       {!loading && data ? (
         <>
           <section className="cash-calendar-primary-v4">
             <header>
-              <div><span className="eyebrow">Календар каси</span><h3>{selectedStaff?.name || 'Моя каса'}</h3></div>
+              <div className="cash-staff-identity-v5">
+                <span className="cash-staff-avatar-v5" aria-hidden="true">
+                  <span>{initials(selectedStaff?.name || 'Моя каса')}</span>
+                  {selectedStaff?.avatar ? (
+                    <img
+                      src={selectedStaff.avatar}
+                      alt=""
+                      onError={(event) => { event.currentTarget.hidden = true; }}
+                    />
+                  ) : null}
+                </span>
+                <div>
+                  <span className="eyebrow">Календар каси</span>
+                  <h3>{selectedStaff?.name || 'Моя каса'}</h3>
+                  <small>{staffRole(selectedStaff)}</small>
+                </div>
+              </div>
               <span>Зелена комірка — касу внесено</span>
             </header>
             <div className="cash-practical-grid">
               {DOW.map((day) => <span className="cash-practical-dow" key={day}>{day}</span>)}
-              {Array.from({ length: firstOffset }, (_, index) => <span className="cash-practical-empty" key={`empty-${index}`} />)}
+              {Array.from({ length: firstOffset }, (_, index) => (
+                <span className="cash-practical-empty" key={`empty-${index}`} />
+              ))}
               {Array.from({ length: daysInMonth }, (_, index) => index + 1).map((day) => {
                 const date = dateForDay(month, day);
                 const cash = asNumber(entryByDate.get(date)?.cash);
@@ -393,10 +470,18 @@ export function CashPage() {
                 </div>
 
                 <div className="cash-day-entry-side-v4">
-                  <div className="cash-practical-summary"><span>Зарплата за день</span><strong>{money(selectedDayEstimate)}</strong></div>
+                  <div className="cash-practical-summary">
+                    <span>Зарплата за день</span>
+                    <strong>{money(selectedDayEstimate)}</strong>
+                  </div>
                   <div className="cash-practical-actions">
-                    {selectedEntry || selectedExtra ? <button type="button" className="is-danger" onClick={() => void deleteDay()} disabled={saving}><Trash2 size={17} /></button> : <span />}
-                    <button type="button" className="is-primary" onClick={() => void saveDay()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти касу</button>
+                    {selectedEntry || selectedExtra ? (
+                      <button type="button" className="is-danger" onClick={() => void deleteDay()} disabled={saving}><Trash2 size={17} /></button>
+                    ) : <span />}
+                    <button type="button" className="is-primary" onClick={() => void saveDay()} disabled={saving}>
+                      {saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />}
+                      Зберегти касу
+                    </button>
                   </div>
                 </div>
               </div>
@@ -404,9 +489,18 @@ export function CashPage() {
               <details className="cash-optional-details" open={optionalOpen} onToggle={(event) => setOptionalOpen(event.currentTarget.open)}>
                 <summary>Чайові та додаткова доплата</summary>
                 <div className="cash-optional-fields cash-optional-fields-v4">
-                  <label><span>Чайові, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.tips} onChange={(event) => setEditor({ ...editor, tips: event.target.value })} placeholder="0" /></label>
-                  <label><span>Додаткова ставка / доплата, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.extra} onChange={(event) => setEditor({ ...editor, extra: event.target.value })} placeholder="0" /></label>
-                  <label className="is-wide"><span>Причина доплати</span><input type="text" maxLength={300} value={editor.note} onChange={(event) => setEditor({ ...editor, note: event.target.value })} placeholder="Банкет, підміна, додаткові години…" /></label>
+                  <label>
+                    <span>Чайові, ₴</span>
+                    <input inputMode="decimal" type="number" min="0" value={editor.tips} onChange={(event) => setEditor({ ...editor, tips: event.target.value })} placeholder="0" />
+                  </label>
+                  <label>
+                    <span>Додаткова ставка / доплата, ₴</span>
+                    <input inputMode="decimal" type="number" min="0" value={editor.extra} onChange={(event) => setEditor({ ...editor, extra: event.target.value })} placeholder="0" />
+                  </label>
+                  <label className="is-wide">
+                    <span>Причина доплати</span>
+                    <input type="text" maxLength={300} value={editor.note} onChange={(event) => setEditor({ ...editor, note: event.target.value })} placeholder="Банкет, підміна, додаткові години…" />
+                  </label>
                 </div>
               </details>
             </section>
