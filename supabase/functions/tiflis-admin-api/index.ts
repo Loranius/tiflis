@@ -63,6 +63,16 @@ type PortalConfig = {
   updated_at: string;
 };
 
+type AdminActorRow = {
+  login: string | null;
+  display_name: string | null;
+};
+
+// Edge Functions use the service client without a generated Database schema.
+// Keep this small boundary untyped instead of allowing Supabase's inferred
+// `never` table types to leak into otherwise checked business logic.
+type UntypedSupabaseClient = any;
+
 function corsHeaders(req: Request): HeadersInit {
   const origin = req.headers.get("origin") ?? "";
   if (!origin || (ALLOWED_ORIGINS.size > 0 && !ALLOWED_ORIGINS.has(origin))) return {};
@@ -120,17 +130,17 @@ function authMarker(): string {
   return `AUTH_ONLY:${crypto.randomUUID()}`;
 }
 
-async function actorName(client: ReturnType<typeof createClient>, legacyId: string): Promise<string> {
+async function actorName(client: UntypedSupabaseClient, legacyId: string): Promise<string> {
   const { data } = await client
     .from("users")
     .select("login,display_name")
     .eq("id", legacyId)
-    .maybeSingle();
+    .maybeSingle() as { data: AdminActorRow | null };
   return String(data?.display_name || data?.login || "Адміністратор");
 }
 
 async function audit(
-  client: ReturnType<typeof createClient>,
+  client: UntypedSupabaseClient,
   actorId: string,
   actor: string,
   action: string,
@@ -210,6 +220,7 @@ Deno.serve(async (req: Request) => {
   } catch {
     return json(req, { ok: false, error: "Invalid JSON" }, 400);
   }
+
   const action = typeof body.action === "string" ? body.action : "";
   if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Unsupported action" }, 400);
 
@@ -220,183 +231,170 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (action === "admin_bootstrap") {
-      const today = new Date().toISOString().slice(0, 10);
-      const inThirtyDays = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
       const [
-        activeStaff,
-        archivedStaff,
-        authOnlyStaff,
-        legacyStaff,
-        linkedProfiles,
-        menuItems,
-        stoppedItems,
-        todayReservations,
-        upcomingReservations,
-        scheduleRows,
         configResult,
-        notificationsResult,
+        activeUsers,
+        linkedProfiles,
+        pendingRegistrations,
+        activeReservations,
+        openNotifications,
         auditResult,
       ] = await Promise.all([
+        admin.from("portal_config").select("*").eq("id", true).maybeSingle(),
         countQuery(admin.from("users").select("id", { count: "exact", head: true }).or("fired.is.null,fired.eq.false")),
-        countQuery(admin.from("users").select("id", { count: "exact", head: true }).eq("fired", true)),
-        countQuery(admin.from("users").select("id", { count: "exact", head: true }).eq("credential_source", "auth")),
-        countQuery(admin.from("users").select("id", { count: "exact", head: true }).eq("credential_source", "legacy")),
-        countQuery(admin.from("staff_profiles").select("user_id", { count: "exact", head: true })),
-        countQuery(admin.from("menu_items").select("id", { count: "exact", head: true })),
-        countQuery(admin.from("menu_items").select("id", { count: "exact", head: true }).eq("stopped", true)),
-        countQuery(admin.from("reservations").select("id", { count: "exact", head: true }).eq("reserved_date", today).in("status", ["booked", "occupied"])),
-        countQuery(admin.from("reservations").select("id", { count: "exact", head: true }).gte("reserved_date", today).lte("reserved_date", inThirtyDays).in("status", ["booked", "occupied"])),
-        countQuery(admin.from("schedule").select("id", { count: "exact", head: true }).gte("date", today)),
-        admin.from("portal_config").select("*").eq("id", true).single<PortalConfig>(),
-        admin.from("notifications").select("id,title,body,priority,author,roles,expires_at,created_at").order("created_at", { ascending: false }).limit(12),
-        admin.from("audit_log").select("id,actor_id,actor_name,action,entity_type,entity_id,summary,metadata,created_at").order("created_at", { ascending: false }).limit(30),
+        countQuery(admin.from("staff_profiles").select("user_id", { count: "exact", head: true }).eq("active", true)),
+        countQuery(admin.from("registration_requests").select("id", { count: "exact", head: true }).eq("status", "pending")),
+        countQuery(admin.from("reserve_bookings").select("id", { count: "exact", head: true }).gte("booking_date", new Date().toISOString().slice(0, 10)).neq("status", "cancelled")),
+        countQuery(admin.from("portal_notifications").select("id", { count: "exact", head: true }).eq("status", "published")),
+        admin.from("audit_log").select("id,actor_name,action,entity_type,entity_id,summary,metadata,created_at").order("created_at", { ascending: false }).limit(30),
       ]);
-
       if (configResult.error) throw configResult.error;
-      if (notificationsResult.error) throw notificationsResult.error;
       if (auditResult.error) throw auditResult.error;
 
+      const config = configResult.data as PortalConfig | null;
       return json(req, {
         ok: true,
-        metrics: {
-          activeStaff,
-          archivedStaff,
-          authOnlyStaff,
-          legacyStaff,
-          linkedProfiles,
-          menuItems,
-          stoppedItems,
-          todayReservations,
-          upcomingReservations,
-          scheduleRows,
+        config: config || {
+          id: true,
+          portal_name: "Тифліс · портал персоналу",
+          maintenance_mode: false,
+          announcement_enabled: false,
+          announcement_title: null,
+          announcement_body: null,
+          announcement_priority: "medium",
+          updated_by: null,
+          updated_at: new Date().toISOString(),
         },
-        config: configResult.data,
-        notifications: notificationsResult.data ?? [],
-        audit: auditResult.data ?? [],
+        metrics: {
+          activeUsers,
+          linkedProfiles,
+          pendingRegistrations,
+          activeReservations,
+          openNotifications,
+        },
         roleMatrix: ROLE_MATRIX,
         modules: MODULES,
+        audit: auditResult.data || [],
       });
     }
 
     if (action === "admin_save_config") {
-      const portalName = cleanText(body.portal_name, 80) || "Тифліс";
-      const title = cleanText(body.announcement_title, 180) || null;
-      const announcementBody = cleanText(body.announcement_body, 3500) || null;
-      const priority = parsePriority(body.announcement_priority);
-      if (!priority) return json(req, { ok: false, error: "Invalid priority" }, 400);
+      const portalName = cleanText(body.portal_name, 120) || "Тифліс · портал персоналу";
+      const maintenanceMode = body.maintenance_mode === true;
+      const announcementEnabled = body.announcement_enabled === true;
+      const announcementTitle = cleanText(body.announcement_title, 160);
+      const announcementBody = cleanText(body.announcement_body, 2000);
+      const announcementPriority = parsePriority(body.announcement_priority);
+      if (!announcementPriority) return json(req, { ok: false, error: "Invalid priority" }, 400);
+      if (announcementEnabled && (!announcementTitle || !announcementBody)) {
+        return json(req, { ok: false, error: "Announcement title and body are required" }, 400);
+      }
 
-      const payload = {
+      const { data, error } = await admin.from("portal_config").upsert({
+        id: true,
         portal_name: portalName,
-        maintenance_mode: body.maintenance_mode === true,
-        announcement_enabled: body.announcement_enabled === true,
-        announcement_title: title,
-        announcement_body: announcementBody,
-        announcement_priority: priority,
-        updated_by: actor,
-      };
-      const { data, error } = await admin
-        .from("portal_config")
-        .update(payload)
-        .eq("id", true)
-        .select("*")
-        .single();
+        maintenance_mode: maintenanceMode,
+        announcement_enabled: announcementEnabled,
+        announcement_title: announcementTitle || null,
+        announcement_body: announcementBody || null,
+        announcement_priority: announcementPriority,
+        updated_by: profile.legacy_user_id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" }).select("*").single();
       if (error) throw error;
-      await audit(admin, profile.legacy_user_id, actor, "portal_config_updated", "portal_config", "Оновлено конфігурацію порталу", "main", {
-        maintenanceMode: payload.maintenance_mode,
-        announcementEnabled: payload.announcement_enabled,
+      await audit(admin, profile.legacy_user_id, actor, "config.update", "portal_config", "Оновлено налаштування порталу", "portal", {
+        maintenanceMode,
+        announcementEnabled,
+        announcementPriority,
       });
       return json(req, { ok: true, config: data });
     }
 
-    if (action === "admin_cleanup_notifications") {
-      const now = new Date().toISOString();
-      const { data, error } = await admin
-        .from("notifications")
-        .delete()
-        .not("expires_at", "is", null)
-        .lt("expires_at", now)
-        .select("id");
-      if (error) throw error;
-      const removed = data?.length || 0;
-      await audit(admin, profile.legacy_user_id, actor, "expired_notifications_removed", "notifications", `Видалено прострочених повідомлень: ${removed}`, null, { removed });
-      return json(req, { ok: true, removed });
-    }
+    if (action === "admin_publish_notification") {
+      const title = cleanText(body.title, 160);
+      const message = cleanText(body.message, 3000);
+      const priority = parsePriority(body.priority);
+      const roles = parseRoles(body.roles);
+      const sendTelegramCopy = body.send_telegram === true;
+      if (!title || !message || !priority) return json(req, { ok: false, error: "Invalid notification" }, 400);
 
-    if (action === "admin_scrub_linked_credentials") {
-      const { data: profiles, error: profilesError } = await admin
-        .from("staff_profiles")
-        .select("legacy_user_id")
-        .not("legacy_user_id", "is", null);
-      if (profilesError) throw profilesError;
-      const ids = (profiles ?? []).map((item) => String(item.legacy_user_id)).filter(Boolean);
-      let scrubbed = 0;
-      for (const id of ids) {
-        const { data, error } = await admin
-          .from("users")
-          .update({ credential_source: "auth", password: authMarker() })
-          .eq("id", id)
-          .neq("credential_source", "auth")
-          .select("id");
-        if (error) throw error;
-        scrubbed += data?.length || 0;
-      }
-      await audit(admin, profile.legacy_user_id, actor, "linked_credentials_scrubbed", "users", `Знищено legacy-паролів пов’язаних акаунтів: ${scrubbed}`, null, { scrubbed });
-      return json(req, { ok: true, scrubbed });
-    }
-
-    const title = cleanText(body.title, 180);
-    const notificationBody = cleanText(body.body, 3500);
-    const priority = parsePriority(body.priority);
-    const roles = parseRoles(body.roles);
-    const expiresAtRaw = cleanText(body.expires_at, 40);
-    const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
-    if (!title || !notificationBody || !priority || (expiresAt && Number.isNaN(expiresAt.getTime()))) {
-      return json(req, { ok: false, error: "Invalid notification" }, 400);
-    }
-
-    const { data: inserted, error: insertError } = await admin
-      .from("notifications")
-      .insert({
+      const { data: notification, error: notificationError } = await admin.from("portal_notifications").insert({
         title,
-        body: notificationBody,
+        message,
         priority,
-        author: actor,
-        roles: roles.length ? roles.join(",") : null,
-        expires_at: expiresAt?.toISOString() || null,
-      })
-      .select("id,title,body,priority,author,roles,expires_at,created_at")
-      .single();
-    if (insertError) throw insertError;
+        roles,
+        status: "published",
+        send_telegram: sendTelegramCopy,
+        created_by: profile.legacy_user_id,
+        published_at: new Date().toISOString(),
+      }).select("*").single();
+      if (notificationError) throw notificationError;
 
-    let telegramSent = 0;
-    let telegramSkipped = 0;
-    if (body.telegram === true && BOT_TOKEN) {
-      const { data: recipients, error: recipientsError } = await admin
-        .from("users")
-        .select("chat_id,tg_id,role,role2,fired")
-        .or("fired.is.null,fired.eq.false");
-      if (recipientsError) throw recipientsError;
-      const message = `${title}\n\n${notificationBody}`;
-      for (const recipient of recipients ?? []) {
-        if (roles.length && !roles.includes(normalizeRole(recipient.role)) && !roles.includes(normalizeRole(recipient.role2))) continue;
-        const destination = recipient.chat_id || recipient.tg_id;
-        if (!destination) {
-          telegramSkipped += 1;
-          continue;
+      let telegramSent = 0;
+      let telegramSkipped = 0;
+      if (sendTelegramCopy) {
+        const usersResult = await admin
+          .from("users")
+          .select("chat_id,tg_id,role,role2,fired")
+          .or("fired.is.null,fired.eq.false");
+        if (usersResult.error) throw usersResult.error;
+        for (const user of usersResult.data || []) {
+          const userRoles = [normalizeRole(user.role), normalizeRole(user.role2)];
+          if (roles.length > 0 && !userRoles.some((role) => roles.includes(role))) continue;
+          const destination = user.chat_id || user.tg_id;
+          if (!destination) {
+            telegramSkipped += 1;
+            continue;
+          }
+          const sent = await sendTelegram(destination, `${title}\n\n${message}`);
+          if (sent) telegramSent += 1;
+          else telegramSkipped += 1;
         }
-        if (await sendTelegram(destination, message)) telegramSent += 1;
-        else telegramSkipped += 1;
       }
+
+      await audit(admin, profile.legacy_user_id, actor, "notification.publish", "portal_notification", `Опубліковано повідомлення «${title}»`, String(notification.id), {
+        priority,
+        roles,
+        sendTelegramCopy,
+        telegramSent,
+        telegramSkipped,
+      });
+      return json(req, { ok: true, notification, telegramSent, telegramSkipped });
     }
 
-    await audit(admin, profile.legacy_user_id, actor, "notification_published", "notifications", `Опубліковано повідомлення «${title}»`, String(inserted.id), {
-      priority,
-      roles,
-      telegram: body.telegram === true,
-      telegramSent,
-      telegramSkipped,
-    });
-    return json(req, { ok: true, notification: inserted, telegramSent, telegramSkipped });
+    if (action === "admin_cleanup_notifications") {
+      const before = typeof body.before === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.before)
+        ? body.before
+        : new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
+      const { data: rows, error: selectError } = await admin
+        .from("portal_notifications")
+        .select("id")
+        .lt("created_at", `${before}T00:00:00.000Z`)
+        .neq("status", "published");
+      if (selectError) throw selectError;
+      const ids = (rows || []).map((row) => row.id);
+      if (ids.length > 0) {
+        const { error } = await admin.from("portal_notifications").delete().in("id", ids);
+        if (error) throw error;
+      }
+      await audit(admin, profile.legacy_user_id, actor, "notification.cleanup", "portal_notification", `Очищено ${ids.length} застарілих повідомлень`, null, { before, count: ids.length });
+      return json(req, { ok: true, deleted: ids.length, before });
+    }
+
+    const linkedProfilesResult = await admin.from("staff_profiles").select("legacy_user_id").not("legacy_user_id", "is", null).eq("active", true);
+    if (linkedProfilesResult.error) throw linkedProfilesResult.error;
+    const ids = [...new Set((linkedProfilesResult.data || []).map((profileRow) => String(profileRow.legacy_user_id || "")).filter(Boolean))];
+    let scrubbed = 0;
+    for (const id of ids) {
+      const { error } = await admin.from("users").update({
+        password: authMarker(),
+        session_token: authMarker(),
+      }).eq("id", id);
+      if (error) throw error;
+      scrubbed += 1;
+    }
+    await audit(admin, profile.legacy_user_id, actor, "credentials.scrub", "users", `Очищено legacy-облікові дані для ${scrubbed} Auth-профілів`, null, { scrubbed });
+    return json(req, { ok: true, scrubbed });
   } catch (error) {
     console.error("tiflis-admin-api failed", error);
     return json(req, { ok: false, error: "Operation failed" }, 502);
