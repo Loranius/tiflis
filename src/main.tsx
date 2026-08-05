@@ -3,11 +3,11 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './auth/AuthProvider';
 import './styles.css';
+import './performance.css';
 
-async function retireLegacyRuntime() {
-  const marker = 'tiflis-v2-react-runtime-ready';
-  if (localStorage.getItem(marker) === '1') return;
+const LEGACY_MARKER = 'tiflis-v2-react-runtime-ready';
 
+function clearInsecureLegacyStorage() {
   const insecureKeys = [
     'tiflis2.session',
     'tiflis_session',
@@ -16,21 +16,42 @@ async function retireLegacyRuntime() {
     'tiflis_tg_token',
   ];
   insecureKeys.forEach((key) => localStorage.removeItem(key));
-
-  if ('serviceWorker' in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map((registration) => registration.unregister()));
-  }
-
-  if ('caches' in window) {
-    const keys = await caches.keys();
-    await Promise.all(keys.filter((key) => key.startsWith('tiflis-')).map((key) => caches.delete(key)));
-  }
-
-  localStorage.setItem(marker, '1');
 }
 
-void retireLegacyRuntime();
+async function unregisterLegacyWorkers() {
+  if (!('serviceWorker' in navigator)) return;
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.allSettled(registrations.map((registration) => registration.unregister()));
+}
+
+async function clearLegacyCaches() {
+  if (!('caches' in window)) return;
+  const keys = await caches.keys();
+  await Promise.allSettled(
+    keys.filter((key) => key.startsWith('tiflis-')).map((key) => caches.delete(key)),
+  );
+}
+
+function scheduleLegacyRetirement() {
+  if (localStorage.getItem(LEGACY_MARKER) === '1') return;
+
+  const finish = async () => {
+    await Promise.allSettled([unregisterLegacyWorkers(), clearLegacyCaches()]);
+    localStorage.setItem(LEGACY_MARKER, '1');
+  };
+
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+  };
+
+  if (idleWindow.requestIdleCallback) {
+    idleWindow.requestIdleCallback(() => { void finish(); }, { timeout: 2500 });
+  } else {
+    window.setTimeout(() => { void finish(); }, 900);
+  }
+}
+
+clearInsecureLegacyStorage();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');
@@ -42,3 +63,5 @@ createRoot(root).render(
     </AuthProvider>
   </StrictMode>,
 );
+
+scheduleLegacyRetirement();
