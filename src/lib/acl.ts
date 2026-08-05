@@ -1,6 +1,6 @@
 import type { StaffRole, StaffUser } from '../types';
 
-export type PageKey = 'today' | 'schedule' | 'cash' | 'menu' | 'reserve' | 'staff' | 'admin';
+export type PageKey = 'today' | 'schedule' | 'cash' | 'menu' | 'reserve' | 'staff' | 'duties' | 'handover' | 'admin';
 export type ActionKey =
   | 'editSchedule'
   | 'editOwnShift'
@@ -33,7 +33,7 @@ export const pages: Record<PageKey, PageAccess> = {
   },
   menu: {
     path: '/menu',
-    title: 'Меню та стоп-лист',
+    title: 'Меню ресторану',
     shortTitle: 'Меню',
     roles: ['sysadmin', 'admin', 'chef', 'cook', 'waiter', 'bar', 'hostess'],
   },
@@ -48,6 +48,18 @@ export const pages: Record<PageKey, PageAccess> = {
     title: 'Персонал',
     shortTitle: 'Команда',
     roles: ['sysadmin', 'admin', 'chef', 'cook', 'waiter', 'bar', 'hostess'],
+  },
+  duties: {
+    path: '/duties',
+    title: 'Щоденні обов’язки',
+    shortTitle: 'Обов’язки',
+    roles: ['sysadmin', 'admin', 'chef', 'cook', 'waiter', 'bar', 'hostess', 'runner'],
+  },
+  handover: {
+    path: '/handover',
+    title: 'Здача зміни',
+    shortTitle: 'Здача зміни',
+    roles: ['sysadmin', 'admin', 'chef', 'cook', 'waiter', 'bar', 'hostess', 'runner'],
   },
   admin: {
     path: '/admin',

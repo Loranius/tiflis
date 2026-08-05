@@ -139,18 +139,19 @@ function intersects(scope: string[] | null | undefined, roles: string[]): boolea
   return !scope?.length || scope.some((role) => roles.includes(normalizeRole(role)));
 }
 
-async function actor(client: ReturnType<typeof createClient>, legacyId: string): Promise<LegacyUser> {
+async function actor(client: any, legacyId: string): Promise<LegacyUser> {
   const { data, error } = await client
     .from("users")
     .select("id,login,display_name,role,role2,avatar,fired")
     .eq("id", legacyId)
     .single();
-  if (error || !data || data.fired === true) throw error || new Error("Staff member not found");
-  return data as LegacyUser;
+  const user = data as LegacyUser | null;
+  if (error || !user || user.fired === true) throw error || new Error("Staff member not found");
+  return user;
 }
 
 async function audit(
-  client: ReturnType<typeof createClient>,
+  client: any,
   staff: LegacyUser,
   action: string,
   entityType: string,
@@ -216,10 +217,16 @@ Deno.serve(async (req: Request) => {
     if (action === "operations_bootstrap") {
       const date = parseDate(body.date);
       if (!date) return json(req, { ok: false, error: "Invalid date" }, 400);
+      const requestedUserId = typeof body.user_id === "string" ? body.user_id.trim().slice(0, 120) : "";
+      const subject = hasRole(profile, ADMIN_ROLES) && requestedUserId
+        ? await actor(service, requestedUserId)
+        : current;
+      const subjectRoles = [normalizeRole(subject.role), normalizeRole(subject.role2)]
+        .filter((role, index, all) => Boolean(role) && all.indexOf(role) === index);
 
       const [templatesResult, assignmentsResult, scheduleResult, usersResult, notesResult, notificationsResult] = await Promise.all([
         service.from("ops_task_templates").select("id,title,description,category,role_scope,shift_codes,sort_order,active").eq("active", true).order("category").order("sort_order"),
-        service.from("ops_task_assignments").select("id,template_id,work_date,assignee_id,status,note,completed_by,completed_at,created_at,updated_at").eq("work_date", date).eq("assignee_id", current.id),
+        service.from("ops_task_assignments").select("id,template_id,work_date,assignee_id,status,note,completed_by,completed_at,created_at,updated_at").eq("work_date", date).eq("assignee_id", subject.id),
         service.from("schedule").select("user_id,date,shift").eq("date", date).not("shift", "is", null),
         service.from("users").select("id,login,display_name,role,role2,avatar,fired").or("fired.is.null,fired.eq.false"),
         service.from("ops_handover_notes").select("id,work_date,author_id,author_name,title,body,priority,role_scope,pinned,resolved_at,resolved_by,created_at").gte("work_date", addDays(date, -2)).lte("work_date", addDays(date, 1)).order("pinned", { ascending: false }).order("created_at", { ascending: false }).limit(60),
@@ -232,9 +239,9 @@ Deno.serve(async (req: Request) => {
       if (notesResult.error) throw notesResult.error;
       if (notificationsResult.error) throw notificationsResult.error;
 
-      const ownShift = (scheduleResult.data ?? []).find((row) => String(row.user_id) === current.id)?.shift || null;
+      const ownShift = (scheduleResult.data ?? []).find((row) => String(row.user_id) === subject.id)?.shift || null;
       const applicable = ((templatesResult.data ?? []) as TaskTemplate[]).filter((template) => {
-        return intersects(template.role_scope, roles) && (!template.shift_codes?.length || template.shift_codes.includes(String(ownShift || "")));
+        return intersects(template.role_scope, subjectRoles) && (!template.shift_codes?.length || template.shift_codes.includes(String(ownShift || "")));
       });
       const assignments = (assignmentsResult.data ?? []) as Assignment[];
       const assignmentByTemplate = new Map(assignments.map((item) => [Number(item.template_id), item]));
@@ -245,7 +252,7 @@ Deno.serve(async (req: Request) => {
           .upsert(missing.map((template) => ({
             template_id: template.id,
             work_date: date,
-            assignee_id: current.id,
+            assignee_id: subject.id,
           })), { onConflict: "template_id,work_date,assignee_id" })
           .select("id,template_id,work_date,assignee_id,status,note,completed_by,completed_at,created_at,updated_at");
         if (createError) throw createError;
@@ -286,6 +293,12 @@ Deno.serve(async (req: Request) => {
           id: current.id,
           name: current.display_name || current.login,
           roles,
+          shift: (scheduleResult.data ?? []).find((row) => String(row.user_id) === current.id)?.shift || null,
+        },
+        subject: {
+          id: subject.id,
+          name: subject.display_name || subject.login,
+          roles: subjectRoles,
           shift: ownShift,
         },
         permissions: {

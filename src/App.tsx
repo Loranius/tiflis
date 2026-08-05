@@ -7,6 +7,8 @@ import {
   loadAdminPage,
   loadCashPage,
   loadDashboardPage,
+  loadDutiesPage,
+  loadHandoverPage,
   loadLoginPage,
   loadMenuPage,
   loadReservePage,
@@ -21,6 +23,8 @@ const CashPage = lazy(() => loadCashPage().then((module) => ({ default: module.C
 const MenuPage = lazy(() => loadMenuPage().then((module) => ({ default: module.MenuPage })));
 const ReservePage = lazy(() => loadReservePage().then((module) => ({ default: module.ReservePage })));
 const StaffPage = lazy(() => loadStaffPage().then((module) => ({ default: module.StaffPage })));
+const DutiesPage = lazy(() => loadDutiesPage().then((module) => ({ default: module.DutiesPage })));
+const HandoverPage = lazy(() => loadHandoverPage().then((module) => ({ default: module.HandoverPage })));
 const AdminPage = lazy(() => loadAdminPage().then((module) => ({ default: module.AdminPage })));
 
 function RouteSkeleton() {
@@ -102,6 +106,8 @@ export default function App() {
           <Route path="/menu" element={<ProtectedPage page="menu"><MenuPage /></ProtectedPage>} />
           <Route path="/reserve" element={<ProtectedPage page="reserve"><ReservePage /></ProtectedPage>} />
           <Route path="/staff" element={<ProtectedPage page="staff"><StaffPage /></ProtectedPage>} />
+          <Route path="/duties" element={<ProtectedPage page="duties"><DutiesPage /></ProtectedPage>} />
+          <Route path="/handover" element={<ProtectedPage page="handover"><HandoverPage /></ProtectedPage>} />
           <Route path="/admin" element={<ProtectedPage page="admin"><AdminPage /></ProtectedPage>} />
         </Route>
         <Route path="/" element={<Navigate to="/today" replace />} />

@@ -2,9 +2,11 @@ import {
   Banknote,
   CalendarDays,
   ChevronRight,
+  ClipboardCheck,
   ClipboardList,
   Home,
   LogOut,
+  MessageSquarePlus,
   MoreHorizontal,
   Settings,
   Soup,
@@ -25,6 +27,8 @@ const icons: Record<PageKey, LucideIcon> = {
   menu: Soup,
   reserve: ClipboardList,
   staff: Users,
+  duties: ClipboardCheck,
+  handover: MessageSquarePlus,
   admin: Settings,
 };
 
@@ -49,10 +53,12 @@ const legacyDesktopOrder: PageKey[] = [
   'staff',
   'menu',
   'reserve',
+  'duties',
+  'handover',
   'admin',
 ];
 
-const preferredWarmOrder: PageKey[] = ['schedule', 'cash', 'menu', 'reserve', 'staff', 'admin'];
+const preferredWarmOrder: PageKey[] = ['schedule', 'cash', 'menu', 'reserve', 'duties', 'handover', 'staff', 'admin'];
 
 type NavigatorWithConnection = Navigator & {
   connection?: {
