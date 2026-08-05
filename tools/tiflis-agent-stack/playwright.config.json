@@ -1,0 +1,33 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "isolated": true,
+    "launchOptions": {
+      "headless": true
+    },
+    "contextOptions": {
+      "viewport": {
+        "width": 448,
+        "height": 998
+      },
+      "deviceScaleFactor": 1,
+      "isMobile": true,
+      "hasTouch": true,
+      "colorScheme": "dark",
+      "locale": "uk-UA"
+    }
+  },
+  "capabilities": ["core", "devtools"],
+  "saveSession": true,
+  "outputDir": ".agent-data/playwright",
+  "outputMaxSize": 52428800,
+  "console": {
+    "level": "info"
+  },
+  "imageResponses": "allow",
+  "snapshot": {
+    "mode": "full"
+  },
+  "allowUnrestrictedFileAccess": false,
+  "codegen": "none"
+}
