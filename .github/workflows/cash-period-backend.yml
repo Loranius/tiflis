@@ -17,18 +17,18 @@ jobs:
         with:
           ref: ux/cash-schedule-menu-favicon
           fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
       - name: Apply backend period logic
         run: python .github/scripts/apply_cash_period_backend.py
       - name: Check edge function
-        run: deno check supabase/functions/tiflis-secure-api/index.ts
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: deno check --node-modules-dir=auto supabase/functions/tiflis-secure-api/index.ts
       - name: Typecheck client
         run: npm run typecheck
       - name: Build client
