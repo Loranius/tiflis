@@ -75,14 +75,6 @@ function roleLabel(row: CashLeaderboardRow): string {
   return labels.join(' · ') || 'Працівник ресторану';
 }
 
-function formatTotal(value: number): string {
-  return new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'UAH',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 function PersonAvatar({ row, podium = false }: { row: CashLeaderboardRow; podium?: boolean }) {
   const name = displayName(row);
   const avatar = typeof row.avatar === 'string' && row.avatar.trim() ? row.avatar.trim() : null;
@@ -100,14 +92,6 @@ function PersonAvatar({ row, podium = false }: { row: CashLeaderboardRow; podium
       ) : null}
     </span>
   );
-}
-
-function ResultValue({ row }: { row: CashLeaderboardRow }) {
-  if (typeof row.total === 'number' && Number.isFinite(row.total)) {
-    return <strong>{formatTotal(row.total)}</strong>;
-  }
-  const relative = typeof row.relative === 'number' && Number.isFinite(row.relative) ? row.relative : 0;
-  return <strong>{Math.round(relative)}% від лідера</strong>;
 }
 
 export function CashLeaderboard({
@@ -132,7 +116,7 @@ export function CashLeaderboard({
         <div>
           <span className="eyebrow">Рейтинг команди</span>
           <h3>Топ каси</h3>
-          <p>Кожне місце показує працівника, його ім’я та аватарку. Точна сума доступна власнику запису й адміністрації.</p>
+          <p>Кожне місце показує працівника, його ім’я та аватарку.</p>
         </div>
         <span className="cash-live-heading-mark"><UsersRound size={25} /></span>
       </header>
@@ -177,7 +161,6 @@ export function CashLeaderboard({
                   <strong>{displayName(row)}</strong>
                   <small>{roleLabel(row)}</small>
                 </div>
-                <ResultValue row={row} />
                 {row.mine ? <b>Ви</b> : null}
               </article>
             ))}
@@ -193,10 +176,11 @@ export function CashLeaderboard({
                     <strong>{displayName(row)}</strong>
                     <small>{roleLabel(row)}</small>
                   </div>
-                  <div className="cash-live-result">
-                    <ResultValue row={row} />
-                    {row.mine ? <span>Ви</span> : null}
-                  </div>
+                  {row.mine ? (
+                    <div className="cash-live-result">
+                      <span>Ви</span>
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -217,7 +201,7 @@ export function CashLeaderboard({
         <Medal size={17} />
         <div>
           <strong>Імена й аватарки відкриті для команди</strong>
-          <span>{canViewAll ? 'Адміністрація бачить точні розрахункові суми.' : 'Чужі точні розрахункові суми залишаються прихованими.'}</span>
+          <span>{canViewAll ? 'Рейтинг показує порядок місць без розрахованих сум.' : 'Рейтинг показує порядок місць без чужих розрахункових даних.'}</span>
         </div>
         {sorted[0] ? <Crown size={18} /> : null}
       </footer>
