@@ -15,15 +15,15 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { CashLeaderboard } from '../components/CashLeaderboard';
 import { secureApi } from '../lib/secureApi';
 import './cash.css';
+import './cash-practical.css';
 
-type CashTab = 'overview' | 'entries' | 'leaderboard' | 'team';
+type CashTab = 'overview' | 'leaderboard' | 'team';
 type LeaderboardPeriod = 'first' | 'second' | 'month' | 'year';
-
 type NumericValue = number | string | null;
 
 interface CashStaff {
@@ -52,15 +52,8 @@ interface ExtraWage {
 }
 
 interface LeaderboardRow {
-  userId: string;
-  name: string;
   rank: number;
-  total: number | null;
-  relative: number;
   mine: boolean;
-  avatar: string | null;
-  role: string;
-  role2: string | null;
 }
 
 interface RatingComment {
@@ -156,6 +149,10 @@ function money(value: number): string {
   }).format(value);
 }
 
+function calendarMoney(value: number): string {
+  return `${new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 }).format(value)} ₴`;
+}
+
 function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || '').join('');
@@ -163,7 +160,7 @@ function initials(name: string): string {
 
 function formatDay(value: string): string {
   return new Intl.DateTimeFormat('uk-UA', {
-    weekday: 'short', day: 'numeric', month: 'long',
+    weekday: 'long', day: 'numeric', month: 'long',
   }).format(new Date(`${value}T12:00:00`));
 }
 
@@ -181,24 +178,13 @@ function inDayRange(value: string, month: string, fromDay: number, toDay: number
   return value >= dateForDay(month, fromDay) && value <= dateForDay(month, toDay);
 }
 
-function summarizePayroll(
-  entries: CashEntry[],
-  extras: ExtraWage[],
-  month: string,
-  cashFrom: number,
-  cashTo: number,
-  baseFrom: number,
-  baseTo: number,
-  extraFrom = baseFrom,
-  extraTo = baseTo,
-) {
-  const cashEntries = entries.filter((entry) => inDayRange(entry.date, month, cashFrom, cashTo));
-  const baseEntries = entries.filter((entry) => inDayRange(entry.date, month, baseFrom, baseTo));
-  const scopedExtras = extras.filter((entry) => inDayRange(entry.date, month, extraFrom, extraTo));
-  const cash = cashEntries.reduce((sum, entry) => sum + asNumber(entry.cash), 0);
-  const tips = cashEntries.reduce((sum, entry) => sum + asNumber(entry.tips), 0);
+function summarizePayroll(entries: CashEntry[], extras: ExtraWage[], month: string, daysInMonth: number) {
+  const scopedEntries = entries.filter((entry) => inDayRange(entry.date, month, 1, daysInMonth));
+  const scopedExtras = extras.filter((entry) => inDayRange(entry.date, month, 1, daysInMonth));
+  const cash = scopedEntries.reduce((sum, entry) => sum + asNumber(entry.cash), 0);
+  const tips = scopedEntries.reduce((sum, entry) => sum + asNumber(entry.tips), 0);
   const extra = scopedExtras.reduce((sum, entry) => sum + asNumber(entry.amount), 0);
-  const workDays = baseEntries.filter((entry) => asNumber(entry.cash) > 0 || asNumber(entry.tips) > 0).length;
+  const workDays = scopedEntries.filter((entry) => asNumber(entry.cash) > 0).length;
   return { cash, tips, extra, workDays, wage: cash * 0.04 + workDays * 200 + extra };
 }
 
@@ -211,6 +197,7 @@ export function CashPage() {
   const [data, setData] = useState<CashBootstrapResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [optionalOpen, setOptionalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editor, setEditor] = useState<DayEditorState>(() => {
     const now = new Date();
@@ -220,8 +207,6 @@ export function CashPage() {
     };
   });
   const [ratingEditor, setRatingEditor] = useState<RatingEditorState | null>(null);
-  const requestId = useRef(0);
-  const quickEntryRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (user && !viewUserId) setViewUserId(user.id);
@@ -229,22 +214,18 @@ export function CashPage() {
 
   const load = useCallback(async () => {
     if (!viewUserId) return;
-    const id = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
       const response = await secureApi<CashBootstrapResponse>({
         action: 'cash_bootstrap', month, user_id: viewUserId, leaderboard_period: leaderboardPeriod,
       });
-      if (requestId.current !== id) return;
       setData(response);
       if (response.viewUserId !== viewUserId) setViewUserId(response.viewUserId);
     } catch (reason) {
-      if (requestId.current === id) {
-        setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити касу.');
-      }
+      setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити касу.');
     } finally {
-      if (requestId.current === id) setLoading(false);
+      setLoading(false);
     }
   }, [leaderboardPeriod, month, viewUserId]);
 
@@ -263,34 +244,49 @@ export function CashPage() {
   const extras = data?.extraWages || [];
   const entryByDate = useMemo(() => new Map(entries.map((entry) => [entry.date, entry])), [entries]);
   const extraByDate = useMemo(() => new Map(extras.map((entry) => [entry.date, entry])), [extras]);
-  const fullMonth = useMemo(() => summarizePayroll(entries, extras, month, 1, daysInMonth, 1, daysInMonth), [daysInMonth, entries, extras, month]);
-  const firstHalf = useMemo(() => summarizePayroll(entries, extras, month, 1, Math.min(14, daysInMonth), 1, Math.min(15, daysInMonth), 1, Math.min(15, daysInMonth)), [daysInMonth, entries, extras, month]);
-  const secondHalf = useMemo(() => summarizePayroll(entries, extras, month, 15, daysInMonth, Math.min(16, daysInMonth), daysInMonth, Math.min(16, daysInMonth), daysInMonth), [daysInMonth, entries, extras, month]);
+  const fullMonth = useMemo(
+    () => summarizePayroll(entries, extras, month, daysInMonth),
+    [daysInMonth, entries, extras, month],
+  );
   const selectedStaff = data?.users.find((staff) => staff.id === data.viewUserId) || null;
-  const sortedEntries = useMemo(() => [...entries].sort((a, b) => b.date.localeCompare(a.date)), [entries]);
   const canEdit = Boolean(data && (data.me.canEditAll || data.viewUserId === data.me.legacyUserId));
   const currentMonth = monthKey(new Date());
   const defaultDate = month === currentMonth ? dateForDay(month, new Date().getDate()) : dateForDay(month, 1);
-
-  useEffect(() => {
-    if (!editor.date.startsWith(`${month}-`)) openDay(defaultDate);
-  }, [defaultDate, month]);
+  const selectedEntry = entryByDate.get(editor.date);
+  const selectedExtra = extraByDate.get(editor.date);
+  const selectedDayEstimate = asNumber(editor.cash) * 0.04
+    + (asNumber(editor.cash) > 0 ? 200 : 0)
+    + asNumber(editor.extra);
 
   function openDay(date: string) {
     const entry = entryByDate.get(date);
     const extra = extraByDate.get(date);
-    setEditor({
+    const next = {
       date,
       cash: entry ? String(asNumber(entry.cash) || '') : '',
       tips: entry ? String(asNumber(entry.tips) || '') : '',
       extra: extra ? String(asNumber(extra.amount) || '') : '',
       note: extra?.description || '',
-    });
+    };
+    setEditor(next);
+    setOptionalOpen(Boolean(asNumber(entry?.tips) || asNumber(extra?.amount) || extra?.description));
   }
+
+  useEffect(() => {
+    if (!editor.date.startsWith(`${month}-`)) openDay(defaultDate);
+  }, [defaultDate, month]);
+
+  useEffect(() => {
+    if (!loading && data) openDay(editor.date.startsWith(`${month}-`) ? editor.date : defaultDate);
+  }, [data?.viewUserId, loading]);
 
   function selectDay(date: string) {
     openDay(date);
-    window.requestAnimationFrame(() => quickEntryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    if (window.innerWidth <= 840) {
+      window.requestAnimationFrame(() => {
+        document.querySelector('.cash-practical-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
   }
 
   async function saveDay() {
@@ -319,6 +315,7 @@ export function CashPage() {
         action: 'cash_delete_day', user_id: data.viewUserId, date: editor.date,
       });
       setEditor({ ...editor, cash: '', tips: '', extra: '', note: '' });
+      setOptionalOpen(false);
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Запис не видалено.');
@@ -348,7 +345,11 @@ export function CashPage() {
   return (
     <div className="cash-page-v2">
       <section className="cash-hero-v2">
-        <div><span className="eyebrow">Фінанси зміни</span><h2>Каса без зайвого шуму</h2><p>Виручка, чайові, доплати, розрахункова виплата та командний рейтинг в одному захищеному просторі.</p></div>
+        <div>
+          <span className="eyebrow">Фінанси зміни</span>
+          <h2>Каса</h2>
+          <p>Оберіть день у календарі, внесіть суму каси й збережіть. Решта полів відкривається лише за потреби.</p>
+        </div>
         <div className="cash-hero-mark"><WalletCards size={35} /></div>
       </section>
 
@@ -360,76 +361,113 @@ export function CashPage() {
           <button type="button" className="cash-today-button" onClick={() => setMonth(currentMonth)}>Сьогодні</button>
         </div>
         <div className="cash-toolbar-actions">
-          {data?.me.canViewAll ? <label className="cash-user-select"><span>Працівник</span><select value={viewUserId} onChange={(event) => setViewUserId(event.target.value)}>{data.users.map((staff) => <option value={staff.id} key={staff.id}>{staff.name}</option>)}</select></label> : null}
+          {data?.me.canViewAll ? (
+            <label className="cash-user-select">
+              <span>Працівник</span>
+              <select value={viewUserId} onChange={(event) => setViewUserId(event.target.value)}>
+                {data.users.map((staff) => <option value={staff.id} key={staff.id}>{staff.name}</option>)}
+              </select>
+            </label>
+          ) : null}
         </div>
       </section>
 
-      {!loading && data && canEdit ? (
-        <section className="cash-quick-entry-v3" ref={quickEntryRef}>
-          <header>
-            <div><span className="eyebrow">Денний запис</span><h3>{formatDay(editor.date)}</h3><p>{selectedStaff?.name || 'Моя каса'} · базова ставка 200 ₴ за робочий день</p></div>
-            <label><span>Дата</span><input type="date" value={editor.date} min={`${month}-01`} max={`${month}-${String(daysInMonth).padStart(2, '0')}`} onChange={(event) => openDay(event.target.value)} /></label>
-          </header>
-          <div className="cash-quick-fields-v3">
-            <label><span>Каса, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.cash} onChange={(event) => setEditor({ ...editor, cash: event.target.value })} placeholder="0" /></label>
-            <label><span>Чайові, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.tips} onChange={(event) => setEditor({ ...editor, tips: event.target.value })} placeholder="0" /></label>
-            <label><span>Додаткова ставка / доплата, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.extra} onChange={(event) => setEditor({ ...editor, extra: event.target.value })} placeholder="0" /></label>
-            <label className="is-wide"><span>Причина доплати</span><input type="text" maxLength={300} value={editor.note} onChange={(event) => setEditor({ ...editor, note: event.target.value })} placeholder="Банкет, підміна, додаткові години…" /></label>
-          </div>
-          <footer>
-            <div><span>Орієнтовно за день</span><strong>{money(asNumber(editor.cash) * 0.04 + (asNumber(editor.cash) > 0 || asNumber(editor.tips) > 0 ? 200 : 0) + asNumber(editor.extra))}</strong></div>
-            <div className="cash-quick-actions-v3">{entryByDate.has(editor.date) || extraByDate.has(editor.date) ? <button type="button" className="is-danger" onClick={() => void deleteDay()} disabled={saving}><Trash2 size={17} /> Очистити</button> : null}<button type="button" className="is-primary" onClick={() => void saveDay()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти день</button></div>
-          </footer>
+      {error ? <div className="cash-alert-v2" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
+      {loading ? <div className="cash-loading-v2"><RefreshCw className="is-spinning" size={24} /><span>Завантажуємо касу…</span></div> : null}
+
+      {!loading && data ? (
+        <section className="cash-practical-workspace">
+          <article className="cash-practical-calendar">
+            <header>
+              <div><span className="eyebrow">Календар каси</span><h3>{selectedStaff?.name || 'Моя каса'}</h3></div>
+              <span>Натисніть день</span>
+            </header>
+            <div className="cash-practical-grid">
+              {DOW.map((day) => <span className="cash-practical-dow" key={day}>{day}</span>)}
+              {Array.from({ length: firstOffset }, (_, index) => <span className="cash-practical-empty" key={`empty-${index}`} />)}
+              {Array.from({ length: daysInMonth }, (_, index) => index + 1).map((day) => {
+                const date = dateForDay(month, day);
+                const entry = entryByDate.get(date);
+                const cash = asNumber(entry?.cash);
+                return (
+                  <button
+                    type="button"
+                    key={date}
+                    className={`cash-practical-day ${cash > 0 ? 'has-cash' : ''} ${editor.date === date ? 'is-selected' : ''}`}
+                    onClick={() => selectDay(date)}
+                  >
+                    <span>{day}</span>
+                    {cash > 0 ? <strong>{calendarMoney(cash)}</strong> : <small>—</small>}
+                  </button>
+                );
+              })}
+            </div>
+          </article>
+
+          {canEdit ? (
+            <article className="cash-practical-editor">
+              <header>
+                <div className="cash-selected-date"><span>Обраний день</span><strong>{formatDay(editor.date)}</strong></div>
+                <input
+                  className="cash-practical-date-input"
+                  aria-label="Дата запису каси"
+                  type="date"
+                  value={editor.date}
+                  min={`${month}-01`}
+                  max={`${month}-${String(daysInMonth).padStart(2, '0')}`}
+                  onChange={(event) => openDay(event.target.value)}
+                />
+              </header>
+
+              <label className="cash-primary-input">
+                <span>Сума каси</span>
+                <span className="cash-primary-input-field">
+                  <input
+                    inputMode="decimal"
+                    type="number"
+                    min="0"
+                    value={editor.cash}
+                    onChange={(event) => setEditor({ ...editor, cash: event.target.value })}
+                    placeholder="0"
+                    autoComplete="off"
+                  />
+                  <b>₴</b>
+                </span>
+              </label>
+              <p className="cash-primary-help">Основна сума, від якої розраховується 4%.</p>
+
+              <details className="cash-optional-details" open={optionalOpen} onToggle={(event) => setOptionalOpen(event.currentTarget.open)}>
+                <summary>Чайові та додаткова доплата</summary>
+                <div className="cash-optional-fields">
+                  <label><span>Чайові, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.tips} onChange={(event) => setEditor({ ...editor, tips: event.target.value })} placeholder="0" /></label>
+                  <label><span>Додаткова ставка / доплата, ₴</span><input inputMode="decimal" type="number" min="0" value={editor.extra} onChange={(event) => setEditor({ ...editor, extra: event.target.value })} placeholder="0" /></label>
+                  <label><span>Причина доплати</span><input type="text" maxLength={300} value={editor.note} onChange={(event) => setEditor({ ...editor, note: event.target.value })} placeholder="Банкет, підміна, додаткові години…" /></label>
+                </div>
+              </details>
+
+              <div className="cash-practical-summary"><span>Орієнтовна виплата за день</span><strong>{money(selectedDayEstimate)}</strong></div>
+              <div className="cash-practical-actions">
+                {selectedEntry || selectedExtra ? <button type="button" className="is-danger" onClick={() => void deleteDay()} disabled={saving}><Trash2 size={17} /></button> : <span />}
+                <button type="button" className="is-primary" onClick={() => void saveDay()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти касу</button>
+              </div>
+            </article>
+          ) : null}
         </section>
       ) : null}
 
       <nav className="cash-tabs-v2" aria-label="Розділи каси">
-        {([['overview', 'Огляд'], ['entries', 'Записи'], ['leaderboard', 'Топ каси'], ['team', 'Рейтинг команди']] as const)
+        {([['overview', 'Підсумок'], ['leaderboard', 'Топ каси'], ['team', 'Команда']] as const)
           .map(([key, label]) => <button type="button" key={key} className={tab === key ? 'is-active' : ''} onClick={() => setTab(key)}>{label}</button>)}
       </nav>
 
-      {error ? <div className="cash-alert-v2" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
-      {loading ? <div className="cash-loading-v2"><RefreshCw className="is-spinning" size={24} /><span>Збираємо фінансові дані…</span></div> : null}
-
-      {!loading && data && tab === 'overview' ? <>
-        <section className="cash-metrics-v2">
-          <article><Banknote size={20} /><span>Виручка за місяць</span><strong>{money(fullMonth.cash)}</strong><small>{fullMonth.workDays} робочих днів</small></article>
-          <article><Coins size={20} /><span>Чайові</span><strong>{money(fullMonth.tips)}</strong><small>окремо від виплати</small></article>
-          <article><Sparkles size={20} /><span>Доплати</span><strong>{money(fullMonth.extra)}</strong><small>зафіксовані надбавки</small></article>
-          <article className="is-accent"><TrendingUp size={20} /><span>Розрахункова виплата</span><strong>{money(fullMonth.wage)}</strong><small>4% + 200 ₴/день + доплати</small></article>
+      {!loading && data && tab === 'overview' ? (
+        <section className="cash-compact-metrics">
+          <article><Banknote size={20} /><span>Каса за місяць</span><strong>{money(fullMonth.cash)}</strong><small>{fullMonth.workDays} днів із внесеною касою</small></article>
+          <article><TrendingUp size={20} /><span>Розрахункова виплата</span><strong>{money(fullMonth.wage)}</strong><small>4% + 200 ₴/день + доплати</small></article>
+          <article><Coins size={20} /><span>Чайові</span><strong>{money(fullMonth.tips)}</strong><small>окремо від каси</small></article>
+          <article><Sparkles size={20} /><span>Доплати</span><strong>{money(fullMonth.extra)}</strong><small>додаткові нарахування</small></article>
         </section>
-        <section className="cash-period-grid-v2">
-          {[[`1–14 числа`, 'Перша половина', firstHalf], [`15–${daysInMonth} числа`, 'Друга половина', secondHalf]].map(([range, title, summary]) => {
-            const value = summary as typeof fullMonth;
-            return <article key={String(range)}><div><span className="eyebrow">{String(range)}</span><h3>{String(title)}</h3></div><strong>{money(value.wage)}</strong><dl><div><dt>Каса</dt><dd>{money(value.cash)}</dd></div><div><dt>Чайові</dt><dd>{money(value.tips)}</dd></div><div><dt>Днів</dt><dd>{value.workDays}</dd></div></dl></article>;
-          })}
-        </section>
-        <section className="cash-calendar-card-v2">
-          <div className="cash-section-heading-v2"><div><span className="eyebrow">Щоденні внесення</span><h3>{selectedStaff?.name || 'Моя каса'}</h3></div><span className="cash-formula-note">Чайові не змішуються з розрахунковою виплатою</span></div>
-          <div className="cash-calendar-grid-v2">
-            {DOW.map((day) => <span className="cash-calendar-dow" key={day}>{day}</span>)}
-            {Array.from({ length: firstOffset }, (_, index) => <span className="cash-calendar-empty" key={`empty-${index}`} />)}
-            {Array.from({ length: daysInMonth }, (_, index) => index + 1).map((day) => {
-              const date = dateForDay(month, day);
-              const entry = entryByDate.get(date);
-              const extra = extraByDate.get(date);
-              const weekend = [0, 6].includes(new Date(`${date}T12:00:00`).getDay());
-              return <button type="button" key={date} className={`${entry || extra ? 'has-data' : ''} ${weekend ? 'is-weekend' : ''}`} onClick={() => canEdit && selectDay(date)} disabled={!canEdit}><span>{day}</span>{entry ? <strong>{money(asNumber(entry.cash))}</strong> : <small>{extra ? `+${money(asNumber(extra.amount))}` : '—'}</small>}{entry && asNumber(entry.tips) > 0 ? <em>чайові {money(asNumber(entry.tips))}</em> : null}</button>;
-            })}
-          </div>
-        </section>
-      </> : null}
-
-      {!loading && data && tab === 'entries' ? <section className="cash-list-card-v2">
-        <div className="cash-section-heading-v2"><div><span className="eyebrow">Історія місяця</span><h3>{selectedStaff?.name || 'Записи'}</h3></div><strong>{sortedEntries.length} днів</strong></div>
-        <div className="cash-entry-list-v2">
-          {sortedEntries.length === 0 ? <div className="cash-empty-v2"><CalendarDays size={28} /><strong>Записів ще немає</strong><span>Додайте перший робочий день.</span></div> : null}
-          {sortedEntries.map((entry) => {
-            const extra = extraByDate.get(entry.date);
-            return <button type="button" key={entry.id} onClick={() => canEdit && selectDay(entry.date)} disabled={!canEdit}><span className="cash-entry-date"><CalendarDays size={17} /><span><strong>{formatDay(entry.date)}</strong><small>{extra?.description || 'Звичайна зміна'}</small></span></span><span className="cash-entry-values"><strong>{money(asNumber(entry.cash))}</strong><small>чайові {money(asNumber(entry.tips))}{extra ? ` · доплата ${money(asNumber(extra.amount))}` : ''}</small></span>{canEdit ? <Edit3 size={16} /> : null}</button>;
-          })}
-        </div>
-      </section> : null}
+      ) : null}
 
       {!loading && data && tab === 'leaderboard' ? (
         <CashLeaderboard
@@ -442,12 +480,31 @@ export function CashPage() {
         />
       ) : null}
 
-      {!loading && data && tab === 'team' ? <section className="cash-team-rating-v2">
-        <div className="cash-section-heading-v2"><div><span className="eyebrow">Сервіс і командна робота</span><h3>Рейтинг персоналу</h3></div><Star size={24} /></div>
-        <div className="cash-rating-grid-v2">{data.ratings.map((rating) => <article key={rating.userId} className={`tone-${scoreTone(rating.score)}`}><div className="cash-rating-person-v2"><span>{initials(rating.name)}</span><div><strong>{rating.name}</strong><small>{roleLabel(rating.role)}</small></div><b>{rating.score > 0 ? '+' : ''}{rating.score}</b></div><div className="cash-score-track-v2"><i style={{ left: '50%', width: `${Math.abs(rating.score) / 2}%`, transform: rating.score < 0 ? 'translateX(-100%)' : undefined }} /></div><div className="cash-rating-comments-v2">{rating.comments.length === 0 ? <span>Останніх коментарів немає</span> : rating.comments.slice(0, 2).map((comment) => <p key={comment.id}><strong>{comment.delta && comment.delta > 0 ? '+' : ''}{comment.delta || 0}</strong><span>{comment.comment || 'Зміна оцінки'} · {comment.author}</span></p>)}</div>{data.me.canEditRatings ? <button type="button" onClick={() => setRatingEditor({ userId: rating.userId, name: rating.name, score: rating.score, comment: '' })}><Edit3 size={15} /> Оновити оцінку</button> : null}</article>)}</div>
-      </section> : null}
+      {!loading && data && tab === 'team' ? (
+        <section className="cash-team-rating-v2">
+          <div className="cash-section-heading-v2"><div><span className="eyebrow">Сервіс і командна робота</span><h3>Рейтинг персоналу</h3></div><Star size={24} /></div>
+          <div className="cash-rating-grid-v2">
+            {data.ratings.map((rating) => (
+              <article key={rating.userId} className={`tone-${scoreTone(rating.score)}`}>
+                <div className="cash-rating-person-v2"><span>{initials(rating.name)}</span><div><strong>{rating.name}</strong><small>{roleLabel(rating.role)}</small></div><b>{rating.score > 0 ? '+' : ''}{rating.score}</b></div>
+                <div className="cash-score-track-v2"><i style={{ left: '50%', width: `${Math.abs(rating.score) / 2}%`, transform: rating.score < 0 ? 'translateX(-100%)' : undefined }} /></div>
+                <div className="cash-rating-comments-v2">{rating.comments.length === 0 ? <span>Останніх коментарів немає</span> : rating.comments.slice(0, 2).map((comment) => <p key={comment.id}><strong>{comment.delta && comment.delta > 0 ? '+' : ''}{comment.delta || 0}</strong><span>{comment.comment || 'Зміна оцінки'} · {comment.author}</span></p>)}</div>
+                {data.me.canEditRatings ? <button type="button" onClick={() => setRatingEditor({ userId: rating.userId, name: rating.name, score: rating.score, comment: '' })}><Edit3 size={15} /> Оновити оцінку</button> : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-      {ratingEditor ? <div className="cash-sheet-backdrop-v2" onMouseDown={() => !saving && setRatingEditor(null)}><section className="cash-sheet-v2 cash-rating-sheet-v2" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="cash-sheet-heading-v2"><div><span className="eyebrow">Оцінка персоналу</span><h3>{ratingEditor.name}</h3><p>Шкала від −100 до +100</p></div><button type="button" onClick={() => setRatingEditor(null)} disabled={saving}><X size={19} /></button></div><div className="cash-rating-control-v2"><output className={`tone-${scoreTone(ratingEditor.score)}`}>{ratingEditor.score > 0 ? '+' : ''}{ratingEditor.score}</output><input type="range" min="-100" max="100" value={ratingEditor.score} onChange={(event) => setRatingEditor({ ...ratingEditor, score: Number(event.target.value) })} /><div>{[-10, -5, -1, 1, 5, 10].map((delta) => <button type="button" key={delta} onClick={() => setRatingEditor({ ...ratingEditor, score: Math.max(-100, Math.min(100, ratingEditor.score + delta)) })}>{delta > 0 ? '+' : ''}{delta}</button>)}</div><label><span>Короткий коментар</span><textarea maxLength={500} value={ratingEditor.comment} onChange={(event) => setRatingEditor({ ...ratingEditor, comment: event.target.value })} placeholder="За що змінюється оцінка" /></label></div><div className="cash-sheet-actions-v2"><span /><button type="button" className="is-primary" onClick={() => void saveRating()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Crown size={17} />} Оновити</button></div></section></div> : null}
+      {ratingEditor ? (
+        <div className="cash-sheet-backdrop-v2" onMouseDown={() => !saving && setRatingEditor(null)}>
+          <section className="cash-sheet-v2 cash-rating-sheet-v2" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="cash-sheet-heading-v2"><div><span className="eyebrow">Оцінка персоналу</span><h3>{ratingEditor.name}</h3><p>Шкала від −100 до +100</p></div><button type="button" onClick={() => setRatingEditor(null)} disabled={saving}><X size={19} /></button></div>
+            <div className="cash-rating-control-v2"><output className={`tone-${scoreTone(ratingEditor.score)}`}>{ratingEditor.score > 0 ? '+' : ''}{ratingEditor.score}</output><input type="range" min="-100" max="100" value={ratingEditor.score} onChange={(event) => setRatingEditor({ ...ratingEditor, score: Number(event.target.value) })} /><div>{[-10, -5, -1, 1, 5, 10].map((delta) => <button type="button" key={delta} onClick={() => setRatingEditor({ ...ratingEditor, score: Math.max(-100, Math.min(100, ratingEditor.score + delta)) })}>{delta > 0 ? '+' : ''}{delta}</button>)}</div><label><span>Короткий коментар</span><textarea maxLength={500} value={ratingEditor.comment} onChange={(event) => setRatingEditor({ ...ratingEditor, comment: event.target.value })} placeholder="За що змінюється оцінка" /></label></div>
+            <div className="cash-sheet-actions-v2"><span /><button type="button" className="is-primary" onClick={() => void saveRating()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Crown size={17} />} Оновити</button></div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
