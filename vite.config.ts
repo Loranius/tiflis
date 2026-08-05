@@ -25,6 +25,16 @@ function portalEntryPlugin(): Plugin {
 export default defineConfig({
   base: './',
   plugins: [portalEntryPlugin(), react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router'],
+          'supabase-vendor': ['@supabase/supabase-js'],
+        },
+      },
+    },
+  },
   server: {
     host: true,
     port: 5173,
