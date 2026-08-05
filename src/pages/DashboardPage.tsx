@@ -15,6 +15,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { canAccessPage, pages, type PageKey } from '../lib/acl';
 import { supabase } from '../lib/supabase';
 import './dashboard.css';
+import './dashboard-cleanup.css';
 
 const TodayOperationsWidget = lazy(() => import('../components/TodayOperationsWidget')
   .then((module) => ({ default: module.TodayOperationsWidget })));
