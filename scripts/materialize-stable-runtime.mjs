@@ -8,6 +8,12 @@ const stableDir = path.join(root, 'stable-runtime');
 const distIndex = path.join(distDir, 'index.html');
 const sourceSha = process.env.STABLE_SOURCE_SHA || process.env.VITE_BUILD_ID || 'unknown';
 
+function isLocalReference(reference) {
+  return !/^(?:[a-z]+:)?\/\//i.test(reference)
+    && !reference.startsWith('data:')
+    && !reference.startsWith('#');
+}
+
 function normalizedAsset(reference) {
   const value = reference.split(/[?#]/, 1)[0].replace(/^\.\//, '').replace(/^\//, '');
   if (!value.startsWith('assets/')) {
@@ -18,9 +24,13 @@ function normalizedAsset(reference) {
 
 const html = await readFile(distIndex, 'utf8');
 const moduleScripts = [...html.matchAll(/<script\b(?=[^>]*\btype=["']module["'])[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
-  .map((match) => normalizedAsset(match[1]));
+  .map((match) => match[1])
+  .filter(isLocalReference)
+  .map(normalizedAsset);
 const stylesheets = [...html.matchAll(/<link\b(?=[^>]*\brel=["']stylesheet["'])[^>]*\bhref=["']([^"']+)["'][^>]*>/gi)]
-  .map((match) => normalizedAsset(match[1]));
+  .map((match) => match[1])
+  .filter(isLocalReference)
+  .map(normalizedAsset);
 
 if (moduleScripts.length !== 1) {
   throw new Error(`Expected one compiled module entry, found ${moduleScripts.length}`);
