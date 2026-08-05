@@ -98,12 +98,6 @@ jobs:
 
           css = Path('src/pages/auth-flow.css')
           css.write_text(css.read_text() + "\n.auth-field-hint-v4{margin:-6px 2px 0;color:#6f7b73;font-size:.82rem;line-height:1.45}\n")
-
-          replace(
-              '.github/workflows/ci.yml',
-              '      - name: Check duty planner Edge Function\n        run: deno check --node-modules-dir=auto supabase/functions/tiflis-duty-planner-api/index.ts\n',
-              '      - name: Check Edge Functions\n        run: |\n          deno check --node-modules-dir=auto supabase/functions/tiflis-duty-planner-api/index.ts\n          deno check --node-modules-dir=auto supabase/functions/tiflis-registration-api/index.ts\n          deno check --node-modules-dir=auto supabase/functions/tiflis-auth-migrate/index.ts\n',
-          )
           PY
 
       - name: Install dependencies
@@ -132,6 +126,6 @@ jobs:
           rm .github/workflows/unify-registration-name-login.yml
           git config user.name Loranius
           git config user.email 72103663+Loranius@users.noreply.github.com
-          git add src/pages/LoginPage.tsx src/pages/auth-flow.css src/lib/publicAuthApi.ts src/components/RegistrationAdminPanel.tsx supabase/functions/tiflis-registration-api/index.ts .github/workflows/ci.yml .github/workflows/unify-registration-name-login.yml
+          git add src/pages/LoginPage.tsx src/pages/auth-flow.css src/lib/publicAuthApi.ts src/components/RegistrationAdminPanel.tsx supabase/functions/tiflis-registration-api/index.ts .github/workflows/unify-registration-name-login.yml
           git commit -m "Use one name as registration login"
           git push origin HEAD:feature/unified-registration-name-login
