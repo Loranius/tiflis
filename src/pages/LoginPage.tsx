@@ -30,7 +30,6 @@ export function LoginPage() {
   const [mode, setMode] = useState<AccessMode>('login');
   const [resetStep, setResetStep] = useState<ResetStep>('request');
   const [loginValue, setLoginValue] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [resetCode, setResetCode] = useState('');
@@ -77,7 +76,6 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       const response = await registerPortalUser({
-        displayName: displayName.trim(),
         login: loginValue.trim(),
         password,
         passwordConfirm,
@@ -188,7 +186,7 @@ export function LoginPage() {
             <p>{mode === 'login'
               ? 'Введи свій робочий логін і пароль.'
               : mode === 'register'
-                ? 'Створи логін і пароль. Доступ відкриється після підтвердження адміністратора.'
+                ? 'Введи ім’я, яке одночасно буде твоїм логіном для входу. Доступ відкриється після підтвердження адміністратора.'
                 : resetStep === 'request'
                   ? 'Введи логін. Одноразовий код і нагадування логіна прийдуть у прив’язаний Telegram.'
                   : 'Код діє 10 хвилин. Після перевірки задай новий пароль.'}</p>
@@ -206,8 +204,8 @@ export function LoginPage() {
 
           {mode === 'register' ? (
             <form className="login-form-v3" onSubmit={submitRegistration}>
-              <AuthField label="Ім’я в порталі" icon={<UserRound size={18} />}><input autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Наприклад, Дмитро" minLength={2} maxLength={120} required /></AuthField>
-              <AuthField label="Логін для входу" icon={<KeyRound size={18} />}><input autoComplete="username" value={loginValue} onChange={(event) => setLoginValue(event.target.value)} placeholder="Літери, цифри, крапка або _" minLength={2} maxLength={40} required /></AuthField>
+              <AuthField label="Ім’я / логін" icon={<UserRound size={18} />}><input autoComplete="username" value={loginValue} onChange={(event) => setLoginValue(event.target.value)} placeholder="Наприклад, Дмитро або Анна Марія" minLength={2} maxLength={40} required /></AuthField>
+              <p className="auth-field-hint-v4">Це ім’я відображатиметься в порталі й використовуватиметься для входу.</p>
               <AuthField label="Пароль" icon={<LockKeyhole size={18} />}><input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Мінімум 8 символів, літера і цифра" minLength={8} required /></AuthField>
               <AuthField label="Повторіть пароль" icon={<ShieldCheck size={18} />}><input type="password" autoComplete="new-password" value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} placeholder="Ще раз той самий пароль" minLength={8} required /></AuthField>
               <Feedback error={error} success={success} />

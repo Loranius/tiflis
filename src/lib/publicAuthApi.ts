@@ -35,14 +35,13 @@ async function request(body: Record<string, unknown>): Promise<PublicAuthRespons
 }
 
 export function registerPortalUser(input: {
-  displayName: string;
   login: string;
   password: string;
   passwordConfirm: string;
 }) {
   return request({
     action: 'register',
-    display_name: input.displayName,
+    display_name: input.login,
     login: input.login,
     password: input.password,
     password_confirm: input.passwordConfirm,
