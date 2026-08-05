@@ -51,7 +51,7 @@ export const pages: Record<PageKey, PageAccess> = {
   },
   duties: {
     path: '/duties',
-    title: 'Щоденні обов’язки',
+    title: 'Обов’язки',
     shortTitle: 'Обов’язки',
     roles: ['sysadmin', 'admin', 'chef', 'cook', 'waiter', 'bar', 'hostess', 'runner'],
   },
