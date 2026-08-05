@@ -134,6 +134,13 @@ export function TodayOperationsWidget() {
           <span className="today-shift-team-count-v4"><UsersRound size={18} /><strong>{loading ? '…' : workingWaiters.length}</strong></span>
         </header>
 
+        {!loading && workingWaiters.length > 0 && !daily?.publication ? (
+          <div className="today-shift-zones-status-v4">
+            <MapPinned size={15} />
+            <span>Розподіл зон ще не опубліковано.</span>
+          </div>
+        ) : null}
+
         {!loading && workingWaiters.length > 0 ? (
           <div className="today-shift-team-grid-v4">
             {workingWaiters.map((waiter) => {
@@ -145,12 +152,17 @@ export function TodayOperationsWidget() {
                     {waiter.avatar ? <img src={waiter.avatar} alt="" loading="lazy" /> : <span>{initials(waiter.name)}</span>}
                   </span>
                   <div className="today-shift-person-v4">
-                    <strong>{waiter.name}{own ? ' · ви' : ''}</strong>
+                    <strong>
+                      <span className="today-shift-name-v4">{waiter.name}</span>
+                      {own ? <span className="today-shift-own-badge-v4">Ви</span> : null}
+                    </strong>
                     <span><Clock3 size={13} /> Зміна {waiter.shift}</span>
-                    <small className={zones.length ? 'has-zone' : ''}>
-                      <MapPinned size={13} />
-                      {zones.length ? zones.join(' · ') : daily?.publication ? 'Зону не призначено' : 'Зони ще не опубліковані'}
-                    </small>
+                    {daily?.publication ? (
+                      <small className={zones.length ? 'has-zone' : ''}>
+                        <MapPinned size={13} />
+                        {zones.length ? zones.join(' · ') : 'Зону не призначено'}
+                      </small>
+                    ) : null}
                   </div>
                 </article>
               );
