@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './auth/AuthProvider';
+import { RootErrorBoundary } from './components/RootErrorBoundary';
 import './styles.css';
 import './performance.css';
 import './design-system.css';
@@ -9,7 +10,8 @@ import './route-transitions.css';
 import './legacy-navigation.css';
 import './reserve-mobile.css';
 
-const LEGACY_MARKER = 'tiflis-v2-react-runtime-ready-20260805-1';
+const BUILD_ID = import.meta.env.VITE_BUILD_ID || 'development';
+const RUNTIME_VERSION_KEY = 'tiflis.runtime.version';
 
 function safeStorageGet(key: string): string | null {
   try {
@@ -43,24 +45,45 @@ function clearInsecureLegacyStorage() {
   }
 }
 
-async function unregisterLegacyWorkers() {
-  if (!('serviceWorker' in navigator)) return;
-  const registrations = await navigator.serviceWorker.getRegistrations();
-  await Promise.allSettled(registrations.map((registration) => registration.unregister()));
+function isPortalWorker(registration: ServiceWorkerRegistration): boolean {
+  const scriptUrl = registration.active?.scriptURL
+    || registration.waiting?.scriptURL
+    || registration.installing?.scriptURL
+    || '';
+  if (!scriptUrl) return false;
+
+  const expected = new URL('./sw.js', document.baseURI).href;
+  return scriptUrl === expected || new URL(scriptUrl).pathname.endsWith('/tiflis/sw.js');
 }
 
-async function clearLegacyCaches() {
-  if (!('caches' in window)) return;
-  const keys = await caches.keys();
-  await Promise.allSettled(keys.map((key) => caches.delete(key)));
+async function retireLegacyRuntime() {
+  const jobs: Promise<unknown>[] = [];
+
+  if ('serviceWorker' in navigator) {
+    jobs.push(
+      navigator.serviceWorker.getRegistrations().then((registrations) => Promise.allSettled(
+        registrations.filter(isPortalWorker).map((registration) => registration.unregister()),
+      )),
+    );
+  }
+
+  if ('caches' in window) {
+    jobs.push(
+      caches.keys().then((keys) => Promise.allSettled(
+        keys.filter((key) => key.toLowerCase().startsWith('tiflis')).map((key) => caches.delete(key)),
+      )),
+    );
+  }
+
+  await Promise.allSettled(jobs);
 }
 
-function scheduleLegacyRetirement() {
-  if (safeStorageGet(LEGACY_MARKER) === '1') return;
+function scheduleRuntimeRetirement() {
+  if (safeStorageGet(RUNTIME_VERSION_KEY) === BUILD_ID) return;
 
   const finish = async () => {
-    await Promise.allSettled([unregisterLegacyWorkers(), clearLegacyCaches()]);
-    safeStorageSet(LEGACY_MARKER, '1');
+    await retireLegacyRuntime();
+    safeStorageSet(RUNTIME_VERSION_KEY, BUILD_ID);
   };
 
   const idleWindow = window as Window & {
@@ -68,9 +91,9 @@ function scheduleLegacyRetirement() {
   };
 
   if (idleWindow.requestIdleCallback) {
-    idleWindow.requestIdleCallback(() => { void finish(); }, { timeout: 1500 });
+    idleWindow.requestIdleCallback(() => { void finish(); }, { timeout: 1200 });
   } else {
-    window.setTimeout(() => { void finish(); }, 400);
+    window.setTimeout(() => { void finish(); }, 300);
   }
 }
 
@@ -88,11 +111,13 @@ if (!root) throw new Error('Root element not found');
 
 createRoot(root).render(
   <StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <RootErrorBoundary>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </RootErrorBoundary>
   </StrictMode>,
 );
 
 window.requestAnimationFrame(reportStarted);
-scheduleLegacyRetirement();
+scheduleRuntimeRetirement();
