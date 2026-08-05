@@ -1,7 +1,21 @@
-import { BellRing, CalendarCheck2, ShieldCheck, Sparkles } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Banknote,
+  BellRing,
+  CalendarCheck2,
+  CalendarDays,
+  ClipboardList,
+  ShieldCheck,
+  Soup,
+  Sparkles,
+  type LucideIcon,
+} from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
+import { canAccessPage, pages, type PageKey } from '../lib/acl';
 import { supabase } from '../lib/supabase';
+import './dashboard.css';
 
 const OperationsDashboard = lazy(() => import('../components/OperationsDashboard')
   .then((module) => ({ default: module.OperationsDashboard })));
@@ -19,12 +33,48 @@ interface NotificationRow {
   created_at: string | null;
 }
 
+interface QuickAction {
+  page: PageKey;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { page: 'schedule', title: 'Графік', description: 'Перевірити зміни команди', icon: CalendarDays },
+  { page: 'menu', title: 'Меню', description: 'Стоп-лист і склад позицій', icon: Soup },
+  { page: 'reserve', title: 'Резерви', description: 'Столи та таймлайн сервісу', icon: ClipboardList },
+  { page: 'cash', title: 'Каса', description: 'Виручка й особистий результат', icon: Banknote },
+  { page: 'staff', title: 'Команда', description: 'Профілі та ролі працівників', icon: ShieldCheck },
+];
+
+const ROLE_NAMES: Record<string, string> = {
+  sysadmin: 'Системний адміністратор',
+  admin: 'Адміністратор',
+  chef: 'Шеф-кухар',
+  cook: 'Кухар',
+  waiter: 'Офіціант',
+  bar: 'Бар',
+  hostess: 'Хостес',
+  runner: 'Ранер',
+  staff: 'Працівник',
+};
+
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat('uk-UA', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
   }).format(new Date(`${value}T12:00:00`));
+}
+
+function formatToday(): string {
+  const value = new Intl.DateTimeFormat('uk-UA', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date());
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export function DashboardPage() {
@@ -90,75 +140,140 @@ export function DashboardPage() {
     () => schedule.find((row) => row.shift && !['Х', 'О', ''].includes(row.shift)),
     [schedule],
   );
+  const quickActions = useMemo(
+    () => user ? QUICK_ACTIONS.filter((action) => canAccessPage(user, action.page)).slice(0, 4) : [],
+    [user],
+  );
+
+  const firstName = user?.displayName.trim().split(/\s+/)[0] || 'колего';
+  const roleLabel = user ? ROLE_NAMES[user.role] || user.role : 'Працівник';
+  const nextShiftLabel = loading
+    ? 'Завантажуємо графік…'
+    : nextShift
+      ? `${formatDate(nextShift.date)} · ${nextShift.shift}`
+      : 'Найближчих змін немає';
 
   return (
-    <div className="dashboard-stack">
-      <section className="welcome-card">
-        <div>
-          <span className="eyebrow">Робочий простір</span>
-          <h2>Привіт, {user?.displayName}</h2>
-          <p>Ваш графік, повідомлення, обов’язки та передача зміни зібрані в одному швидкому робочому просторі.</p>
+    <div className="today-page-v3">
+      <section className="today-hero-v3">
+        <div className="today-hero-copy-v3">
+          <span className="today-date-v3"><Sparkles size={15} /> {formatToday()}</span>
+          <h2>Гарної зміни, {firstName}</h2>
+          <p>Тут зібрано все, що потрібно сьогодні: найближчий графік, повідомлення команди, обов’язки та передача зміни.</p>
+
+          <div className="today-shift-pill-v3">
+            <CalendarCheck2 size={19} />
+            <div className="today-shift-pill-copy-v3">
+              <span>Наступна зміна</span>
+              <strong>{nextShiftLabel}</strong>
+            </div>
+          </div>
         </div>
-        <div className="welcome-symbol"><Sparkles size={34} /></div>
+
+        <div className="today-emblem-v3" aria-hidden="true">
+          <span>თ</span>
+          <small>team</small>
+        </div>
       </section>
 
-      <section className="metric-grid">
-        <article className="metric-card">
-          <CalendarCheck2 size={22} />
-          <span>Наступна зміна</span>
-          <strong>{loading ? '…' : nextShift ? `${formatDate(nextShift.date)} · ${nextShift.shift}` : 'Не призначено'}</strong>
+      {quickActions.length > 0 ? (
+        <section className="today-quick-grid-v3" aria-label="Швидкі дії">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link className="today-quick-v3" to={pages[action.page].path} key={action.page}>
+                <Icon size={22} />
+                <span className="today-quick-copy-v3">
+                  <strong>{action.title}</strong>
+                  <span>{action.description}</span>
+                </span>
+                <ArrowUpRight size={17} />
+              </Link>
+            );
+          })}
+        </section>
+      ) : null}
+
+      <section className="today-metric-row-v3">
+        <article className="today-metric-v3">
+          <span className="today-metric-icon-v3"><CalendarCheck2 size={20} /></span>
+          <span className="today-metric-copy-v3">
+            <span>Наступна зміна</span>
+            <strong>{nextShiftLabel}</strong>
+          </span>
         </article>
-        <article className="metric-card">
-          <BellRing size={22} />
-          <span>Нові повідомлення</span>
-          <strong>{loading ? '…' : notifications.length}</strong>
+        <article className="today-metric-v3">
+          <span className="today-metric-icon-v3"><BellRing size={20} /></span>
+          <span className="today-metric-copy-v3">
+            <span>Повідомлення</span>
+            <strong>{loading ? 'Завантаження…' : `${notifications.length} нових`}</strong>
+          </span>
         </article>
-        <article className="metric-card">
-          <ShieldCheck size={22} />
-          <span>Рівень доступу</span>
-          <strong>{user?.role === 'sysadmin' ? 'Сисадмін' : user?.role}</strong>
+        <article className="today-metric-v3">
+          <span className="today-metric-icon-v3"><ShieldCheck size={20} /></span>
+          <span className="today-metric-copy-v3">
+            <span>Роль у порталі</span>
+            <strong>{roleLabel}</strong>
+          </span>
         </article>
       </section>
 
-      <section className="content-grid">
-        <article className="panel-card">
-          <div className="panel-heading">
+      <section className="today-content-grid-v3">
+        <article className="today-panel-v3">
+          <div className="today-panel-heading-v3">
             <div>
               <span className="eyebrow">Найближчі дні</span>
               <h3>Мій графік</h3>
             </div>
+            {user && canAccessPage(user, 'schedule') ? (
+              <Link className="today-panel-link-v3" to={pages.schedule.path}>Відкрити <ArrowUpRight size={14} /></Link>
+            ) : null}
           </div>
-          <div className="schedule-list">
-            {loading ? <p className="muted">Завантаження…</p> : null}
-            {!loading && schedule.length === 0 ? <p className="muted">Записів у графіку поки немає.</p> : null}
-            {schedule.map((row) => (
-              <div className="schedule-row" key={row.date}>
+
+          <div className="today-schedule-v3">
+            {loading ? <div className="today-empty-v3"><span>Завантажуємо найближчі зміни…</span></div> : null}
+            {!loading && schedule.length === 0 ? (
+              <div className="today-empty-v3">
+                <CalendarDays size={27} />
+                <strong>Графік поки порожній</strong>
+                <span>Коли зміни будуть призначені, вони одразу з’являться тут.</span>
+              </div>
+            ) : null}
+            {!loading ? schedule.map((row) => (
+              <div className="today-schedule-row-v3" key={row.date}>
                 <span>{formatDate(row.date)}</span>
                 <strong>{row.shift || 'Вихідний'}</strong>
               </div>
-            ))}
+            )) : null}
           </div>
         </article>
 
-        <article className="panel-card">
-          <div className="panel-heading">
+        <article className="today-panel-v3">
+          <div className="today-panel-heading-v3">
             <div>
-              <span className="eyebrow">Останнє</span>
-              <h3>Сповіщення</h3>
+              <span className="eyebrow">Команда</span>
+              <h3>Повідомлення</h3>
             </div>
           </div>
-          <div className="notification-list">
-            {loading ? <p className="muted">Завантаження…</p> : null}
-            {!loading && notifications.length === 0 ? <p className="muted">Нових повідомлень немає.</p> : null}
-            {notifications.map((item) => (
-              <div className="notification-item" key={item.id}>
+
+          <div className="today-notifications-v3">
+            {loading ? <div className="today-empty-v3"><span>Оновлюємо повідомлення…</span></div> : null}
+            {!loading && notifications.length === 0 ? (
+              <div className="today-empty-v3">
+                <BellRing size={27} />
+                <strong>Усе спокійно</strong>
+                <span>Нових оголошень для команди зараз немає.</span>
+              </div>
+            ) : null}
+            {!loading ? notifications.map((item) => (
+              <div className="today-notification-v3" key={item.id}>
                 <span className={`priority-dot priority-${item.priority || 'medium'}`} />
                 <div>
                   <strong>{item.title}</strong>
                   <p>{item.body || 'Без додаткового тексту'}</p>
                 </div>
               </div>
-            ))}
+            )) : null}
           </div>
         </article>
       </section>
