@@ -215,7 +215,7 @@ async function sendTelegram(destination: number | null, text: string): Promise<b
 }
 
 async function writeAudit(
-  service: ReturnType<typeof createClient>,
+  service: any,
   actor: LegacyUser,
   action: string,
   summary: string,
@@ -233,7 +233,7 @@ async function writeAudit(
 }
 
 async function loadPlan(
-  service: ReturnType<typeof createClient>,
+  service: any,
   type: PlanType,
   date: string,
 ) {
@@ -382,8 +382,8 @@ Deno.serve(async (req: Request) => {
 
       const rawAssignments = Array.isArray(body.assignments) ? body.assignments : [];
       const rawZones = Array.isArray(body.zones) ? body.zones : [];
-      const allowedDutyKeys = new Set(dutyDefinitions(type).map((item) => item.key));
-      const allowedZoneKeys = new Set(DAILY_ZONES.map((item) => item.key));
+      const allowedDutyKeys = new Set<string>(dutyDefinitions(type).map((item) => item.key));
+      const allowedZoneKeys = new Set<string>(DAILY_ZONES.map((item) => item.key));
       const plan = await loadPlan(service, type, date);
       const workingIds = new Set(plan.waiters.map((waiter) => waiter.id));
       const seenDuties = new Set<string>();
@@ -458,8 +458,8 @@ Deno.serve(async (req: Request) => {
 
       const plan = await loadPlan(service, type, date);
       const workingIds = new Set(plan.waiters.map((waiter) => waiter.id));
-      const dutyMap = new Map(dutyDefinitions(type).map((item) => [item.key, item.title]));
-      const zoneMap = new Map(DAILY_ZONES.map((item) => [item.key, item.title]));
+      const dutyMap = new Map<string, string>(dutyDefinitions(type).map((item) => [item.key, item.title]));
+      const zoneMap = new Map<string, string>(DAILY_ZONES.map((item) => [item.key, item.title]));
       const byUser = new Map<string, { duties: string[]; zones: string[] }>();
       const ensure = (id: string) => {
         const current = byUser.get(id) || { duties: [], zones: [] };
