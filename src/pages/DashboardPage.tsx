@@ -1,7 +1,10 @@
 import { BellRing, CalendarCheck2, ShieldCheck, Sparkles } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../lib/supabase';
+
+const OperationsDashboard = lazy(() => import('../components/OperationsDashboard')
+  .then((module) => ({ default: module.OperationsDashboard })));
 
 interface ScheduleRow {
   date: string;
@@ -29,9 +32,29 @@ export function DashboardPage() {
   const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [operationsReady, setOperationsReady] = useState(false);
+
+  useEffect(() => {
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    if (idleWindow.requestIdleCallback) {
+      const handle = idleWindow.requestIdleCallback(
+        () => setOperationsReady(true),
+        { timeout: 900 },
+      );
+      return () => idleWindow.cancelIdleCallback?.(handle);
+    }
+
+    const handle = window.setTimeout(() => setOperationsReady(true), 320);
+    return () => window.clearTimeout(handle);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     const userId = user.id;
     const today = new Date().toISOString().slice(0, 10);
 
@@ -51,6 +74,7 @@ export function DashboardPage() {
           .limit(3),
       ]);
 
+      if (cancelled) return;
       if (!scheduleResult.error) setSchedule((scheduleResult.data || []) as ScheduleRow[]);
       if (!notificationsResult.error) {
         setNotifications((notificationsResult.data || []) as NotificationRow[]);
@@ -59,6 +83,7 @@ export function DashboardPage() {
     }
 
     void load();
+    return () => { cancelled = true; };
   }, [user]);
 
   const nextShift = useMemo(
@@ -72,7 +97,7 @@ export function DashboardPage() {
         <div>
           <span className="eyebrow">Робочий простір</span>
           <h2>Привіт, {user?.displayName}</h2>
-          <p>Новий портал уже працює на захищеній сесії. Модулі переноситимуться сюди поетапно без повернення до монолітного коду.</p>
+          <p>Ваш графік, повідомлення, обов’язки та передача зміни зібрані в одному швидкому робочому просторі.</p>
         </div>
         <div className="welcome-symbol"><Sparkles size={34} /></div>
       </section>
@@ -137,6 +162,12 @@ export function DashboardPage() {
           </div>
         </article>
       </section>
+
+      {operationsReady ? (
+        <Suspense fallback={<div className="operations-deferred-placeholder route-skeleton-card" aria-label="Завантаження робочої зміни" />}>
+          <OperationsDashboard />
+        </Suspense>
+      ) : <div className="operations-deferred-placeholder route-skeleton-card" aria-hidden="true" />}
     </div>
   );
 }
