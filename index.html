@@ -14,17 +14,38 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Prata&display=optional" rel="stylesheet" media="print" onload="this.media='all'" />
     <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Prata&display=optional" rel="stylesheet" /></noscript>
     <style>
-      #boot-recovery{min-height:100vh;display:grid;place-items:center;padding:24px;background:#101813;color:#f2eee5;font-family:system-ui,sans-serif;text-align:center}
+      html,body{min-height:100%;margin:0;background:#101813;color:#f2eee5}
+      #root{min-height:100dvh}
+      #boot-recovery{position:fixed;inset:0;z-index:99999;min-height:100dvh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 18%,rgba(126,34,49,.24),transparent 32%),#101813;color:#f2eee5;font-family:system-ui,sans-serif;text-align:center;box-sizing:border-box}
       #boot-recovery[hidden]{display:none}
-      #boot-recovery>div{max-width:420px;display:grid;gap:12px;padding:24px;border:1px solid rgba(215,182,108,.25);border-radius:22px;background:#17231b}
-      #boot-recovery strong{font-size:22px;color:#d7b66c}
+      #boot-recovery>div{width:min(100%,420px);display:grid;justify-items:center;gap:13px;padding:28px 24px;border:1px solid rgba(215,182,108,.25);border-radius:24px;background:#17231b;box-shadow:0 30px 90px rgba(0,0,0,.4);box-sizing:border-box}
+      #boot-recovery .boot-mark{width:64px;height:64px;display:grid;place-items:center;border:1px solid rgba(215,182,108,.3);border-radius:21px;background:rgba(215,182,108,.1);color:#d7b66c;font-family:serif;font-size:36px}
+      #boot-recovery strong{font-size:23px;color:#f4d98e}
       #boot-recovery span{color:#b8c1ba;line-height:1.55}
-      #boot-recovery button{min-height:44px;border:1px solid rgba(215,182,108,.3);border-radius:12px;background:rgba(215,182,108,.12);color:#f4d98e;font:inherit;font-weight:700}
+      #boot-recovery .boot-loader{width:34px;height:34px;margin-top:3px;border:3px solid rgba(215,182,108,.15);border-top-color:#d7b66c;border-radius:50%;animation:boot-spin .8s linear infinite}
+      #boot-recovery button{display:none;min-height:46px;width:100%;margin-top:3px;border:1px solid rgba(215,182,108,.3);border-radius:13px;background:linear-gradient(135deg,#d7b66c,#b99045);color:#17150f;font:inherit;font-weight:800;cursor:pointer}
+      #boot-recovery[data-state="error"] .boot-loader{display:none}
+      #boot-recovery[data-state="error"] button{display:block}
+      @keyframes boot-spin{to{transform:rotate(360deg)}}
     </style>
     <script>
       (() => {
-        const recoveryKey = 'tiflis-v2-asset-recovery-20260805-1';
+        const rawBuildId = '%VITE_BUILD_ID%';
+        const buildId = rawBuildId.startsWith('%') ? 'development' : rawBuildId;
+        const recoveryKey = `tiflis.asset-recovery.${buildId}`;
         let appStarted = false;
+
+        function portalWorker(registration) {
+          const worker = registration.active || registration.waiting || registration.installing;
+          const scriptUrl = worker && worker.scriptURL ? worker.scriptURL : '';
+          if (!scriptUrl) return false;
+          const expected = new URL('./sw.js', document.baseURI).href;
+          try {
+            return scriptUrl === expected || new URL(scriptUrl).pathname.endsWith('/tiflis/sw.js');
+          } catch (_) {
+            return false;
+          }
+        }
 
         window.__TIFLIS_APP_STARTED__ = () => {
           appStarted = true;
@@ -32,18 +53,18 @@
           if (recovery) recovery.hidden = true;
         };
 
-        async function clearLegacyRuntime() {
+        async function clearPortalRuntime() {
           try {
             if ('serviceWorker' in navigator) {
               const registrations = await navigator.serviceWorker.getRegistrations();
-              await Promise.allSettled(registrations.map((registration) => registration.unregister()));
+              await Promise.allSettled(registrations.filter(portalWorker).map((registration) => registration.unregister()));
             }
           } catch (_) {}
 
           try {
             if ('caches' in window) {
               const keys = await caches.keys();
-              await Promise.allSettled(keys.map((key) => caches.delete(key)));
+              await Promise.allSettled(keys.filter((key) => key.toLowerCase().startsWith('tiflis')).map((key) => caches.delete(key)));
             }
           } catch (_) {}
         }
@@ -53,17 +74,27 @@
           try { alreadyRecovered = sessionStorage.getItem(recoveryKey) === '1'; } catch (_) {}
           if (alreadyRecovered) return false;
           try { sessionStorage.setItem(recoveryKey, '1'); } catch (_) {}
-          await clearLegacyRuntime();
+          await clearPortalRuntime();
           const url = new URL(location.href);
-          url.searchParams.set('runtime', Date.now().toString());
+          url.searchParams.set('runtime', `${buildId}-${Date.now()}`);
           location.replace(url.toString());
           return true;
+        }
+
+        function showRecoveryError() {
+          const recovery = document.getElementById('boot-recovery');
+          if (!recovery) return;
+          recovery.dataset.state = 'error';
+          const title = recovery.querySelector('strong');
+          const message = recovery.querySelector('.boot-message');
+          if (title) title.textContent = 'Портал не завантажився';
+          if (message) message.textContent = 'Застарілий кеш уже очищено. Перезапустіть робочу версію порталу.';
         }
 
         window.addEventListener('error', (event) => {
           const target = event.target;
           const assetFailed = target instanceof HTMLScriptElement || target instanceof HTMLLinkElement;
-          if (assetFailed) void recoverOnce();
+          if (assetFailed && !appStarted) void recoverOnce();
         }, true);
 
         window.addEventListener('unhandledrejection', () => {
@@ -73,18 +104,19 @@
         window.setTimeout(async () => {
           if (appStarted) return;
           if (await recoverOnce()) return;
-          const recovery = document.getElementById('boot-recovery');
-          if (recovery) recovery.hidden = false;
-        }, 4500);
+          showRecoveryError();
+        }, 5500);
       })();
     </script>
   </head>
   <body>
     <div id="root"></div>
-    <div id="boot-recovery" hidden>
+    <div id="boot-recovery" data-state="loading">
       <div>
-        <strong>Портал не завантажився</strong>
-        <span>Ми очистили застарілий кеш. Натисніть кнопку, щоб перезапустити сайт.</span>
+        <div class="boot-mark" aria-hidden="true">თ</div>
+        <strong>Завантажуємо Тифліс</strong>
+        <span class="boot-message">Готуємо актуальну версію порталу без переривання роботи.</span>
+        <div class="boot-loader" aria-hidden="true"></div>
         <button type="button" onclick="location.reload()">Перезапустити портал</button>
       </div>
     </div>
