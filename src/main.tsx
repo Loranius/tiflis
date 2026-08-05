@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './auth/AuthProvider';
+import { ModalRuntime } from './components/ModalRuntime';
 import { RootErrorBoundary } from './components/RootErrorBoundary';
 import './styles.css';
 import './performance.css';
@@ -9,6 +10,7 @@ import './design-system.css';
 import './route-transitions.css';
 import './legacy-navigation.css';
 import './reserve-mobile.css';
+import './modal-runtime.css';
 
 const BUILD_ID = import.meta.env.VITE_BUILD_ID || 'development';
 const RUNTIME_VERSION_KEY = 'tiflis.runtime.version';
@@ -112,6 +114,7 @@ if (!root) throw new Error('Root element not found');
 createRoot(root).render(
   <StrictMode>
     <RootErrorBoundary>
+      <ModalRuntime />
       <AuthProvider>
         <App />
       </AuthProvider>
