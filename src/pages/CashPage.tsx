@@ -1,6 +1,5 @@
 import {
   Banknote,
-  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,

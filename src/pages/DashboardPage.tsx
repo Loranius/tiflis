@@ -51,7 +51,7 @@ function millisecondsUntilKyivMidnight(now = new Date()): number {
 
 function dailyWishFor(dayKey: string): string {
   const hash = [...dayKey].reduce((sum, char) => ((sum * 31) + char.charCodeAt(0)) >>> 0, 0);
-  return DAILY_WISHES[hash % DAILY_WISHES.length] || DAILY_WISHES[0];
+  return DAILY_WISHES[hash % DAILY_WISHES.length] ?? 'Бажаємо гарного дня.';
 }
 
 function formatDate(value: string): string {
