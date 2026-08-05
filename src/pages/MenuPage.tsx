@@ -157,7 +157,6 @@ export function MenuPage() {
   const [search, setSearch] = useState('');
   const [activeSection, setActiveSection] = useState('all');
   const [activeCategory, setActiveCategory] = useState('all');
-  const [stopsOnly, setStopsOnly] = useState(false);
   const [busyMode, setBusyMode] = useState(false);
   const [selected, setSelected] = useState<MenuItem | null>(null);
   const [editor, setEditor] = useState<MenuEditorState | null>(null);
@@ -211,11 +210,10 @@ export function MenuPage() {
     return items.filter((item) => {
       if (activeSection !== 'all' && item.section !== activeSection) return false;
       if (activeCategory !== 'all' && item.category !== activeCategory) return false;
-      if (stopsOnly && !item.stopped) return false;
       if (query && !itemSearchText(item).includes(query)) return false;
       return true;
     });
-  }, [activeCategory, activeSection, items, search, stopsOnly]);
+  }, [activeCategory, activeSection, items, search]);
 
   const metrics = useMemo(() => {
     const stopped = items.filter((item) => item.stopped).length;
@@ -233,24 +231,6 @@ export function MenuPage() {
     });
     return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right, 'uk'));
   }, [filtered]);
-
-  async function toggleStop(item: MenuItem, stopped: boolean) {
-    if (!data?.permissions.canToggleStop) return;
-    const previous = item.stopped;
-    setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, stopped } : entry));
-    setSelected((current) => current?.id === item.id ? { ...current, stopped } : current);
-    setError(null);
-    try {
-      await secureApi<MenuMutationResponse>(
-        { action: 'menu_toggle_stop', id: item.id, stopped },
-        'tiflis-menu-api',
-      );
-    } catch (reason) {
-      setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, stopped: previous } : entry));
-      setSelected((current) => current?.id === item.id ? { ...current, stopped: previous } : current);
-      setError(reason instanceof Error ? reason.message : 'Стоп-лист не оновлено.');
-    }
-  }
 
   async function saveItem() {
     if (!editor) return;
@@ -313,7 +293,7 @@ export function MenuPage() {
         <div>
           <span className="eyebrow">Каталог ресторану</span>
           <h2>Меню, яке працює під час сервісу</h2>
-          <p>Швидкий пошук по 315 позиціях, фото, склад, алергени, час кухні та живий стоп-лист без перезавантажень.</p>
+          <p>Швидкий пошук по 315 позиціях, фото, склад, алергени та час кухні без зайвих службових перемикачів.</p>
         </div>
         <div className="menu-hero-mark"><ChefHat size={36} /></div>
       </section>
@@ -330,14 +310,12 @@ export function MenuPage() {
         </label>
         <div className="menu-command-actions-v2">
           <button type="button" className={busyMode ? 'is-active' : ''} onClick={() => setBusyMode((value) => !value)}><Clock3 size={17} /> Завантажена кухня</button>
-          <button type="button" className={stopsOnly ? 'is-danger-active' : ''} onClick={() => setStopsOnly((value) => !value)}><AlertTriangle size={17} /> Стопи {metrics.stopped || ''}</button>
           {data?.permissions.canEdit ? <button type="button" className="menu-add-v2" onClick={() => setEditor(createEditor())}><Plus size={18} /> Нова позиція</button> : null}
         </div>
       </section>
 
       <section className="menu-metrics-v2">
         <article><UtensilsCrossed size={19} /><span>Позицій</span><strong>{items.length}</strong></article>
-        <article><AlertTriangle size={19} /><span>У стопі</span><strong>{metrics.stopped}</strong></article>
         <article><ImageIcon size={19} /><span>З фото</span><strong>{metrics.photographed}</strong></article>
         <article><Clock3 size={19} /><span>З часом кухні</span><strong>{metrics.timed}</strong></article>
       </section>
@@ -383,7 +361,6 @@ export function MenuPage() {
                       {(item.allergens || []).length > 0 ? <div className="menu-card-allergens-v2">{(item.allergens || []).slice(0, 3).map((allergen) => <span key={allergen}>{allergen}</span>)}{(item.allergens || []).length > 3 ? <span>+{(item.allergens || []).length - 3}</span> : null}</div> : null}
                     </div>
                   </button>
-                  {data?.permissions.canToggleStop ? <button type="button" className={`menu-stop-button-v2 ${item.stopped ? 'is-return' : ''}`} onClick={() => void toggleStop(item, !item.stopped)}>{item.stopped ? <><Check size={16} /> Повернути</> : <><AlertTriangle size={16} /> У стоп</>}</button> : null}
                 </article>;
               })}
             </div>
@@ -401,7 +378,7 @@ export function MenuPage() {
           <div className="menu-detail-times-v2"><span><Clock3 size={17} /><b>Звичайно</b>{selected.cook_time_normal !== null ? `${selected.cook_time_normal} хв` : 'не вказано'}</span><span><AlertTriangle size={17} /><b>При завантаженні</b>{selected.cook_time_busy !== null ? `${selected.cook_time_busy} хв` : 'не вказано'}</span></div>
           {(selected.allergens || []).length > 0 ? <div className="menu-detail-allergens-v2"><strong>Алергени</strong><div>{(selected.allergens || []).map((allergen) => <span key={allergen}>{allergen}</span>)}</div></div> : null}
           <div className="menu-detail-actions-v2">
-            {data?.permissions.canToggleStop ? <button type="button" className={selected.stopped ? 'is-return' : 'is-stop'} onClick={() => void toggleStop(selected, !selected.stopped)}>{selected.stopped ? <><Check size={17} /> Повернути в продаж</> : <><AlertTriangle size={17} /> Додати у стоп</>}</button> : <span />}
+            <span />
             {data?.permissions.canEdit ? <button type="button" className="is-edit" onClick={() => { setEditor(createEditor(selected)); setSelected(null); }}><Edit3 size={17} /> Редагувати</button> : null}
           </div>
         </div>

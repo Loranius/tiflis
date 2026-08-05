@@ -59,6 +59,7 @@ interface PickerState {
   staff: ScheduleStaff;
   date: string;
   value: ShiftCode;
+  anchor: { left: number; top: number };
 }
 
 const MONTHS = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень', 'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'];
@@ -226,8 +227,14 @@ export function SchedulePage() {
   const canEditOwn = user ? canPerform(user, 'editOwnShift') : false;
   const canEditStaff = (staff: ScheduleStaff) => Boolean(data && (canEditAll || (canEditOwn && staff.id === data.me.legacyUserId)));
 
-  function openPicker(staff: ScheduleStaff, date: string) {
-    if (canEditStaff(staff)) setPicker({ staff, date, value: entries[cellKey(staff.id, date)] || '' });
+  function openPicker(staff: ScheduleStaff, date: string, target: HTMLButtonElement) {
+    if (!canEditStaff(staff)) return;
+    const rect = target.getBoundingClientRect();
+    const width = Math.min(360, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left + rect.width / 2 - width / 2));
+    const preferredTop = rect.bottom + 8;
+    const top = Math.max(12, Math.min(window.innerHeight - 330, preferredTop));
+    setPicker({ staff, date, value: entries[cellKey(staff.id, date)] || '', anchor: { left, top } });
   }
 
   async function applyShift(code: ShiftCode) {
@@ -317,7 +324,7 @@ export function SchedulePage() {
                     const weekend = [0, 6].includes(new Date(`${date}T12:00:00`).getDay()), editable = canEditStaff(staff);
                     return <td key={date} className={`${date === currentDate ? 'is-today' : ''} ${weekend ? 'is-weekend' : ''}`}>
                       <button type="button" className={`schedule-shift-cell tone-${shiftTone(value, shiftDefinitions)} ${editable ? 'is-editable' : ''} ${saving.has(key) ? 'is-saving' : ''} ${savedKey === key ? 'is-saved' : ''}`}
-                        onClick={() => openPicker(staff, date)} disabled={!editable || saving.has(key)}
+                        onClick={(event) => openPicker(staff, date, event.currentTarget)} disabled={!editable || saving.has(key)}
                         aria-label={`${staff.name}, ${day} ${MONTHS[monthDate.getMonth()]}, ${value || 'не призначено'}${editable ? ', редагувати' : ''}`}>
                         {saving.has(key) ? <RefreshCw size={13} className="is-spinning" /> : savedKey === key ? <Check size={14} /> : value || '·'}
                       </button>
@@ -334,7 +341,7 @@ export function SchedulePage() {
 
       {picker ? (
         <div className="schedule-picker-backdrop" role="presentation" onMouseDown={() => setPicker(null)}>
-          <section className="schedule-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="schedule-picker-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section className="schedule-picker-sheet" style={{ left: picker.anchor.left, top: picker.anchor.top }} role="dialog" aria-modal="true" aria-labelledby="schedule-picker-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="schedule-picker-heading"><div><span className="eyebrow">Зміна</span><h3 id="schedule-picker-title">{picker.staff.name}</h3><p>{new Intl.DateTimeFormat('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${picker.date}T12:00:00`))}</p></div><button type="button" onClick={() => setPicker(null)} aria-label="Закрити"><X size={19} /></button></div>
             <div className="schedule-picker-grid">{shiftDefinitions.map((item) => (
               <button type="button" key={item.code || 'empty'} className={`tone-${item.tone} ${picker.value === item.code ? 'is-active' : ''}`} onClick={() => void applyShift(item.code)}>

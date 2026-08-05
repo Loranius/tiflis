@@ -1057,3 +1057,6 @@
     padding: 13px;
   }
 }
+
+/* Menu without stop-list controls; preserve full photo composition */
+.menu-metrics-v2{grid-template-columns:repeat(3,minmax(0,1fr))}.menu-stop-button-v2,.menu-card-media-v2>b{display:none!important}.menu-card-media-v2 img{object-fit:contain!important;padding:6px;background:#101812}.menu-detail-media-v2 img{object-fit:contain!important;padding:10px;background:#101812}.menu-card-media-v2{background:#101812}.menu-detail-media-v2{background:#101812}@media(max-width:760px){.menu-metrics-v2{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:520px){.menu-metrics-v2{grid-template-columns:1fr}.menu-card-media-v2 img{padding:4px}.menu-detail-media-v2 img{padding:6px}}
