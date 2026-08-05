@@ -107,6 +107,10 @@ function sectionLabel(section: string): string {
   return SECTION_META[section]?.label || section;
 }
 
+function categoryLabel(category: string): string {
+  return category === 'Хлібобулочні' ? 'Хачапурі' : category;
+}
+
 function sectionIcon(section: string): string {
   return SECTION_META[section]?.icon || '𐃯';
 }
@@ -129,7 +133,7 @@ function categoryOrder(section: string, category: string): number {
 
 function compareCategories(section: string, left: string, right: string): number {
   return categoryOrder(section, left) - categoryOrder(section, right)
-    || left.localeCompare(right, 'uk');
+    || categoryLabel(left).localeCompare(categoryLabel(right), 'uk');
 }
 
 function money(value: number | string | null): string {
@@ -158,6 +162,7 @@ function itemSearchText(item: MenuItem): string {
   return [
     item.name,
     item.category,
+    categoryLabel(item.category),
     sectionLabel(item.section),
     item.description || '',
     item.weight || '',
@@ -235,7 +240,7 @@ export function MenuPage() {
     scoped.forEach((item) => counts.set(item.category, (counts.get(item.category) || 0) + 1));
     return [...counts.entries()].sort(([left], [right]) => {
       if (activeSection !== 'all') return compareCategories(activeSection, left, right);
-      return left.localeCompare(right, 'uk');
+      return categoryLabel(left).localeCompare(categoryLabel(right), 'uk');
     });
   }, [activeSection, items]);
 
@@ -373,7 +378,7 @@ export function MenuPage() {
 
         <div className="menu-category-tabs-v2">
           <button type="button" className={activeCategory === 'all' ? 'is-active' : ''} onClick={() => setActiveCategory('all')}>Усі категорії</button>
-          {categories.map(([category, count]) => <button type="button" className={activeCategory === category ? 'is-active' : ''} onClick={() => setActiveCategory(category)} key={category}>{category}<span>{count}</span></button>)}
+          {categories.map(([category, count]) => <button type="button" className={activeCategory === category ? 'is-active' : ''} onClick={() => setActiveCategory(category)} key={category}>{categoryLabel(category)}<span>{count}</span></button>)}
         </div>
 
         {error ? <div className="menu-alert-v2" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
@@ -382,8 +387,8 @@ export function MenuPage() {
 
         {!loading ? <div className="menu-category-groups-v2">
           {visibleCategories.map((group) => <section key={group.key} className="menu-category-group-v2">
-            <div className="menu-category-heading-v2"><div><span className="eyebrow">{sectionLabel(group.section)}</span><h3>{group.category}</h3></div><span>{group.items.length} позицій</span></div>
-            <div className="menu-table-v3" aria-label={`Категорія: ${group.category}`}>
+            <div className="menu-category-heading-v2"><div><span className="eyebrow">{sectionLabel(group.section)}</span><h3>{categoryLabel(group.category)}</h3></div><span>{group.items.length} позицій</span></div>
+            <div className="menu-table-v3" aria-label={`Категорія: ${categoryLabel(group.category)}`}>
               <div className="menu-table-heading-v3" aria-hidden="true"><span>Позиція</span><span>Ціна / вага</span></div>
               {group.items.map((item) => {
                 const shownTime = busyMode ? item.cook_time_busy : item.cook_time_normal;
@@ -399,7 +404,7 @@ export function MenuPage() {
                           {item.photo ? <em><ImageIcon size={12} /> Фото</em> : null}
                           {shownTime !== null ? <em><Clock3 size={12} /> {shownTime} хв</em> : null}
                           {allergenCount > 0 ? <em>{allergenCount} алергенів</em> : null}
-                          {!item.stopped && !item.photo && shownTime === null && allergenCount === 0 ? <em>{item.category}</em> : null}
+                          {!item.stopped && !item.photo && shownTime === null && allergenCount === 0 ? <em>{categoryLabel(item.category)}</em> : null}
                         </small>
                       </span>
                     </span>
@@ -415,12 +420,12 @@ export function MenuPage() {
       {selected ? <div className="menu-sheet-backdrop-v2" onMouseDown={() => setSelected(null)}><section className="menu-detail-sheet-v2" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
         <div className="menu-detail-media-v2">{selected.photo ? <img src={selected.photo} alt={selected.name} /> : <span>{selected.emoji || sectionIcon(selected.section)}</span>}<button type="button" onClick={() => setSelected(null)} aria-label="Закрити"><X size={19} /></button>{selected.stopped ? <b><AlertTriangle size={16} /> Позиція у стопі</b> : null}</div>
         <div className="menu-detail-body-v2">
-          <span className="eyebrow">{sectionLabel(selected.section)} · {selected.category}</span>
+          <span className="eyebrow">{sectionLabel(selected.section)} · {categoryLabel(selected.category)}</span>
           <h3>{selected.name}</h3>
           <div className="menu-detail-price-v2"><strong>{money(selected.price)}</strong>{selected.weight ? <span>{selected.weight}</span> : null}</div>
           <p>{selected.description || 'Опис позиції не додано.'}</p>
           <div className="menu-detail-facts-v3">
-            <span><b>Розділ</b>{sectionLabel(selected.section)}</span><span><b>Категорія</b>{selected.category}</span><span><b>Статус</b>{selected.stopped ? 'У стопі' : 'Доступна'}</span><span><b>Фото</b>{selected.photo ? 'Додано' : 'Відсутнє'}</span><span><b>ID позиції</b>#{selected.id}</span><span><b>Порядок</b>{selected.sort_order}</span><span className="is-wide"><b>Останнє оновлення</b>{formatUpdatedAt(selected.updated_at)}</span>
+            <span><b>Розділ</b>{sectionLabel(selected.section)}</span><span><b>Категорія</b>{categoryLabel(selected.category)}</span><span><b>Статус</b>{selected.stopped ? 'У стопі' : 'Доступна'}</span><span><b>Фото</b>{selected.photo ? 'Додано' : 'Відсутнє'}</span><span><b>ID позиції</b>#{selected.id}</span><span><b>Порядок</b>{selected.sort_order}</span><span className="is-wide"><b>Останнє оновлення</b>{formatUpdatedAt(selected.updated_at)}</span>
           </div>
           <div className="menu-detail-times-v2"><span><Clock3 size={17} /><b>Звичайно</b>{selected.cook_time_normal !== null ? `${selected.cook_time_normal} хв` : 'не вказано'}</span><span><AlertTriangle size={17} /><b>При завантаженні</b>{selected.cook_time_busy !== null ? `${selected.cook_time_busy} хв` : 'не вказано'}</span></div>
           {(selected.allergens || []).length > 0 ? <div className="menu-detail-allergens-v2"><strong>Алергени</strong><div>{(selected.allergens || []).map((allergen) => <span key={allergen}>{allergen}</span>)}</div></div> : null}
@@ -432,7 +437,7 @@ export function MenuPage() {
         <div className="menu-editor-heading-v2"><div><span className="eyebrow">{editor.id ? 'Редагування' : 'Нова позиція'}</span><h3>{editor.id ? editor.name : 'Додати до меню'}</h3></div><button type="button" onClick={() => setEditor(null)} disabled={saving}><X size={19} /></button></div>
         <div className="menu-editor-grid-v2">
           <label><span>Розділ</span><select value={editor.section} onChange={(event) => setEditor({ ...editor, section: event.target.value })}>{[...new Set([...Object.keys(SECTION_META), ...sections.map(([section]) => section)])].map((section) => <option value={section} key={section}>{sectionLabel(section)}</option>)}</select></label>
-          <label><span>Категорія</span><input value={editor.category} onChange={(event) => setEditor({ ...editor, category: event.target.value })} list="menu-categories" maxLength={120} /><datalist id="menu-categories">{categories.map(([category]) => <option value={category} key={category} />)}</datalist></label>
+          <label><span>Категорія</span><input value={editor.category} onChange={(event) => setEditor({ ...editor, category: event.target.value })} list="menu-categories" maxLength={120} /><datalist id="menu-categories">{categories.map(([category]) => <option value={category} key={category}>{categoryLabel(category)}</option>)}</datalist></label>
           <label className="is-wide"><span>Назва</span><input value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} maxLength={180} /></label>
           <label><span>Ціна, ₴</span><input type="number" min="0" value={editor.price} onChange={(event) => setEditor({ ...editor, price: event.target.value })} /></label>
           <label><span>Вага / обʼєм</span><input value={editor.weight} onChange={(event) => setEditor({ ...editor, weight: event.target.value })} maxLength={100} placeholder="250 г / 50 мл" /></label>
