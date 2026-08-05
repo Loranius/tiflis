@@ -198,7 +198,30 @@ Deno.serve(async (req: Request) => {
       .limit(1)
       .maybeSingle();
 
-    if (!legacy || legacy.fired === true) {
+    if (!legacy) {
+      const { data: pending } = await admin
+        .from("registration_requests")
+        .select("auth_user_id,status")
+        .eq("login", login)
+        .eq("status", "pending")
+        .limit(1)
+        .maybeSingle();
+      if (pending?.auth_user_id) {
+        const { data: authRecord } = await admin.auth.admin.getUserById(String(pending.auth_user_id));
+        const pendingEmail = authRecord.user?.email || null;
+        if (pendingEmail) {
+          const { data: pendingSignIn } = await authClient.auth.signInWithPassword({ email: pendingEmail, password });
+          if (pendingSignIn.session) {
+            return json({ ok: false, error: "Реєстрація очікує підтвердження адміністратора" }, 403);
+          }
+        }
+      }
+      await registerFailure(keyHash);
+      await sleep(450);
+      return json({ ok: false, error: "Невірний логін або пароль" }, 401);
+    }
+
+    if (legacy.fired === true) {
       await registerFailure(keyHash);
       await sleep(450);
       return json({ ok: false, error: "Невірний логін або пароль" }, 401);
