@@ -14,8 +14,16 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router';
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
+} from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { accessiblePages, pages, type PageKey } from '../lib/acl';
 import { preloadPage, preloadPages } from '../lib/pageLoaders';
@@ -59,6 +67,19 @@ const legacyDesktopOrder: PageKey[] = [
 ];
 
 const preferredWarmOrder: PageKey[] = ['schedule', 'cash', 'menu', 'reserve', 'duties', 'handover', 'staff', 'admin'];
+const ROUTE_SWIPE_BREAKPOINT = 980;
+const ROUTE_SWIPE_EDGE_GUARD = 24;
+const ROUTE_SWIPE_MAX_DURATION = 900;
+
+interface RouteSwipeGesture {
+  identifier: number;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  startedAt: number;
+  blocked: boolean;
+}
 
 type NavigatorWithConnection = Navigator & {
   connection?: {
@@ -71,6 +92,31 @@ type MobileSlot = 'schedule' | 'role' | 'home' | 'menu';
 
 function warmPage(page: PageKey) {
   void preloadPage(page).catch(() => undefined);
+}
+
+function blocksRouteSwipe(target: EventTarget | null, boundary: HTMLElement): boolean {
+  if (!(target instanceof Element)) return false;
+
+  if (target.closest([
+    'input',
+    'textarea',
+    'select',
+    '[contenteditable="true"]',
+    '[role="dialog"]',
+    '.mobile-more-sheet',
+  ].join(','))) return true;
+
+  let element: Element | null = target;
+  while (element && element !== boundary) {
+    if (element instanceof HTMLElement) {
+      const style = window.getComputedStyle(element);
+      const horizontalScroller = style.overflowX === 'auto' || style.overflowX === 'scroll';
+      if (horizontalScroller && element.scrollWidth > element.clientWidth + 8) return true;
+    }
+    element = element.parentElement;
+  }
+
+  return false;
 }
 
 function MobilePageLink({
@@ -110,7 +156,11 @@ function MobilePageLink({
 export const AppShell = memo(function AppShell() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
+  const routeSwipeRef = useRef<RouteSwipeGesture | null>(null);
+  const suppressClickUntilRef = useRef(0);
+  const swipeTransitionDirectionRef = useRef<'forward' | 'backward' | null>(null);
 
   const accessible = useMemo(
     () => new Set<PageKey>(user ? accessiblePages(user) : []),
@@ -127,9 +177,11 @@ export const AppShell = memo(function AppShell() {
   const previousActiveRef = useRef<PageKey>(activeKey);
   const previousIndex = navigation.indexOf(previousActiveRef.current);
   const activeIndex = navigation.indexOf(activeKey);
-  const transitionDirection = previousIndex >= 0 && activeIndex >= 0 && activeIndex < previousIndex
-    ? 'backward'
-    : 'forward';
+  const transitionDirection = swipeTransitionDirectionRef.current || (
+    previousIndex >= 0 && activeIndex >= 0 && activeIndex < previousIndex
+      ? 'backward'
+      : 'forward'
+  );
 
   // Стара мобільна схема: Графік · Каса/рольова заміна · Головна · Меню · Ще.
   // Якщо каса недоступна для ролі, на її місце стає найближчий робочий модуль,
@@ -152,8 +204,24 @@ export const AppShell = memo(function AppShell() {
   );
   const moreContainsActive = mobileSecondary.includes(activeKey);
 
+  // Свайпи йдуть у тому самому порядку, у якому модулі стоять у мобільній навігації.
+  const swipeNavigation = useMemo<PageKey[]>(() => {
+    const ordered: PageKey[] = [];
+    const add = (key: PageKey | null) => {
+      if (key && navigation.includes(key) && !ordered.includes(key)) ordered.push(key);
+    };
+
+    add('schedule');
+    add(mobileRoleKey);
+    add('today');
+    add('menu');
+    mobileSecondary.forEach(add);
+    return ordered;
+  }, [mobileRoleKey, mobileSecondary, navigation]);
+
   useEffect(() => {
     previousActiveRef.current = activeKey;
+    swipeTransitionDirectionRef.current = null;
   }, [activeKey]);
 
   useEffect(() => {
@@ -191,6 +259,83 @@ export const AppShell = memo(function AppShell() {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [moreOpen]);
+
+  function handleRouteTouchStart(event: ReactTouchEvent<HTMLElement>) {
+    routeSwipeRef.current = null;
+    if (window.innerWidth > ROUTE_SWIPE_BREAKPOINT || moreOpen || event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    const startsAtSystemEdge = touch.clientX <= ROUTE_SWIPE_EDGE_GUARD
+      || touch.clientX >= window.innerWidth - ROUTE_SWIPE_EDGE_GUARD;
+
+    routeSwipeRef.current = {
+      identifier: touch.identifier,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      lastY: touch.clientY,
+      startedAt: performance.now(),
+      blocked: startsAtSystemEdge || blocksRouteSwipe(event.target, event.currentTarget),
+    };
+  }
+
+  function handleRouteTouchMove(event: ReactTouchEvent<HTMLElement>) {
+    const gesture = routeSwipeRef.current;
+    if (!gesture) return;
+
+    const touch = Array.from(event.touches).find((item) => item.identifier === gesture.identifier);
+    if (!touch) return;
+
+    gesture.lastX = touch.clientX;
+    gesture.lastY = touch.clientY;
+
+    const deltaX = gesture.lastX - gesture.startX;
+    const deltaY = gesture.lastY - gesture.startY;
+    if (Math.abs(deltaY) > 26 && Math.abs(deltaY) > Math.abs(deltaX) * 1.05) {
+      gesture.blocked = true;
+    }
+  }
+
+  function handleRouteTouchEnd(event: ReactTouchEvent<HTMLElement>) {
+    const gesture = routeSwipeRef.current;
+    routeSwipeRef.current = null;
+    if (!gesture || gesture.blocked || window.innerWidth > ROUTE_SWIPE_BREAKPOINT) return;
+
+    const touch = Array.from(event.changedTouches).find((item) => item.identifier === gesture.identifier);
+    const endX = touch?.clientX ?? gesture.lastX;
+    const endY = touch?.clientY ?? gesture.lastY;
+    const deltaX = endX - gesture.startX;
+    const deltaY = endY - gesture.startY;
+    const elapsed = performance.now() - gesture.startedAt;
+    const minimumDistance = Math.min(96, Math.max(64, window.innerWidth * 0.16));
+
+    if (elapsed > ROUTE_SWIPE_MAX_DURATION) return;
+    if (Math.abs(deltaX) < minimumDistance) return;
+    if (Math.abs(deltaX) < Math.abs(deltaY) * 1.35) return;
+
+    const currentIndex = swipeNavigation.indexOf(activeKey);
+    if (currentIndex < 0) return;
+
+    const step = deltaX < 0 ? 1 : -1;
+    const nextKey = swipeNavigation[currentIndex + step];
+    if (!nextKey) return;
+
+    suppressClickUntilRef.current = performance.now() + 650;
+    swipeTransitionDirectionRef.current = step > 0 ? 'forward' : 'backward';
+    warmPage(nextKey);
+    navigate(pages[nextKey].path);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+  }
+
+  function handleRouteTouchCancel() {
+    routeSwipeRef.current = null;
+  }
+
+  function handleRouteClickCapture(event: ReactMouseEvent<HTMLElement>) {
+    if (performance.now() >= suppressClickUntilRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
 
   if (!user) return null;
 
@@ -252,7 +397,14 @@ export const AppShell = memo(function AppShell() {
             </div>
           </div>
         </header>
-        <section className="page-content">
+        <section
+          className="page-content route-swipe-surface"
+          onTouchStartCapture={handleRouteTouchStart}
+          onTouchMoveCapture={handleRouteTouchMove}
+          onTouchEndCapture={handleRouteTouchEnd}
+          onTouchCancelCapture={handleRouteTouchCancel}
+          onClickCapture={handleRouteClickCapture}
+        >
           <div
             key={location.pathname}
             className="route-transition"
