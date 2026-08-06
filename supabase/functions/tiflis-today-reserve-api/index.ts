@@ -55,6 +55,12 @@ type ReservationRow = {
   merged_tables: string[] | null;
 };
 
+type AssignedZone = {
+  key: string;
+  title: string;
+  hallId: number;
+};
+
 function corsHeaders(req: Request): HeadersInit {
   const origin = req.headers.get("origin") ?? "";
   if (!origin || (ALLOWED_ORIGINS.size > 0 && !ALLOWED_ORIGINS.has(origin))) return {};
@@ -212,15 +218,14 @@ Deno.serve(async (req: Request) => {
     const assignedKeys = new Set(
       (assignmentsResult.data ?? []).map((item) => String(item.zone_key)),
     );
-    const assignedZones = ZONE_HALLS.filter((zone) => assignedKeys.has(zone.key));
     const halls = (hallsResult.data ?? []) as HallRow[];
     const hallByName = new Map(halls.map((hall) => [hall.name, hall]));
-    const zones = assignedZones
-      .map((zone) => {
-        const hall = hallByName.get(zone.title);
-        return hall ? { key: zone.key, title: zone.title, hallId: hall.id } : null;
-      })
-      .filter((zone): zone is { key: string; title: string; hallId: number } => Boolean(zone));
+    const zones: AssignedZone[] = [];
+    for (const zone of ZONE_HALLS) {
+      if (!assignedKeys.has(zone.key)) continue;
+      const hall = hallByName.get(zone.title);
+      if (hall) zones.push({ key: zone.key, title: zone.title, hallId: hall.id });
+    }
 
     if (!zones.length) {
       return json(req, {
