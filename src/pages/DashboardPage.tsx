@@ -4,6 +4,8 @@ const TodayOperationsWidget = lazy(() => import('../components/TodayOperationsWi
   .then((module) => ({ default: module.TodayOperationsWidget })));
 const TodayCashCard = lazy(() => import('../components/TodayCashCard')
   .then((module) => ({ default: module.TodayCashCard })));
+const TodayReservationsCard = lazy(() => import('../components/TodayReservationsCard')
+  .then((module) => ({ default: module.TodayReservationsCard })));
 
 function DashboardCardSkeleton({ label }: { label: string }) {
   return (
@@ -23,6 +25,10 @@ export function DashboardPage() {
 
       <Suspense fallback={<DashboardCardSkeleton label="Завантаження каси за сьогодні" />}>
         <TodayCashCard />
+      </Suspense>
+
+      <Suspense fallback={<DashboardCardSkeleton label="Завантаження найближчих резервів" />}>
+        <TodayReservationsCard />
       </Suspense>
     </div>
   );
