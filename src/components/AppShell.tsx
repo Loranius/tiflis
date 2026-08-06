@@ -97,26 +97,20 @@ function warmPage(page: PageKey) {
 function blocksRouteSwipe(target: EventTarget | null, boundary: HTMLElement): boolean {
   if (!(target instanceof Element)) return false;
 
-  if (target.closest([
+  // Звичайні модульні картки та їхній контент мають залишатися свайп-зоною.
+  // Блокуємо лише елементи, де жест повинен належати самому контролу.
+  const blockingTarget = target.closest([
     'input',
     'textarea',
     'select',
     '[contenteditable="true"]',
     '[role="dialog"]',
     '.mobile-more-sheet',
-  ].join(','))) return true;
+    '[data-route-swipe-lock="true"]',
+    '.route-swipe-lock',
+  ].join(','));
 
-  let element: Element | null = target;
-  while (element && element !== boundary) {
-    if (element instanceof HTMLElement) {
-      const style = window.getComputedStyle(element);
-      const horizontalScroller = style.overflowX === 'auto' || style.overflowX === 'scroll';
-      if (horizontalScroller && element.scrollWidth > element.clientWidth + 8) return true;
-    }
-    element = element.parentElement;
-  }
-
-  return false;
+  return blockingTarget !== null && boundary.contains(blockingTarget);
 }
 
 function MobilePageLink({
