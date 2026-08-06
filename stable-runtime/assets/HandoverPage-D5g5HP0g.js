@@ -1,0 +1,1 @@
+import{s as e,t}from"./react-vendor-B3C-SO0D.js";var n=t();function r(){return(0,n.jsx)(e,{to:`/duties?tab=handover`,replace:!0})}export{r as HandoverPage};
