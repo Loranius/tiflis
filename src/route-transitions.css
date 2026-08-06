@@ -77,6 +77,21 @@
 }
 
 @media (max-width: 980px) {
+  .route-swipe-surface {
+    touch-action: pan-y pinch-zoom;
+    overscroll-behavior-x: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .route-swipe-surface input,
+  .route-swipe-surface textarea,
+  .route-swipe-surface select,
+  .route-swipe-surface [contenteditable='true'] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
   .route-transition {
     min-height: calc(100dvh - 160px);
     animation-duration: 85ms;
