@@ -264,7 +264,9 @@ export const AppShell = memo(function AppShell() {
     routeSwipeRef.current = null;
     if (window.innerWidth > ROUTE_SWIPE_BREAKPOINT || moreOpen || event.touches.length !== 1) return;
 
-    const touch = event.touches[0];
+    const touch = event.touches.item(0);
+    if (!touch) return;
+
     const startsAtSystemEdge = touch.clientX <= ROUTE_SWIPE_EDGE_GUARD
       || touch.clientX >= window.innerWidth - ROUTE_SWIPE_EDGE_GUARD;
 
