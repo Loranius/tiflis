@@ -35,12 +35,12 @@ function routeFromHref(rawHref: string | null): string | null {
 
   const hashIndex = rawHref.indexOf('#');
   const candidate = hashIndex >= 0 ? rawHref.slice(hashIndex + 1) : rawHref;
-  const path = candidate.split('?')[0];
+  const path = candidate.split('?')[0] ?? '';
   return path.startsWith('/') ? path : null;
 }
 
 function currentRoute(): string {
-  const route = window.location.hash.replace(/^#/, '').split('?')[0];
+  const route = window.location.hash.replace(/^#/, '').split('?')[0] ?? '';
   return route.startsWith('/') ? route : '/today';
 }
 
