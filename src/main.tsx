@@ -8,7 +8,6 @@ import { RootErrorBoundary } from './components/RootErrorBoundary';
 import './styles.css';
 import './performance.css';
 import './design-system.css';
-import './route-transitions.css';
 import './legacy-navigation.css';
 import './reserve-mobile.css';
 import './modal-runtime.css';
@@ -16,6 +15,8 @@ import './mobile-operations-fixes.css';
 import './mobile-operations-critical.css';
 import './mobile-density.css';
 import './ux-cleanup-20260805.css';
+// Must stay last: module styles define their own scroll/touch behaviour.
+import './route-transitions.css';
 
 const BUILD_ID = import.meta.env.VITE_BUILD_ID || 'development';
 const RUNTIME_VERSION_KEY = 'tiflis.runtime.version';
