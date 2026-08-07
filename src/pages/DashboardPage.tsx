@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import './dashboard-order.css';
 
 const TodayOperationsWidget = lazy(() => import('../components/TodayOperationsWidget')
   .then((module) => ({ default: module.TodayOperationsWidget })));
