@@ -5,7 +5,6 @@ import { AuthProvider } from './auth/AuthProvider';
 import { ModalRuntime } from './components/ModalRuntime';
 import { PortalWarmup } from './components/PortalWarmup';
 import { RootErrorBoundary } from './components/RootErrorBoundary';
-import { installMobileRouteSwipe } from './lib/mobileRouteSwipe';
 import './styles.css';
 import './performance.css';
 import './design-system.css';
@@ -113,7 +112,6 @@ function reportStarted() {
   recoveryWindow.__TIFLIS_APP_STARTED__?.();
 }
 
-installMobileRouteSwipe();
 clearInsecureLegacyStorage();
 
 const root = document.getElementById('root');
