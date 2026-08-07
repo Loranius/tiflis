@@ -79,7 +79,8 @@ function readCachedProfile(authUserId: string): StaffUser | null {
     }
     return cached.profile;
   } catch {
-    sessionStorage.removeItem(PROFILE_CACHE_KEY);
+    // Some privacy modes/WebViews reject every sessionStorage operation, including
+    // removeItem. Never retry an unsafe storage call from inside the recovery path.
     return null;
   }
 }
@@ -153,31 +154,39 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const restore = useCallback(async () => {
-    const { data, error } = await supabase.auth.getSession();
-    if (error || !data.session?.user) {
-      clearCachedProfile();
-      applyUser(null);
-      setLoading(false);
-      return;
-    }
-
-    const authUser = data.session.user;
-    const cached = readCachedProfile(authUser.id);
-    if (cached) {
-      applyUser(cached, authUser.id);
-      setLoading(false);
-    }
-
     try {
-      const profile = await loadStaffProfile(authUser);
-      if (!profile.active) throw new Error('Доступ заблоковано');
-      applyUser(profile, authUser.id);
+      const { data, error } = await supabase.auth.getSession();
+      if (error || !data.session?.user) {
+        clearCachedProfile();
+        applyUser(null);
+        return;
+      }
+
+      const authUser = data.session.user;
+      const cached = readCachedProfile(authUser.id);
+      if (cached) {
+        applyUser(cached, authUser.id);
+      }
+
+      try {
+        const profile = await loadStaffProfile(authUser);
+        if (!profile.active) throw new Error('Доступ заблоковано');
+        applyUser(profile, authUser.id);
+      } catch {
+        clearCachedProfile();
+        try {
+          await supabase.auth.signOut();
+        } finally {
+          applyUser(null);
+        }
+      }
     } catch {
+      // A storage adapter or session bootstrap can fail before Supabase can return
+      // its normal { error } envelope. The app must leave the loading screen anyway.
       clearCachedProfile();
-      await supabase.auth.signOut();
       applyUser(null);
     } finally {
-      if (!cached) setLoading(false);
+      setLoading(false);
     }
   }, [applyUser]);
 
@@ -203,8 +212,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         })
         .catch(async () => {
           clearCachedProfile();
-          await supabase.auth.signOut();
-          applyUser(null);
+          try {
+            await supabase.auth.signOut();
+          } finally {
+            applyUser(null);
+          }
         })
         .finally(() => setLoading(false));
     });
@@ -261,8 +273,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const logout = useCallback(async () => {
     clearCachedProfile();
-    await supabase.auth.signOut();
-    applyUser(null);
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      // Even if the auth client/storage layer itself fails, never leave stale
+      // privileged UI rendered after the user explicitly pressed “Вийти”.
+      applyUser(null);
+      setLoading(false);
+    }
   }, [applyUser]);
 
   const value = useMemo<AuthContextValue>(
