@@ -3,7 +3,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router';
 import { useAuth } from './auth/AuthProvider';
 import { AppShell } from './components/AppShell';
 import { canAccessPage, type PageKey } from './lib/acl';
-import { installMobileScrollRescue } from './lib/mobileScrollRescue';
+import { installMobileScrollChromeGuard } from './lib/mobileScrollChromeGuard';
 import {
   loadAdminPage,
   loadCashPage,
@@ -17,7 +17,9 @@ import {
   loadStaffPage,
 } from './lib/pageLoaders';
 
-installMobileScrollRescue();
+// Install before AppShell mounts so Chromium/WebView never receive a
+// cancelable global touchmove listener capable of freezing native page scroll.
+installMobileScrollChromeGuard();
 
 const LoginPage = lazy(() => loadLoginPage().then((module) => ({ default: module.LoginPage })));
 const DashboardPage = lazy(() => loadDashboardPage().then((module) => ({ default: module.DashboardPage })));
