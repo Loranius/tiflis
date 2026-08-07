@@ -77,6 +77,38 @@
 }
 
 @media (max-width: 980px) {
+  /*
+   * Chrome Android and Chromium-based in-app WebViews (Telegram included)
+   * are sensitive to a chain of full-width wrappers that clip overflow while
+   * an animated/transformed descendant is under the finger. Keep the document
+   * as the single authoritative vertical scroller and explicitly allow pan-y.
+   */
+  html,
+  body {
+    height: auto !important;
+    min-height: 100%;
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto;
+    touch-action: pan-y pinch-zoom;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root,
+  .app-shell,
+  .workspace,
+  .page-content,
+  .route-transition {
+    height: auto !important;
+    overflow-y: visible !important;
+    touch-action: pan-y pinch-zoom;
+  }
+
+  .page-content,
+  .route-transition {
+    /* hidden is safer than clip for Chromium touch-scroll hit testing. */
+    overflow-x: hidden !important;
+  }
+
   .route-transition {
     min-height: calc(100dvh - 160px);
     animation-duration: 85ms;
