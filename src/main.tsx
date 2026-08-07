@@ -16,7 +16,6 @@ import './mobile-operations-critical.css';
 import './mobile-density.css';
 import './ux-cleanup-20260805.css';
 import './mobile-adaptation.css';
-import './sisyphus-refinement.css';
 // Must stay last: module styles define their own scroll/touch behaviour.
 import './route-transitions.css';
 
