@@ -77,37 +77,6 @@
 }
 
 @media (max-width: 980px) {
-  /*
-   * Keep browser-native scrolling authoritative on phones. The route swipe
-   * listener observes strongly horizontal gestures, but it must not restrict
-   * pan directions for every child card/table/strip in the page.
-   */
-  .route-swipe-surface {
-    touch-action: pan-x pan-y pinch-zoom !important;
-    overscroll-behavior-x: none;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-
-  /* Interactive editors and nested scrollers keep their own native gestures. */
-  .route-swipe-surface input,
-  .route-swipe-surface textarea,
-  .route-swipe-surface select,
-  .route-swipe-surface [contenteditable='true'],
-  .route-swipe-surface [role='dialog'],
-  .route-swipe-surface [role='dialog'] *,
-  .route-swipe-surface .cash-tabs-v2,
-  .route-swipe-surface .menu-section-tabs-v2,
-  .route-swipe-surface .menu-category-tabs-v2,
-  .route-swipe-surface .admin-tabs-v2,
-  .route-swipe-surface .schedule-role-tabs,
-  .route-swipe-surface .reserve-date-strip-v2,
-  .route-swipe-surface .schedule-table-scroll,
-  .route-swipe-surface .duty-planner-table-wrap-v1,
-  .route-swipe-surface .cash-leaderboard-periods {
-    touch-action: auto !important;
-  }
-
   .route-transition {
     min-height: calc(100dvh - 160px);
     animation-duration: 85ms;
