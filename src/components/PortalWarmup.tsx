@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { accessiblePages, type PageKey } from '../lib/acl';
 import { preloadPages } from '../lib/pageLoaders';
 import { secureApi } from '../lib/secureApi';
+import { getKyivDateKey } from '../lib/time';
 
 type NavigatorWithConnection = Navigator & {
   connection?: {
@@ -17,8 +18,7 @@ type IdleWindow = Window & {
 };
 
 function currentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return getKyivDateKey().slice(0, 7);
 }
 
 export function PortalWarmup() {
