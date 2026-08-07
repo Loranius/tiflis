@@ -166,6 +166,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const cached = readCachedProfile(authUser.id);
       if (cached) {
         applyUser(cached, authUser.id);
+        setLoading(false);
       }
 
       try {
