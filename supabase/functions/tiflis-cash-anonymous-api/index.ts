@@ -17,6 +17,30 @@ type CashRow = {
   cash: number | string | null;
 };
 
+type MonthRange = {
+  month: string;
+  start: string;
+  end: string;
+  year: number;
+  monthNumber: number;
+  daysInMonth: number;
+};
+
+type TimelinePoint = {
+  rank: number;
+  progress: number;
+};
+
+type SourceLeaderboardRow = Record<string, unknown> & {
+  userId?: unknown;
+  name?: unknown;
+  rank?: unknown;
+  mine?: unknown;
+  avatar?: unknown;
+  role?: unknown;
+  role2?: unknown;
+};
+
 function corsHeaders(req: Request): HeadersInit {
   const origin = req.headers.get("origin") ?? "";
   if (!origin || (ALLOWED_ORIGINS.size && !ALLOWED_ORIGINS.has(origin))) return {};
@@ -43,19 +67,139 @@ function json(req: Request, data: unknown, status = 200): Response {
 
 function numberOf(value: unknown): number {
   const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
 }
 
-function leaderboardRange(month: unknown, period: unknown): { start: string; end: string } | null {
-  if (typeof month !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return null;
-  const [yearText = "", monthText = ""] = month.split("-");
+function parseMonth(value: unknown): MonthRange | null {
+  if (typeof value !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return null;
+  const [yearText = "", monthText = ""] = value.split("-");
   const year = Number(yearText);
   const monthNumber = Number(monthText);
-  const nextMonth = new Date(Date.UTC(year, monthNumber, 1)).toISOString().slice(0, 10);
-  if (period === "year") return { start: `${year}-01-01`, end: `${year + 1}-01-01` };
-  if (period === "first") return { start: `${month}-01`, end: `${month}-15` };
-  if (period === "second") return { start: `${month}-15`, end: nextMonth };
-  return { start: `${month}-01`, end: nextMonth };
+  const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return {
+    month: value,
+    start: `${value}-01`,
+    end: new Date(Date.UTC(year, monthNumber, 1)).toISOString().slice(0, 10),
+    year,
+    monthNumber,
+    daysInMonth,
+  };
+}
+
+function dateForDay(month: string, day: number): string {
+  return `${month}-${String(day).padStart(2, "0")}`;
+}
+
+function kyivToday(): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Kyiv",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function publicName(item: SourceLeaderboardRow, fallbackRank: number): string {
+  return typeof item.name === "string" && item.name.trim()
+    ? item.name.trim()
+    : `Працівник #${fallbackRank}`;
+}
+
+function visibleLastDay(range: MonthRange, today: string): number {
+  const currentMonth = today.slice(0, 7);
+  if (range.month < currentMonth) return range.daysInMonth;
+  if (range.month > currentMonth) return 0;
+  const todayDay = Number(today.slice(-2));
+  return Math.max(0, Math.min(range.daysInMonth, todayDay));
+}
+
+function buildTimeline(
+  range: MonthRange,
+  sourceRows: SourceLeaderboardRow[],
+  cashRows: CashRow[],
+  exactProgress: boolean,
+): Map<string, Record<string, TimelinePoint>> {
+  const today = kyivToday();
+  const lastVisibleDay = visibleLastDay(range, today);
+  const timeline = new Map<string, Record<string, TimelinePoint>>();
+  const ids = sourceRows
+    .map((row) => typeof row.userId === "string" ? row.userId : "")
+    .filter(Boolean);
+
+  for (const id of ids) timeline.set(id, {});
+  if (!ids.length || lastVisibleDay <= 0) return timeline;
+
+  const dailyCash = new Map<string, Map<number, number>>();
+  for (const id of ids) dailyCash.set(id, new Map());
+  for (const row of cashRows) {
+    if (!row.user_id || !dailyCash.has(row.user_id) || !row.date.startsWith(`${range.month}-`)) continue;
+    const day = Number(row.date.slice(-2));
+    if (!Number.isInteger(day) || day < 1 || day > range.daysInMonth) continue;
+    const perDay = dailyCash.get(row.user_id);
+    if (!perDay) continue;
+    perDay.set(day, (perDay.get(day) ?? 0) + numberOf(row.cash));
+  }
+
+  const stableOrder = new Map<string, number>();
+  sourceRows.forEach((row, index) => {
+    if (typeof row.userId === "string") stableOrder.set(row.userId, index);
+  });
+
+  const cycleTarget = (cycleStart: number, cycleEnd: number): number => {
+    const availableEnd = Math.min(cycleEnd, lastVisibleDay);
+    if (availableEnd < cycleStart) return 0;
+
+    let leaderToDate = 0;
+    for (const id of ids) {
+      const perDay = dailyCash.get(id);
+      let total = 0;
+      for (let day = cycleStart; day <= availableEnd; day += 1) total += perDay?.get(day) ?? 0;
+      leaderToDate = Math.max(leaderToDate, total);
+    }
+    if (leaderToDate <= 0) return 0;
+
+    const cycleLength = cycleEnd - cycleStart + 1;
+    const elapsed = availableEnd - cycleStart + 1;
+    const completed = lastVisibleDay >= cycleEnd;
+    return completed ? leaderToDate : leaderToDate * (cycleLength / Math.max(1, elapsed));
+  };
+
+  const firstTarget = cycleTarget(1, Math.min(14, range.daysInMonth));
+  const secondTarget = range.daysInMonth >= 15 ? cycleTarget(15, range.daysInMonth) : 0;
+  const running = new Map<string, number>(ids.map((id) => [id, 0]));
+
+  for (let day = 1; day <= lastVisibleDay; day += 1) {
+    const cycleStart = day <= 14 ? 1 : 15;
+    if (day === cycleStart) {
+      for (const id of ids) running.set(id, 0);
+    }
+
+    for (const id of ids) {
+      running.set(id, (running.get(id) ?? 0) + (dailyCash.get(id)?.get(day) ?? 0));
+    }
+
+    const ranked = ids
+      .map((id) => ({ id, total: running.get(id) ?? 0 }))
+      .sort((left, right) => {
+        if (right.total !== left.total) return right.total - left.total;
+        return (stableOrder.get(left.id) ?? 9999) - (stableOrder.get(right.id) ?? 9999);
+      });
+    const target = day <= 14 ? firstTarget : secondTarget;
+    const date = dateForDay(range.month, day);
+
+    ranked.forEach((entry, index) => {
+      const rawProgress = target > 0 ? Math.min(100, (entry.total / target) * 100) : 0;
+      const progress = exactProgress
+        ? Math.round(rawProgress * 10) / 10
+        : Math.max(0, Math.min(100, Math.round(rawProgress / 5) * 5));
+      const userTimeline = timeline.get(entry.id);
+      if (userTimeline) userTimeline[date] = { rank: index + 1, progress };
+    });
+  }
+
+  return timeline;
 }
 
 Deno.serve(async (req: Request) => {
@@ -81,7 +225,7 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: false, error: "Unsupported action" }, 400);
   }
 
-  const range = leaderboardRange(body.month, body.leaderboard_period);
+  const range = parseMonth(body.month);
   if (!range) return json(req, { ok: false, error: "Invalid month" }, 400);
 
   try {
@@ -111,57 +255,54 @@ Deno.serve(async (req: Request) => {
       .from("cash")
       .select("user_id,date,cash")
       .gte("date", range.start)
-      .lt("date", range.end);
+      .lt("date", range.end)
+      .order("date", { ascending: true });
     if (cashResult.error) throw cashResult.error;
 
-    const positiveCashUsers = new Set<string>();
-    for (const row of (cashResult.data ?? []) as CashRow[]) {
-      if (!row.user_id) continue;
-      if (numberOf(row.cash) > 0) positiveCashUsers.add(row.user_id);
-    }
+    const sourceRows = (Array.isArray(payload.leaderboard) ? payload.leaderboard : [])
+      .map((row) => row && typeof row === "object" ? row as SourceLeaderboardRow : {})
+      .filter((row) => typeof row.userId === "string" && Boolean(row.userId));
+    const me = payload.me && typeof payload.me === "object"
+      ? payload.me as Record<string, unknown>
+      : {};
+    const exactProgress = me.canViewAll === true;
+    const timeline = buildTimeline(range, sourceRows, (cashResult.data ?? []) as CashRow[], exactProgress);
 
-    const sourceRows = Array.isArray(payload.leaderboard) ? payload.leaderboard : [];
-    const leaderboard = sourceRows
-      .map((row) => row && typeof row === "object" ? row as Record<string, unknown> : {})
-      .filter((item) => typeof item.userId === "string" && positiveCashUsers.has(item.userId))
-      .sort((left, right) => Number(left.rank || 0) - Number(right.rank || 0))
-      .map((item, index) => {
-        const rank = index + 1;
-        const name = typeof item.name === "string" && item.name.trim()
-          ? item.name.trim()
-          : `Працівник #${rank}`;
-        const avatar = typeof item.avatar === "string" && item.avatar.trim()
-          ? item.avatar.trim()
-          : null;
-        const role = typeof item.role === "string" && item.role.trim()
-          ? item.role.trim()
-          : "staff";
-        const role2 = typeof item.role2 === "string" && item.role2.trim()
-          ? item.role2.trim()
-          : null;
-        const total = typeof item.total === "number" && Number.isFinite(item.total)
-          ? item.total
-          : null;
-        const relativeValue = Number(item.relative ?? 0);
-        const relative = Number.isFinite(relativeValue) ? relativeValue : 0;
+    const leaderboard = sourceRows.map((item, index) => {
+      const userId = String(item.userId);
+      const fallbackRank = index + 1;
+      const name = publicName(item, fallbackRank);
+      const avatar = typeof item.avatar === "string" && item.avatar.trim() ? item.avatar.trim() : null;
+      const role = typeof item.role === "string" && item.role.trim() ? item.role.trim() : "staff";
+      const role2 = typeof item.role2 === "string" && item.role2.trim() ? item.role2.trim() : null;
+      const userTimeline = timeline.get(userId) ?? {};
+      const dates = Object.keys(userTimeline).sort();
+      const latestPoint = dates.length ? userTimeline[dates[dates.length - 1] ?? ""] : undefined;
 
-        return {
-          userId: item.userId,
-          name,
-          rank,
-          total,
-          relative,
-          mine: item.mine === true,
-          avatar,
-          role,
-          role2,
-        };
-      });
+      return {
+        ...item,
+        userId,
+        name,
+        rank: latestPoint?.rank ?? Number(item.rank || fallbackRank),
+        mine: item.mine === true,
+        avatar,
+        role,
+        role2,
+        timeline: userTimeline,
+      };
+    }).sort((left, right) => Number(left.rank || 0) - Number(right.rank || 0));
 
     return json(req, {
       ...payload,
       leaderboard,
-      leaderboardPrivacy: "named-staff-with-protected-totals",
+      leaderboardPrivacy: "named-staff-with-hidden-cash-timeline",
+      leaderboardTimeline: {
+        month: range.month,
+        daysInMonth: range.daysInMonth,
+        resetDays: [1, 15],
+        summitDays: [Math.min(14, range.daysInMonth), range.daysInMonth],
+        values: "rank-and-normalized-progress-only",
+      },
     });
   } catch (error) {
     console.error("tiflis-cash-anonymous-api failed", error);
