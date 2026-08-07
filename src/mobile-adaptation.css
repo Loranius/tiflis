@@ -1,0 +1,644 @@
+/*
+ * Final mobile-first adaptation layer.
+ *
+ * The portal has module-specific responsive CSS that is lazy-loaded with routes.
+ * Keep this file defensive and slightly more specific so all modules share one
+ * predictable phone contract. route-transitions.css is intentionally loaded
+ * after this file because it owns gesture/touch-action behaviour.
+ */
+
+@media (max-width: 980px) {
+  html {
+    min-width: 320px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body,
+  #root,
+  body .app-shell,
+  body .workspace {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  body,
+  #root,
+  body .app-shell {
+    min-height: 100dvh;
+  }
+
+  body .app-shell {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important;
+  }
+
+  body .workspace,
+  body .page-content,
+  body .route-transition,
+  body .today-page-v5,
+  body .cash-page-v2,
+  body .menu-page-v2,
+  body .staff-page-v2,
+  body .reserve-page-v2,
+  body .admin-page-v2,
+  body .schedule-page-v2,
+  body .duty-planner-page-v1 {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  body .topbar {
+    min-height: 64px !important;
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(16px, env(safe-area-inset-right))
+      10px
+      max(16px, env(safe-area-inset-left)) !important;
+  }
+
+  body .topbar .eyebrow {
+    font-size: 9px;
+    line-height: 1.2;
+  }
+
+  body .topbar h1 {
+    margin-top: 3px !important;
+    font-size: clamp(20px, 6vw, 24px) !important;
+    line-height: 1.12 !important;
+  }
+
+  body .topbar::after {
+    left: max(16px, env(safe-area-inset-left)) !important;
+  }
+
+  body .page-content {
+    padding: 14px max(14px, env(safe-area-inset-right)) 20px max(14px, env(safe-area-inset-left)) !important;
+  }
+
+  body .route-transition {
+    min-height: calc(100dvh - 154px) !important;
+  }
+
+  /* Prevent accidental page-wide horizontal scrolling. Purpose-built strips/tables scroll themselves. */
+  body .page-content,
+  body .route-transition,
+  body .today-page-v5,
+  body .cash-page-v2,
+  body .menu-page-v2,
+  body .staff-page-v2,
+  body .reserve-page-v2,
+  body .admin-page-v2,
+  body .schedule-page-v2,
+  body .duty-planner-page-v1 {
+    overflow-wrap: anywhere;
+  }
+
+  /* Compact working heroes leave more room for actual restaurant data. */
+  body [class*='-hero-v2'] {
+    min-height: 104px !important;
+    padding: 18px 17px !important;
+    border-radius: 19px !important;
+  }
+
+  body [class*='-hero-v2'] h2 {
+    margin: 5px 0 6px !important;
+    font-size: clamp(25px, 7.5vw, 32px) !important;
+    line-height: 1.08 !important;
+  }
+
+  body [class*='-hero-v2'] p {
+    max-width: 680px !important;
+    font-size: 12px !important;
+    line-height: 1.5 !important;
+  }
+
+  /* Bottom navigation: thumb-sized targets + safe area + guaranteed content clearance. */
+  body .mobile-nav.legacy-mobile-nav {
+    left: max(8px, env(safe-area-inset-left)) !important;
+    right: max(8px, env(safe-area-inset-right)) !important;
+    bottom: calc(8px + env(safe-area-inset-bottom)) !important;
+    min-height: 68px !important;
+    padding: 6px 5px !important;
+    border-radius: 20px !important;
+  }
+
+  body .legacy-mobile-nav .mobile-nav-item {
+    min-width: 0 !important;
+    min-height: 54px !important;
+    padding-inline: 2px !important;
+  }
+
+  body .legacy-mobile-nav .mobile-nav-item > span {
+    max-width: 100%;
+    font-size: 9.5px !important;
+    line-height: 1.05;
+    text-overflow: ellipsis;
+  }
+
+  body .mobile-nav-home-icon {
+    width: 49px;
+    height: 49px;
+  }
+
+  /* More is a bottom sheet, not a generic centered modal. ModalRuntime also sees role=dialog. */
+  body .mobile-more-backdrop.tiflis-modal-backdrop,
+  body .mobile-more-backdrop {
+    align-items: flex-end !important;
+    justify-items: center !important;
+    place-items: end center !important;
+    padding:
+      max(14px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      0
+      max(8px, env(safe-area-inset-left)) !important;
+  }
+
+  body .mobile-more-sheet.tiflis-modal-surface,
+  body .mobile-more-sheet {
+    position: relative !important;
+    inset: auto !important;
+    width: min(100%, 560px) !important;
+    max-width: 100% !important;
+    max-height: min(84dvh, 760px) !important;
+    margin: auto 0 0 !important;
+    padding: 18px 16px calc(20px + env(safe-area-inset-bottom)) !important;
+    border-right: 1px solid var(--border-strong) !important;
+    border-bottom: 0 !important;
+    border-left: 1px solid var(--border-strong) !important;
+    border-radius: 24px 24px 0 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+
+  body .mobile-more-close {
+    width: 44px !important;
+    height: 44px !important;
+    flex: 0 0 auto;
+  }
+
+  body .mobile-more-link,
+  body .mobile-more-logout {
+    min-height: 52px !important;
+  }
+
+  /* Form controls must not trigger iOS/WebView zoom and remain easy to tap. */
+  body input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  body select,
+  body textarea {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px !important;
+  }
+
+  body textarea {
+    line-height: 1.45;
+  }
+
+  body button,
+  body a,
+  body input,
+  body select,
+  body textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Main tab strips are deliberately horizontally scrollable instead of squeezing labels. */
+  body .cash-tabs-v2,
+  body .menu-section-tabs-v2,
+  body .menu-category-tabs-v2,
+  body .admin-tabs-v2,
+  body .schedule-role-tabs,
+  body .reserve-date-strip-v2 {
+    max-width: 100%;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body .cash-tabs-v2::-webkit-scrollbar,
+  body .menu-section-tabs-v2::-webkit-scrollbar,
+  body .menu-category-tabs-v2::-webkit-scrollbar,
+  body .admin-tabs-v2::-webkit-scrollbar,
+  body .schedule-role-tabs::-webkit-scrollbar,
+  body .reserve-date-strip-v2::-webkit-scrollbar {
+    display: none;
+  }
+
+  body .cash-tabs-v2 > button,
+  body .menu-section-tabs-v2 > button,
+  body .menu-category-tabs-v2 > button,
+  body .admin-tabs-v2 > button,
+  body .schedule-role-tabs > button,
+  body .reserve-date-strip-v2 > button {
+    min-height: 44px !important;
+    scroll-snap-align: start;
+  }
+
+  /* Horizontal data tables own their overflow instead of forcing the whole page wider. */
+  body .schedule-table-scroll,
+  body .duty-planner-table-wrap-v1 {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 760px) {
+  body .cash-page-v2,
+  body .menu-page-v2,
+  body .staff-page-v2,
+  body .reserve-page-v2,
+  body .admin-page-v2,
+  body .schedule-page-v2,
+  body .duty-planner-page-v1 {
+    gap: 12px !important;
+  }
+
+  /* A consistent two-column metric rhythm is readable at 360-448px without huge vertical waste. */
+  body .cash-metrics-v2,
+  body .menu-metrics-v2,
+  body .staff-metrics-v2,
+  body .reserve-metrics-v2,
+  body .admin-metrics-v2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  body .cash-metrics-v2 article,
+  body .menu-metrics-v2 article,
+  body .staff-metrics-v2 article,
+  body .reserve-metrics-v2 article,
+  body .admin-metrics-v2 article {
+    min-width: 0 !important;
+    min-height: 102px !important;
+    padding: 14px !important;
+    border-radius: 16px !important;
+  }
+
+  body .cash-metrics-v2 article span,
+  body .menu-metrics-v2 article span,
+  body .staff-metrics-v2 article span,
+  body .reserve-metrics-v2 article span,
+  body .admin-metrics-v2 article span {
+    font-size: 9.5px !important;
+    line-height: 1.35 !important;
+    letter-spacing: .07em !important;
+    overflow-wrap: anywhere;
+  }
+
+  body .cash-metrics-v2 article strong,
+  body .menu-metrics-v2 article strong,
+  body .staff-metrics-v2 article strong,
+  body .reserve-metrics-v2 article strong,
+  body .admin-metrics-v2 article strong {
+    font-size: clamp(20px, 6vw, 24px) !important;
+    line-height: 1.08 !important;
+  }
+
+  /* Schedule stays dense, but its labels and controls remain tappable. */
+  body .schedule-toolbar-v2 {
+    gap: 9px !important;
+    padding: 10px !important;
+  }
+
+  body .schedule-month-nav {
+    width: 100%;
+    min-width: 0;
+    justify-content: space-between !important;
+  }
+
+  body .schedule-icon-button {
+    width: 44px !important;
+    height: 44px !important;
+    flex: 0 0 auto;
+  }
+
+  body .schedule-month-title {
+    min-width: 0 !important;
+    flex: 1;
+  }
+
+  body .schedule-scope-switch button {
+    min-height: 44px !important;
+  }
+
+  body .schedule-metrics-v2 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  body .schedule-metrics-v2 article {
+    min-width: 0;
+    min-height: 88px !important;
+    padding: 11px !important;
+  }
+
+  body .schedule-metrics-v2 span {
+    font-size: 8.5px !important;
+    line-height: 1.25;
+    letter-spacing: .05em;
+  }
+
+  body .schedule-metrics-v2 strong {
+    font-size: 20px !important;
+  }
+
+  body .schedule-table-v2 .schedule-name-column {
+    width: 142px !important;
+    min-width: 142px !important;
+    max-width: 142px !important;
+  }
+
+  body .schedule-table-v2 th,
+  body .schedule-table-v2 td {
+    min-width: 42px !important;
+  }
+
+  body .schedule-shift-cell {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  /* Cash actions and editor stack cleanly instead of overflowing. */
+  body .cash-toolbar-v2,
+  body .cash-quick-entry-v3 {
+    min-width: 0 !important;
+  }
+
+  body .cash-toolbar-actions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  body .cash-user-select {
+    min-width: 0;
+  }
+
+  body .cash-user-select select,
+  body .cash-add-button {
+    min-height: 46px !important;
+  }
+
+  body .cash-period-grid-v2,
+  body .cash-rating-grid-v2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  body .cash-calendar-card-v2,
+  body .cash-list-card-v2,
+  body .cash-leaderboard-card-v2,
+  body .cash-team-rating-v2,
+  body .admin-panel-v2,
+  body .duty-planner-card-v1 {
+    padding-inline: 14px !important;
+  }
+
+  /* Menu/table rows never reserve too much room for the value column. */
+  body .menu-table-heading-v3,
+  body .menu-table-row-v3 {
+    grid-template-columns: minmax(0, 1fr) minmax(92px, 31%) !important;
+    gap: 8px !important;
+  }
+
+  body .menu-table-row-v3 {
+    min-height: 68px !important;
+    padding-inline: 10px !important;
+  }
+
+  body .menu-table-name-v3 strong,
+  body .menu-table-value-v3 strong {
+    font-size: 12px !important;
+  }
+
+  body .menu-command-actions-v2 > button,
+  body .staff-command-v2 > button,
+  body .reserve-head-actions-v2 button,
+  body .admin-primary-v2,
+  body .cash-quick-actions-v3 button {
+    min-height: 46px !important;
+  }
+
+  /* Login fills the visible mobile viewport and respects display cutouts. */
+  body .login-page-v3,
+  body .login-access-v3 {
+    min-height: 100dvh !important;
+  }
+
+  body .login-access-v3 {
+    padding:
+      max(22px, env(safe-area-inset-top))
+      max(18px, env(safe-area-inset-right))
+      max(26px, env(safe-area-inset-bottom))
+      max(18px, env(safe-area-inset-left)) !important;
+  }
+
+  body .login-card-v3 {
+    width: min(100%, 470px) !important;
+  }
+
+  body .login-input-v3 {
+    min-height: 54px;
+    height: auto;
+  }
+
+  body .login-input-v3 input {
+    min-height: 52px;
+  }
+
+  body .login-submit-v3 {
+    min-height: 54px !important;
+  }
+}
+
+@media (max-width: 540px) {
+  body .page-content {
+    padding-inline: max(12px, env(safe-area-inset-left)) !important;
+  }
+
+  body [class*='-hero-v2'] {
+    min-height: 96px !important;
+    padding: 16px 15px !important;
+  }
+
+  body [class*='-hero-v2'] h2 {
+    font-size: clamp(24px, 8vw, 30px) !important;
+  }
+
+  body .mobile-more-sheet.tiflis-modal-surface,
+  body .mobile-more-sheet {
+    width: 100% !important;
+    border-radius: 22px 22px 0 0 !important;
+  }
+
+  body .mobile-more-profile {
+    padding: 12px !important;
+  }
+
+  body .mobile-more-link {
+    min-height: 54px !important;
+  }
+
+  body .cash-tabs-v2,
+  body .menu-section-tabs-v2,
+  body .menu-category-tabs-v2,
+  body .admin-tabs-v2,
+  body .schedule-role-tabs,
+  body .reserve-date-strip-v2 {
+    margin-inline: -2px;
+    padding-inline: 8px !important;
+  }
+
+  body .cash-tabs-v2 > button {
+    min-width: 112px !important;
+  }
+
+  body .schedule-table-v2 .schedule-name-column {
+    width: 136px !important;
+    min-width: 136px !important;
+    max-width: 136px !important;
+  }
+
+  body .schedule-person-copy strong {
+    font-size: 10px !important;
+  }
+
+  body .schedule-person-copy small {
+    font-size: 8px !important;
+  }
+
+  body .cash-calendar-grid-v2 {
+    gap: 3px !important;
+  }
+
+  body .cash-calendar-grid-v2 button {
+    min-height: 66px !important;
+    padding: 6px 4px !important;
+  }
+
+  body .cash-calendar-dow {
+    padding-inline: 2px !important;
+  }
+
+  body .login-mobile-brand-v3 {
+    margin-bottom: 30px !important;
+  }
+
+  body .login-heading-v3 h2 {
+    font-size: clamp(30px, 9vw, 36px) !important;
+  }
+
+  body .login-form-v3 {
+    gap: 15px;
+    margin-top: 26px;
+  }
+}
+
+@media (max-width: 390px) {
+  body .page-content {
+    padding-inline: max(10px, env(safe-area-inset-left)) !important;
+  }
+
+  body .mobile-nav.legacy-mobile-nav {
+    left: max(6px, env(safe-area-inset-left)) !important;
+    right: max(6px, env(safe-area-inset-right)) !important;
+    gap: 1px !important;
+    padding-inline: 4px !important;
+  }
+
+  body .legacy-mobile-nav .mobile-nav-item > span {
+    font-size: 9px !important;
+  }
+
+  body .mobile-nav-home-icon {
+    width: 46px;
+    height: 46px;
+  }
+
+  body .cash-metrics-v2 article,
+  body .menu-metrics-v2 article,
+  body .staff-metrics-v2 article,
+  body .reserve-metrics-v2 article,
+  body .admin-metrics-v2 article {
+    min-height: 98px !important;
+    padding: 12px !important;
+  }
+
+  body .cash-metrics-v2 article span,
+  body .menu-metrics-v2 article span,
+  body .staff-metrics-v2 article span,
+  body .reserve-metrics-v2 article span,
+  body .admin-metrics-v2 article span {
+    font-size: 9px !important;
+  }
+
+  body .schedule-metrics-v2 article {
+    padding: 9px !important;
+  }
+
+  body .schedule-metrics-v2 span {
+    font-size: 8px !important;
+  }
+
+  body .schedule-table-v2 .schedule-name-column {
+    width: 130px !important;
+    min-width: 130px !important;
+    max-width: 130px !important;
+  }
+
+  body .menu-table-heading-v3,
+  body .menu-table-row-v3 {
+    grid-template-columns: minmax(0, 1fr) minmax(86px, 30%) !important;
+  }
+
+  body .menu-table-name-v3 > i {
+    display: none !important;
+  }
+
+  body .menu-table-name-v3 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body .login-access-v3 {
+    padding-inline: 14px !important;
+  }
+
+  body .login-security-v3 {
+    padding: 13px !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 560px) and (max-width: 980px) {
+  body .topbar {
+    min-height: 54px !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+
+  body .topbar .eyebrow {
+    display: none;
+  }
+
+  body .app-shell {
+    padding-bottom: calc(82px + env(safe-area-inset-bottom)) !important;
+  }
+
+  body .mobile-more-sheet.tiflis-modal-surface,
+  body .mobile-more-sheet {
+    max-height: calc(100dvh - 8px) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body .mobile-more-sheet,
+  body .mobile-more-backdrop,
+  body .mobile-nav-item,
+  body [class*='-hero-v2'] {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
