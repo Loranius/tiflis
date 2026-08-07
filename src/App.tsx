@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router';
 import { useAuth } from './auth/AuthProvider';
 import { AppShell } from './components/AppShell';
 import { canAccessPage, type PageKey } from './lib/acl';
+import { installMobileScrollRescue } from './lib/mobileScrollRescue';
 import {
   loadAdminPage,
   loadCashPage,
@@ -15,6 +16,8 @@ import {
   loadSchedulePage,
   loadStaffPage,
 } from './lib/pageLoaders';
+
+installMobileScrollRescue();
 
 const LoginPage = lazy(() => loadLoginPage().then((module) => ({ default: module.LoginPage })));
 const DashboardPage = lazy(() => loadDashboardPage().then((module) => ({ default: module.DashboardPage })));

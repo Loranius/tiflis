@@ -78,32 +78,34 @@
 
 @media (max-width: 980px) {
   /*
-   * touch-action is evaluated from the touched element up to its nearest scroll container.
-   * Many portal cards are scroll containers because they use overflow: hidden/auto, so a rule
-   * only on .route-swipe-surface never reached gestures started on those cards. Apply the route
-   * gesture contract to every descendant and load this stylesheet last.
+   * Keep browser-native scrolling authoritative on phones. The route swipe
+   * listener observes strongly horizontal gestures, but it must not restrict
+   * pan directions for every child card/table/strip in the page.
    */
-  .route-swipe-surface,
-  .route-swipe-surface * {
-    touch-action: pan-y pinch-zoom !important;
-  }
-
   .route-swipe-surface {
+    touch-action: pan-x pan-y pinch-zoom !important;
     overscroll-behavior-x: none;
     -webkit-user-select: none;
     user-select: none;
   }
 
-  /* Interactive editors keep their native touch behaviour and are already ignored in AppShell. */
+  /* Interactive editors and nested scrollers keep their own native gestures. */
   .route-swipe-surface input,
   .route-swipe-surface textarea,
   .route-swipe-surface select,
   .route-swipe-surface [contenteditable='true'],
   .route-swipe-surface [role='dialog'],
-  .route-swipe-surface [role='dialog'] * {
+  .route-swipe-surface [role='dialog'] *,
+  .route-swipe-surface .cash-tabs-v2,
+  .route-swipe-surface .menu-section-tabs-v2,
+  .route-swipe-surface .menu-category-tabs-v2,
+  .route-swipe-surface .admin-tabs-v2,
+  .route-swipe-surface .schedule-role-tabs,
+  .route-swipe-surface .reserve-date-strip-v2,
+  .route-swipe-surface .schedule-table-scroll,
+  .route-swipe-surface .duty-planner-table-wrap-v1,
+  .route-swipe-surface .cash-leaderboard-periods {
     touch-action: auto !important;
-    -webkit-user-select: text;
-    user-select: text;
   }
 
   .route-transition {

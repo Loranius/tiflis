@@ -3,9 +3,23 @@ import { useEffect } from 'react';
 const DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]';
 
 function isVisible(element: HTMLElement): boolean {
-  if (!element.isConnected || element.hidden) return false;
-  const style = window.getComputedStyle(element);
-  return style.display !== 'none' && style.visibility !== 'hidden';
+  if (!element.isConnected || element.hidden || element.getClientRects().length === 0) return false;
+
+  let current: HTMLElement | null = element;
+  while (current && current !== document.body) {
+    const style = window.getComputedStyle(current);
+    if (
+      style.display === 'none'
+      || style.visibility === 'hidden'
+      || style.visibility === 'collapse'
+      || style.pointerEvents === 'none'
+    ) {
+      return false;
+    }
+    current = current.parentElement;
+  }
+
+  return true;
 }
 
 function findBackdrop(dialog: HTMLElement): HTMLElement | null {
@@ -83,7 +97,7 @@ export function ModalRuntime() {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['aria-modal', 'hidden', 'open'],
+      attributeFilter: ['aria-modal', 'hidden', 'open', 'class', 'style'],
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
