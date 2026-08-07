@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 const DIALOG_SELECTOR = '[role="dialog"][aria-modal="true"]';
+const MOBILE_BREAKPOINT = 980;
 
 function isVisible(element: HTMLElement): boolean {
   if (!element.isConnected || element.hidden || element.getClientRects().length === 0) return false;
@@ -67,7 +68,12 @@ export function ModalRuntime() {
         findBackdrop(dialog)?.classList.add('tiflis-modal-backdrop');
       });
 
-      document.body.classList.toggle('tiflis-modal-open', Boolean(nextDialog));
+      // On phones/WebViews the document itself must remain the authoritative
+      // vertical scroller. Dialog surfaces already have their own overflow, so
+      // locking body here only creates a failure mode where Chrome/Telegram can
+      // get stuck on overflow:hidden after a stale or misdetected dialog state.
+      const shouldLockBody = Boolean(nextDialog) && window.innerWidth > MOBILE_BREAKPOINT;
+      document.body.classList.toggle('tiflis-modal-open', shouldLockBody);
 
       if (nextDialog && nextDialog !== activeDialog) {
         previousFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
