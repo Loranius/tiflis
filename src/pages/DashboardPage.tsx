@@ -20,12 +20,12 @@ function DashboardCardSkeleton({ label }: { label: string }) {
 export function DashboardPage() {
   return (
     <div className="today-page-v5">
-      <Suspense fallback={<DashboardCardSkeleton label="Завантаження робочого дня" />}>
-        <TodayOperationsWidget />
-      </Suspense>
-
       <Suspense fallback={<DashboardCardSkeleton label="Завантаження каси за сьогодні" />}>
         <TodayCashCard />
+      </Suspense>
+
+      <Suspense fallback={<DashboardCardSkeleton label="Завантаження робочого дня" />}>
+        <TodayOperationsWidget />
       </Suspense>
 
       <Suspense fallback={<DashboardCardSkeleton label="Завантаження найближчих резервів" />}>
