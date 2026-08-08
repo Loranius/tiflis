@@ -92,8 +92,10 @@ if (/respondWith\s*\(/.test(sw)) fail('Retirement service worker still intercept
 const indexHtml = await read('index.html');
 if (!indexHtml.includes('stable-runtime/loader.js')) fail('Raw Pages fallback loader is missing from index.html.');
 if (!indexHtml.includes('id="boot-recovery"')) fail('Boot recovery UI is missing from index.html.');
+if (!indexHtml.includes('rel="manifest"')) fail('Web app manifest is not linked from index.html.');
+if (!indexHtml.includes('__TIFLIS_BUILD_ID__')) fail('Build identifier marker is missing from index.html.');
 const viteConfig = await read('vite.config.ts');
-if (!viteConfig.includes('TIFLIS_RAW_RUNTIME_START') || !viteConfig.includes('/src/main.tsx')) {
+if (!viteConfig.includes('TIFLIS_RAW_RUNTIME_START') || !viteConfig.includes('/src/main.tsx') || !viteConfig.includes('BUILD_ID_MARKER')) {
   fail('Vite does not transform the raw fallback into the React entry.');
 }
 
@@ -111,7 +113,7 @@ const temporaryFiles = [
 if (temporaryFiles.length) fail(`Temporary patch machinery remains: ${temporaryFiles.join(', ')}`);
 
 const packageJson = JSON.parse(await read('package.json'));
-for (const script of ['typecheck', 'build', 'perf:budget', 'smoke:dist']) {
+for (const script of ['lint', 'typecheck', 'build', 'perf:budget', 'smoke:dist']) {
   if (!packageJson.scripts?.[script]) fail(`Required package script is missing: ${script}`);
 }
 

@@ -15,7 +15,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { secureApi } from '../lib/secureApi';
 import './reserve.css';
 
@@ -171,8 +171,10 @@ export function ReservePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -180,14 +182,16 @@ export function ReservePage() {
         { action: 'reserve_bootstrap', date: selectedDate },
         'tiflis-reserve-api',
       );
+      if (requestId.current !== id) return;
       setData(response);
       setActiveHallId((current) => response.halls.some((hall) => hall.id === current)
         ? current
         : response.halls[0]?.id ?? null);
     } catch (reason) {
+      if (requestId.current !== id) return;
       setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити резерви.');
     } finally {
-      setLoading(false);
+      if (requestId.current === id) setLoading(false);
     }
   }, [selectedDate]);
 

@@ -146,6 +146,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
   const userRef = useRef<StaffUser | null>(null);
   const authUserIdRef = useRef<string | null>(null);
+  const sessionGenerationRef = useRef(0);
 
   const applyUser = useCallback((next: StaffUser | null, authUserId: string | null = null) => {
     userRef.current = next;
@@ -154,8 +155,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const restore = useCallback(async () => {
+    const generation = ++sessionGenerationRef.current;
     try {
       const { data, error } = await supabase.auth.getSession();
+      if (sessionGenerationRef.current !== generation) return;
       if (error || !data.session?.user) {
         clearCachedProfile();
         applyUser(null);
@@ -163,6 +166,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
 
       const authUser = data.session.user;
+      authUserIdRef.current = authUser.id;
       const cached = readCachedProfile(authUser.id);
       if (cached) {
         applyUser(cached, authUser.id);
@@ -171,23 +175,26 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       try {
         const profile = await loadStaffProfile(authUser);
+        if (sessionGenerationRef.current !== generation || authUserIdRef.current !== authUser.id) return;
         if (!profile.active) throw new Error('Доступ заблоковано');
         applyUser(profile, authUser.id);
       } catch {
+        if (sessionGenerationRef.current !== generation || authUserIdRef.current !== authUser.id) return;
         clearCachedProfile();
         try {
           await supabase.auth.signOut();
         } finally {
-          applyUser(null);
+          if (sessionGenerationRef.current === generation) applyUser(null);
         }
       }
     } catch {
+      if (sessionGenerationRef.current !== generation) return;
       // A storage adapter or session bootstrap can fail before Supabase can return
       // its normal { error } envelope. The app must leave the loading screen anyway.
       clearCachedProfile();
       applyUser(null);
     } finally {
-      setLoading(false);
+      if (sessionGenerationRef.current === generation) setLoading(false);
     }
   }, [applyUser]);
 
@@ -197,6 +204,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') return;
 
       if (event === 'SIGNED_OUT' || !session?.user) {
+        sessionGenerationRef.current += 1;
         clearCachedProfile();
         applyUser(null);
         setLoading(false);
@@ -205,21 +213,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (authUserIdRef.current === session.user.id && userRef.current) return;
 
+      const generation = ++sessionGenerationRef.current;
+      authUserIdRef.current = session.user.id;
       setLoading(true);
       void loadStaffProfile(session.user)
         .then((profile) => {
+          if (sessionGenerationRef.current !== generation || authUserIdRef.current !== session.user.id) return;
           if (!profile.active) throw new Error('Доступ заблоковано');
           applyUser(profile, session.user.id);
         })
         .catch(async () => {
+          if (sessionGenerationRef.current !== generation || authUserIdRef.current !== session.user.id) return;
           clearCachedProfile();
           try {
             await supabase.auth.signOut();
           } finally {
-            applyUser(null);
+            if (sessionGenerationRef.current === generation) applyUser(null);
           }
         })
-        .finally(() => setLoading(false));
+        .finally(() => {
+          if (sessionGenerationRef.current === generation) setLoading(false);
+        });
     });
     return () => data.subscription.unsubscribe();
   }, [applyUser, restore]);
@@ -273,6 +287,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [applyUser]);
 
   const logout = useCallback(async () => {
+    sessionGenerationRef.current += 1;
     clearCachedProfile();
     try {
       await supabase.auth.signOut();

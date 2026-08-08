@@ -117,6 +117,8 @@ export const AppShell = memo(function AppShell() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreTriggerRef = useRef<HTMLButtonElement>(null);
+  const moreSheetRef = useRef<HTMLElement>(null);
 
   const accessible = useMemo(
     () => new Set<PageKey>(user ? accessiblePages(user) : []),
@@ -185,16 +187,51 @@ export const AppShell = memo(function AppShell() {
   useEffect(() => {
     if (!moreOpen) return;
     const previousOverflow = document.body.style.overflow;
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     document.body.style.overflow = 'hidden';
 
+    const focusFrame = window.requestAnimationFrame(() => {
+      const firstControl = moreSheetRef.current?.querySelector<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      (firstControl || moreSheetRef.current)?.focus();
+    });
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMoreOpen(false);
+      if (event.key === 'Escape') {
+        setMoreOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !moreSheetRef.current) return;
+
+      const controls = [...moreSheetRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )].filter((control) => !control.hasAttribute('hidden'));
+      if (controls.length === 0) {
+        event.preventDefault();
+        moreSheetRef.current.focus();
+        return;
+      }
+
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
 
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', onKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, [moreOpen]);
 
@@ -286,6 +323,7 @@ export const AppShell = memo(function AppShell() {
 
         {mobileSecondary.length > 0 ? (
           <button
+            ref={moreTriggerRef}
             type="button"
             className={`mobile-nav-item mobile-nav-more mobile-slot-more${moreContainsActive || moreOpen ? ' is-active' : ''}`}
             onClick={() => setMoreOpen(true)}
@@ -302,17 +340,19 @@ export const AppShell = memo(function AppShell() {
       {moreOpen ? (
         <div className="mobile-more-backdrop is-open" onMouseDown={() => setMoreOpen(false)}>
           <section
+            ref={moreSheetRef}
             id="mobile-more-sheet"
             className="mobile-more-sheet"
             role="dialog"
             aria-modal="true"
-            aria-label="Додаткові розділи"
+            aria-labelledby="mobile-more-title"
+            tabIndex={-1}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="mobile-more-heading">
               <div>
                 <span className="eyebrow">Навігація</span>
-                <h2>Ще</h2>
+                <h2 id="mobile-more-title">Ще</h2>
               </div>
               <button className="mobile-more-close" type="button" onClick={() => setMoreOpen(false)} aria-label="Закрити">
                 <X size={20} />

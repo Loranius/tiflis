@@ -7,7 +7,7 @@ import {
   RefreshCw,
   UsersRound,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useKyivDay } from '../hooks/useKyivDay';
 import { secureApi } from '../lib/secureApi';
@@ -63,23 +63,27 @@ export function TodayReservationsCard() {
   const [data, setData] = useState<TodayReservationsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
+    const id = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
       const response = await secureApi<TodayReservationsResponse>({
         action: 'today_reservations_get',
-      }, 'tiflis-today-reserve-api');
+      }, 'tiflis-today-reserve-api', { forceRefresh });
+      if (requestId.current !== id) return;
       setData(response);
     } catch (reason) {
+      if (requestId.current !== id) return;
       setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити резерви для ваших зон.');
     } finally {
-      setLoading(false);
+      if (requestId.current === id) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [dayKey, load]);
+  useEffect(() => { void load(true); }, [dayKey, load]);
 
   useEffect(() => {
     const refresh = () => { void load(); };
@@ -114,7 +118,7 @@ export function TodayReservationsCard() {
             <CalendarClock size={17} />
             <strong>{loading ? '…' : data?.reservations.length || 0}</strong>
           </span>
-          <button type="button" onClick={() => void load()} disabled={loading} aria-label="Оновити резерви">
+          <button type="button" onClick={() => void load(true)} disabled={loading} aria-label="Оновити резерви">
             <RefreshCw size={17} className={loading ? 'is-spinning' : ''} />
           </button>
         </div>
@@ -124,7 +128,7 @@ export function TodayReservationsCard() {
         <div className="today-reservations-alert-v1" role="alert">
           <CircleAlert size={17} />
           <span>{error}</span>
-          <button type="button" onClick={() => void load()} aria-label="Спробувати ще раз">
+          <button type="button" onClick={() => void load(true)} aria-label="Спробувати ще раз">
             <RefreshCw size={15} />
           </button>
         </div>

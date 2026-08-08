@@ -11,7 +11,7 @@ import {
   UserPlus,
   UserRound,
 } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import {
@@ -36,10 +36,19 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const resetRedirectTimer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetRedirectTimer.current !== null) window.clearTimeout(resetRedirectTimer.current);
+  }, []);
 
   if (user) return <Navigate to="/today" replace />;
 
   function switchMode(next: AccessMode) {
+    if (resetRedirectTimer.current !== null) {
+      window.clearTimeout(resetRedirectTimer.current);
+      resetRedirectTimer.current = null;
+    }
     setMode(next);
     setError('');
     setSuccess('');
@@ -125,7 +134,7 @@ export function LoginPage() {
       setSuccess(response.message || 'Пароль оновлено.');
       setPassword('');
       setPasswordConfirm('');
-      window.setTimeout(() => switchMode('login'), 1600);
+      resetRedirectTimer.current = window.setTimeout(() => switchMode('login'), 1600);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Пароль не оновлено.');
     } finally {
@@ -170,11 +179,11 @@ export function LoginPage() {
           </div>
 
           {mode !== 'forgot' ? (
-            <div className="auth-tabs-v4" role="tablist" aria-label="Доступ до порталу">
-              <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'is-active' : ''} onClick={() => switchMode('login')}>
+            <div className="auth-tabs-v4" role="group" aria-label="Доступ до порталу">
+              <button type="button" aria-pressed={mode === 'login'} disabled={submitting} className={mode === 'login' ? 'is-active' : ''} onClick={() => switchMode('login')}>
                 <KeyRound size={16} /> Увійти
               </button>
-              <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'is-active' : ''} onClick={() => switchMode('register')}>
+              <button type="button" aria-pressed={mode === 'register'} disabled={submitting} className={mode === 'register' ? 'is-active' : ''} onClick={() => switchMode('register')}>
                 <UserPlus size={16} /> Реєстрація
               </button>
             </div>
@@ -193,7 +202,7 @@ export function LoginPage() {
           </div>
 
           {mode === 'login' ? (
-            <form className="login-form-v3" onSubmit={submitLogin}>
+            <form className="login-form-v3" onSubmit={submitLogin} aria-busy={submitting}>
               <AuthField label="Логін" icon={<UserRound size={18} />}><input autoComplete="username" value={loginValue} onChange={(event) => setLoginValue(event.target.value)} placeholder="Робочий логін" required /></AuthField>
               <AuthField label="Пароль" icon={<LockKeyhole size={18} />}><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Твій пароль" required /></AuthField>
               <button className="auth-forgot-link-v4" type="button" onClick={() => switchMode('forgot')}>Забули пароль?</button>
@@ -203,7 +212,7 @@ export function LoginPage() {
           ) : null}
 
           {mode === 'register' ? (
-            <form className="login-form-v3" onSubmit={submitRegistration}>
+            <form className="login-form-v3" onSubmit={submitRegistration} aria-busy={submitting}>
               <AuthField label="Ім’я / логін" icon={<UserRound size={18} />}><input autoComplete="username" value={loginValue} onChange={(event) => setLoginValue(event.target.value)} placeholder="Наприклад, Дмитро або Анна Марія" minLength={2} maxLength={40} required /></AuthField>
               <p className="auth-field-hint-v4">Це ім’я відображатиметься в порталі й використовуватиметься для входу.</p>
               <AuthField label="Пароль" icon={<LockKeyhole size={18} />}><input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Мінімум 8 символів, літера і цифра" minLength={8} required /></AuthField>
@@ -214,7 +223,7 @@ export function LoginPage() {
           ) : null}
 
           {mode === 'forgot' ? (
-            <form className="login-form-v3" onSubmit={resetStep === 'request' ? submitResetRequest : submitResetConfirm}>
+            <form className="login-form-v3" onSubmit={resetStep === 'request' ? submitResetRequest : submitResetConfirm} aria-busy={submitting}>
               <button className="auth-back-v4" type="button" onClick={() => switchMode('login')}><ArrowLeft size={16} /> Назад до входу</button>
               <AuthField label="Логін" icon={<UserRound size={18} />}><input autoComplete="username" value={loginValue} onChange={(event) => setLoginValue(event.target.value)} placeholder="Робочий логін" required readOnly={resetStep === 'confirm'} /></AuthField>
               {resetStep === 'confirm' ? (

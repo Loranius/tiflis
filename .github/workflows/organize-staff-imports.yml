@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm install
+      - run: npm ci
       - run: node scripts/organize-staff-imports.mjs
       - name: Commit result
         run: |

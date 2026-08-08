@@ -52,7 +52,7 @@ jobs:
           config_path.write_text(config)
           PY
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
       - name: Typecheck

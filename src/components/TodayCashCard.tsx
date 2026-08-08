@@ -6,7 +6,7 @@ import {
   RefreshCw,
   Save,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useKyivDay } from '../hooks/useKyivDay';
 import { secureApi } from '../lib/secureApi';
@@ -52,6 +52,7 @@ export function TodayCashCard() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const hydrate = useCallback((response: TodayCashResponse) => {
     setData(response);
@@ -59,24 +60,27 @@ export function TodayCashCard() {
     setTips(valueString(response.entry?.tips));
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
+    const id = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
       const response = await secureApi<TodayCashResponse>({
         action: 'today_cash_get',
-      }, 'tiflis-today-cash-api');
+      }, 'tiflis-today-cash-api', { forceRefresh });
+      if (requestId.current !== id) return;
       hydrate(response);
     } catch (reason) {
+      if (requestId.current !== id) return;
       setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити касу за сьогодні.');
     } finally {
-      setLoading(false);
+      if (requestId.current === id) setLoading(false);
     }
   }, [hydrate]);
 
   useEffect(() => {
     setNotice(null);
-    void load();
+    void load(true);
   }, [dayKey, load]);
 
   const originalCash = valueString(data?.entry?.cash);
@@ -127,7 +131,7 @@ export function TodayCashCard() {
         <div className="today-cash-alert-v1" role="alert">
           <CircleAlert size={17} />
           <span>{error}</span>
-          <button type="button" onClick={() => void load()} aria-label="Спробувати ще раз">
+          <button type="button" onClick={() => void load(true)} aria-label="Спробувати ще раз">
             <RefreshCw size={15} />
           </button>
         </div>

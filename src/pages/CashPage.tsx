@@ -13,7 +13,7 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { CashLeaderboard } from '../components/CashLeaderboard';
 import { secureApi } from '../lib/secureApi';
@@ -218,6 +218,7 @@ export function CashPage() {
   const [saving, setSaving] = useState(false);
   const [optionalOpen, setOptionalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
   const [editor, setEditor] = useState<DayEditorState>(() => {
     const now = new Date();
     return {
@@ -235,6 +236,7 @@ export function CashPage() {
 
   const load = useCallback(async () => {
     if (!viewUserId) return;
+    const id = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -244,12 +246,14 @@ export function CashPage() {
         user_id: viewUserId,
         leaderboard_period: leaderboardPeriod,
       });
+      if (requestId.current !== id) return;
       setData(response);
       if (response.viewUserId !== viewUserId) setViewUserId(response.viewUserId);
     } catch (reason) {
+      if (requestId.current !== id) return;
       setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити касу.');
     } finally {
-      setLoading(false);
+      if (requestId.current === id) setLoading(false);
     }
   }, [leaderboardPeriod, month, viewUserId]);
 
