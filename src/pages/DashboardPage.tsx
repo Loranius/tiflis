@@ -53,33 +53,35 @@ function WelcomeWidget() {
   }).format(now), [now]);
 
   return (
-    <section className="today-welcome-v1" aria-label="Вітання">
-      <div className="today-welcome-mark-v1" aria-hidden="true">თ</div>
-      <div className="today-welcome-copy-v1">
+    <section className="today-welcome-v2" aria-label="Вітання">
+      <div className="today-welcome-copy-v2">
         <strong>{greetingFor(now)}, {firstName}</strong>
         <span>{dateLabel} · {timeLabel}</span>
       </div>
-      <span className="today-welcome-brand-v1">TIFLIS</span>
     </section>
   );
 }
 
 export function DashboardPage() {
   return (
-    <div className="today-page-v5">
+    <div className="today-page-v6">
       <WelcomeWidget />
 
-      <Suspense fallback={<DashboardCardSkeleton label="Завантаження каси за сьогодні" />}>
-        <TodayCashCard />
-      </Suspense>
+      <div className="today-dashboard-cash-v2">
+        <Suspense fallback={<DashboardCardSkeleton label="Завантаження каси за сьогодні" />}>
+          <TodayCashCard compact />
+        </Suspense>
+      </div>
 
-      <Suspense fallback={<DashboardCardSkeleton label="Завантаження робочого дня" />}>
-        <TodayOperationsWidget />
-      </Suspense>
+      <div className="today-dashboard-support-v2" aria-label="Зміна сьогодні">
+        <Suspense fallback={<DashboardCardSkeleton label="Завантаження робочого дня" />}>
+          <TodayOperationsWidget compact />
+        </Suspense>
 
-      <Suspense fallback={<DashboardCardSkeleton label="Завантаження найближчих резервів" />}>
-        <TodayReservationsCard />
-      </Suspense>
+        <Suspense fallback={<DashboardCardSkeleton label="Завантаження найближчих резервів" />}>
+          <TodayReservationsCard compact />
+        </Suspense>
+      </div>
     </div>
   );
 }

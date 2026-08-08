@@ -43,7 +43,7 @@ function money(value: NumericValue | undefined): string {
   }).format(Number.isFinite(parsed) ? parsed : 0);
 }
 
-export function TodayCashCard() {
+export function TodayCashCard({ compact = false }: { compact?: boolean }) {
   const dayKey = useKyivDay();
   const [data, setData] = useState<TodayCashResponse | null>(null);
   const [cash, setCash] = useState('');
@@ -114,11 +114,11 @@ export function TodayCashCard() {
   }
 
   return (
-    <section className="today-cash-card-v1" aria-labelledby="today-cash-title">
+    <section className={`today-cash-card-v1${compact ? ' is-dashboard-compact' : ''}`} aria-labelledby="today-cash-title">
       <header className="today-cash-heading-v1">
         <div>
           <span className="eyebrow">Каса за поточний день</span>
-          <h2 id="today-cash-title">Швидке внесення каси</h2>
+          <h2 id="today-cash-title">{compact ? 'Каса, ₴' : 'Швидке внесення каси'}</h2>
           <p>Тільки ваша каса та чайові за сьогодні. Повна статистика залишається в модулі «Каса».</p>
         </div>
         <span className={`today-cash-status-v1${data?.entry ? ' is-saved' : ''}`}>

@@ -1,6 +1,7 @@
 import {
   Armchair,
   CalendarClock,
+  ChevronRight,
   CircleAlert,
   ExternalLink,
   MapPinned,
@@ -58,7 +59,7 @@ function durationLabel(minutes: number): string {
   return `${minutes} хв`;
 }
 
-export function TodayReservationsCard() {
+export function TodayReservationsCard({ compact = false }: { compact?: boolean }) {
   const dayKey = useKyivDay();
   const [data, setData] = useState<TodayReservationsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,6 +105,35 @@ export function TodayReservationsCard() {
     () => data?.reservations.reduce((sum, reservation) => sum + reservation.guests, 0) || 0,
     [data?.reservations],
   );
+
+  if (compact) {
+    const nextReservation = data?.reservations[0];
+    const reservationLabel = loading
+      ? 'Перевіряємо бронювання…'
+      : error
+        ? 'Не вдалося завантажити резерви'
+        : !data?.canView
+          ? 'Недоступно для вашої ролі'
+          : !data.publication
+            ? 'Розподіл зон ще не опубліковано'
+            : data.zones.length === 0
+              ? 'На сьогодні зону не призначено'
+              : nextReservation
+                ? `${nextReservation.time} · ${nextReservation.guestName} · ${nextReservation.hallName}`
+                : 'Немає найближчих';
+
+    return (
+      <Link className="today-reservations-card-v1 is-dashboard-compact today-dashboard-row-v2" to="/reserve" aria-label={`Найближчий резерв. ${reservationLabel}`}>
+        <span className="today-dashboard-row-icon-v2" aria-hidden="true"><CalendarClock size={20} /></span>
+        <span className="today-dashboard-row-copy-v2">
+          <strong>Найближчий резерв</strong>
+          <small>{reservationLabel}</small>
+        </span>
+        {nextReservation ? <strong className="today-dashboard-reserve-count-v2">{nextReservation.guests}</strong> : null}
+        <ChevronRight className="today-dashboard-row-chevron-v2" size={19} aria-hidden="true" />
+      </Link>
+    );
+  }
 
   return (
     <section className="today-reservations-card-v1" aria-labelledby="today-reservations-title">

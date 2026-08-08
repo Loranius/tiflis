@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  ChevronRight,
   Circle,
   ClipboardCheck,
   Clock3,
@@ -10,6 +11,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { useKyivDay } from '../hooks/useKyivDay';
 import {
   loadDutyPlan,
@@ -108,7 +110,7 @@ function initials(name: string): string {
     .map((part) => part[0]?.toUpperCase() || '').join('');
 }
 
-export function TodayOperationsWidget() {
+export function TodayOperationsWidget({ compact = false }: { compact?: boolean }) {
   const date = useKyivDay();
   const isTuesday = useMemo(() => isKyivWeekday(date, 2), [date]);
   const [daily, setDaily] = useState<DutyPlanResponse | null>(null);
@@ -237,6 +239,99 @@ export function TodayOperationsWidget() {
         {busy ? <RefreshCw size={18} className="is-spinning" /> : task.status === 'done' ? <CheckCircle2 size={20} /> : <Circle size={20} />}
         <span><strong>{title}</strong><small>{label}</small></span>
       </button>
+    );
+  }
+
+  if (compact) {
+    const zoneLabel = dutiesLoading
+      ? 'Завантажуємо розподіл…'
+      : dutiesError
+        ? 'Не вдалося завантажити зону'
+        : !hasWorkingShift
+          ? 'Сьогодні у вас немає зміни'
+          : !daily?.publication
+            ? 'Розподіл ще не опубліковано'
+            : !currentIsWaiter
+              ? 'Зона для цієї ролі не потрібна'
+              : personalZones.length
+                ? personalZones.map((zone) => zoneDefinitions.get(zone.zone_key) || zone.zone_key).join(' · ')
+                : 'Зону не призначено';
+    const firstTask = allAssignments[0];
+    const firstTaskTitle = firstTask
+      ? (dailyAssignments.some((task) => task.id === firstTask.id)
+        ? dailyDefinitions.get(firstTask.duty_key)
+        : handoverDefinitions.get(firstTask.duty_key)) || firstTask.duty_key
+      : null;
+    const dutyLabel = dutiesLoading
+      ? 'Завантажуємо обов’язки…'
+      : dutiesError
+        ? 'Не вдалося завантажити обов’язки'
+        : !hasWorkingShift
+          ? 'З’являться у ваш робочий день'
+          : !hasPublishedPlan
+            ? 'Розподіл ще не опубліковано'
+            : firstTaskTitle || 'Особистих обов’язків немає';
+
+    return (
+      <section className="today-operations-v5 is-dashboard-compact" aria-label="Моя зміна">
+        <Link className="today-dashboard-row-v2 today-dashboard-zone-row-v2" to="/duties">
+          <span className="today-dashboard-row-icon-v2" aria-hidden="true"><MapPinned size={20} /></span>
+          <span className="today-dashboard-row-copy-v2">
+            <strong>Моя зона</strong>
+            <small>{zoneLabel}</small>
+          </span>
+          <ChevronRight className="today-dashboard-row-chevron-v2" size={19} aria-hidden="true" />
+        </Link>
+
+        <div className="today-dashboard-row-v2 today-dashboard-duty-row-v2">
+          {firstTask ? (
+            <button
+              type="button"
+              className={`today-dashboard-task-toggle-v2 status-${firstTask.status}`}
+              onClick={() => void toggleTask(firstTask)}
+              disabled={savingId === firstTask.id}
+              aria-label={firstTask.status === 'done' ? 'Позначити обов’язок невиконаним' : 'Позначити обов’язок виконаним'}
+            >
+              {savingId === firstTask.id
+                ? <RefreshCw size={20} className="is-spinning" />
+                : firstTask.status === 'done'
+                  ? <CheckCircle2 size={20} />
+                  : <Circle size={20} />}
+            </button>
+          ) : (
+            <span className="today-dashboard-row-icon-v2" aria-hidden="true"><ClipboardCheck size={20} /></span>
+          )}
+          <Link className="today-dashboard-duty-link-v2" to="/duties" aria-label={`Відкрити обов’язки. Виконано ${doneCount} із ${allAssignments.length}`}>
+            <span className="today-dashboard-row-copy-v2">
+              <strong>Обов’язки</strong>
+              <small>{dutyLabel}</small>
+            </span>
+            <span className="today-dashboard-row-tail-v2" aria-hidden="true">
+              <strong>{doneCount}/{allAssignments.length}</strong>
+              <ChevronRight size={19} />
+            </span>
+          </Link>
+        </div>
+
+        <Link className="today-dashboard-row-v2 today-dashboard-team-row-v2" to="/schedule">
+          <span className="today-dashboard-row-icon-v2" aria-hidden="true"><UsersRound size={20} /></span>
+          <span className="today-dashboard-row-copy-v2">
+            <strong>Команда сьогодні</strong>
+            <small>{teamLoading ? 'Завантажуємо команду…' : teamError ? 'Не вдалося завантажити команду' : `${workingTeam.length} ${workingTeam.length === 1 ? 'працівник' : 'працівників'} у зміні`}</small>
+          </span>
+          {!teamLoading && workingTeam.length ? (
+            <span className="today-dashboard-avatars-v2" role="img" aria-label={`${workingTeam.length} працівників`}>
+              {workingTeam.slice(0, 4).map((staff) => (
+                <span key={staff.id} className="today-dashboard-avatar-v2">
+                  {staff.avatar ? <img src={staff.avatar} alt="" loading="lazy" /> : initials(staff.name)}
+                </span>
+              ))}
+              {workingTeam.length > 4 ? <span className="today-dashboard-avatar-v2 is-more">+{workingTeam.length - 4}</span> : null}
+            </span>
+          ) : null}
+          <ChevronRight className="today-dashboard-row-chevron-v2" size={19} aria-hidden="true" />
+        </Link>
+      </section>
     );
   }
 
