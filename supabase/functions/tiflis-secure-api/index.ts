@@ -313,13 +313,18 @@ Deno.serve(async (req: Request) => {
       const leaderboardPeriod = ["first", "second", "month", "year"].includes(rawLeaderboardPeriod)
         ? rawLeaderboardPeriod
         : "first";
-      const [yearText = "", monthText = ""] = range.month.split("-");
+      const [yearText = ""] = range.month.split("-");
       const selectedYear = Number(yearText);
-      const selectedMonth = Number(monthText);
-      const monthLastDay = new Date(Date.UTC(selectedYear, selectedMonth, 0)).getUTCDate();
-      const isoForDay = (day: number) => `${range.month}-${String(day).padStart(2, "0")}`;
-      const leaderboardStart = leaderboardPeriod === "year" ? `${selectedYear}-01-01` : range.start;
-      const leaderboardEnd = leaderboardPeriod === "year" ? `${selectedYear + 1}-01-01` : range.end;
+      const leaderboardStart = leaderboardPeriod === "year"
+        ? `${selectedYear}-01-01`
+        : leaderboardPeriod === "second"
+          ? `${range.month}-15`
+          : range.start;
+      const leaderboardEnd = leaderboardPeriod === "year"
+        ? `${selectedYear + 1}-01-01`
+        : leaderboardPeriod === "first"
+          ? `${range.month}-15`
+          : range.end;
 
       const usersResult = await serviceClient
         .from("users")
@@ -335,72 +340,92 @@ Deno.serve(async (req: Request) => {
       const requestedStaff = allUsers.find((staff) => staff.id === requestedUserId);
       const viewStaff = isAdmin(profile) && requestedStaff ? requestedStaff : currentStaff;
 
-      const [cashResult, extrasResult, leaderboardCashResult, leaderboardExtrasResult, ratingsResult, commentsResult] = await Promise.all([
+      const [cashResult, extrasResult, leaderboardCashResult, ratingsResult, commentsResult] = await Promise.all([
         serviceClient.from("cash").select("id,user_id,date,cash,tips,first_cash").eq("user_id", viewStaff.id).gte("date", range.start).lt("date", range.end).order("date", { ascending: true }),
         serviceClient.from("extra_wages").select("id,user_id,date,amount,description").eq("user_id", viewStaff.id).gte("date", range.start).lt("date", range.end).order("date", { ascending: true }),
         serviceClient.from("cash").select("id,user_id,date,cash,tips,first_cash").gte("date", leaderboardStart).lt("date", leaderboardEnd).order("date", { ascending: true }),
-        serviceClient.from("extra_wages").select("id,user_id,date,amount,description").gte("date", leaderboardStart).lt("date", leaderboardEnd).order("date", { ascending: true }),
         serviceClient.from("ratings").select("user_id,score"),
         serviceClient.from("rating_comments").select("id,user_id,author,delta,comment,text,created_at").order("created_at", { ascending: false }).limit(200),
       ]);
       if (cashResult.error) throw cashResult.error;
       if (extrasResult.error) throw extrasResult.error;
       if (leaderboardCashResult.error) throw leaderboardCashResult.error;
-      if (leaderboardExtrasResult.error) throw leaderboardExtrasResult.error;
       if (ratingsResult.error) throw ratingsResult.error;
       if (commentsResult.error) throw commentsResult.error;
 
       const cashRows = (cashResult.data ?? []) as CashRow[];
       const leaderboardCashRows = (leaderboardCashResult.data ?? []) as CashRow[];
-      const leaderboardExtraRows = (leaderboardExtrasResult.data ?? []) as ExtraWageRow[];
       const cashStaff = allUsers.filter(isCashStaff);
       const selectorUsers = isAdmin(profile)
         ? [...new Map([...cashStaff, currentStaff].map((staff) => [staff.id, staff])).values()]
         : [currentStaff];
-
-      const includeCashDate = (date: string): boolean => {
-        if (leaderboardPeriod === "first") return date >= isoForDay(1) && date <= isoForDay(Math.min(14, monthLastDay));
-        if (leaderboardPeriod === "second") return date >= isoForDay(Math.min(15, monthLastDay)) && date < range.end;
-        return true;
-      };
-      const includeBaseDate = (date: string): boolean => {
-        if (leaderboardPeriod === "first") return date >= isoForDay(1) && date <= isoForDay(Math.min(15, monthLastDay));
-        if (leaderboardPeriod === "second") return date >= isoForDay(Math.min(16, monthLastDay)) && date < range.end;
-        return true;
-      };
-      const includeExtraDate = includeBaseDate;
-
-      const totals = cashStaff.map((staff) => {
-        const staffCashRows = leaderboardCashRows.filter((row) => row.user_id === staff.id);
-        const cashForPercent = staffCashRows
-          .filter((row) => includeCashDate(row.date))
-          .reduce((sum, row) => sum + numberOf(row.first_cash ?? row.cash), 0);
-        const workDays = staffCashRows.filter((row) => {
-          return includeBaseDate(row.date) && (numberOf(row.cash) > 0 || numberOf(row.tips) > 0);
-        }).length;
-        const extras = leaderboardExtraRows
-          .filter((row) => row.user_id === staff.id && includeExtraDate(row.date))
-          .reduce((sum, row) => sum + numberOf(row.amount), 0);
-        return { staff, total: cashForPercent * 0.04 + workDays * 200 + extras };
-      }).sort((left, right) => right.total - left.total || (left.staff.display_name || left.staff.login).localeCompare(right.staff.display_name || right.staff.login, "uk"));
-      const maxTotal = totals[0]?.total || 0;
       const adminView = isAdmin(profile);
-      const leaderboard = totals.map(({ staff, total }, index) => {
-        const mine = staff.id === profile.legacy_user_id;
+      const cashStaffIds = new Set(cashStaff.map((staff) => staff.id));
+      const staffName = (staff: LegacyStaff) => staff.display_name || staff.login;
+      const rankedCashValue = (row: CashRow) => Math.max(0, numberOf(row.first_cash ?? row.cash));
+      const relativeValue = (total: number, maxTotal: number, mine: boolean): number => {
         const exactRelative = maxTotal > 0 ? Math.round((total / maxTotal) * 1000) / 10 : 0;
-        const relative = adminView || mine
+        return adminView || mine
           ? exactRelative
           : Math.max(0, Math.min(100, Math.round(exactRelative / 5) * 5));
+      };
+
+      const rowsByDate = new Map<string, CashRow[]>();
+      for (const row of leaderboardCashRows) {
+        if (!row.user_id || !cashStaffIds.has(row.user_id) || rankedCashValue(row) <= 0) continue;
+        const rows = rowsByDate.get(row.date) ?? [];
+        rows.push(row);
+        rowsByDate.set(row.date, rows);
+      }
+
+      const activityDates = [...rowsByDate.keys()].sort();
+      const visibleTimelineDates = new Set(activityDates.slice(-31));
+      const cumulativeTotals = new Map<string, number>();
+      const timelineByUser = new Map<string, Record<string, { rank: number; progress: number }>>();
+
+      for (const date of activityDates) {
+        for (const row of rowsByDate.get(date) ?? []) {
+          const userId = row.user_id;
+          if (!userId) continue;
+          cumulativeTotals.set(userId, (cumulativeTotals.get(userId) ?? 0) + rankedCashValue(row));
+        }
+
+        if (!visibleTimelineDates.has(date)) continue;
+        const snapshot = cashStaff
+          .map((staff) => ({ staff, total: cumulativeTotals.get(staff.id) ?? 0 }))
+          .filter(({ total }) => total > 0)
+          .sort((left, right) => right.total - left.total || staffName(left.staff).localeCompare(staffName(right.staff), "uk"));
+        const snapshotMax = snapshot[0]?.total ?? 0;
+
+        snapshot.forEach(({ staff, total }, index) => {
+          const mine = staff.id === profile.legacy_user_id;
+          const timeline = timelineByUser.get(staff.id) ?? {};
+          timeline[date] = {
+            rank: index + 1,
+            progress: relativeValue(total, snapshotMax, mine),
+          };
+          timelineByUser.set(staff.id, timeline);
+        });
+      }
+
+      const totals = cashStaff
+        .map((staff) => ({ staff, total: cumulativeTotals.get(staff.id) ?? 0 }))
+        .filter(({ total }) => total > 0)
+        .sort((left, right) => right.total - left.total || staffName(left.staff).localeCompare(staffName(right.staff), "uk"));
+      const maxTotal = totals[0]?.total || 0;
+      const leaderboard = totals.map(({ staff, total }, index) => {
+        const mine = staff.id === profile.legacy_user_id;
         return {
           userId: staff.id,
-          name: staff.display_name || staff.login,
+          name: staffName(staff),
           rank: index + 1,
           total: adminView || mine ? Math.round(total * 100) / 100 : null,
-          relative,
+          relative: relativeValue(total, maxTotal, mine),
           mine,
           avatar: staff.avatar,
           role: normalizeRole(staff.role),
           role2: staff.role2 ? normalizeRole(staff.role2) : null,
+          timeline: timelineByUser.get(staff.id) ?? {},
         };
       });
 
