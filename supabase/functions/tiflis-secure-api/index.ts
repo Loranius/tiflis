@@ -10,7 +10,7 @@ const MAX_TEXT_LENGTH = 3500;
 const TELEGRAM_ACTIONS = new Set(["send_personal", "broadcast"]);
 const SCHEDULE_ACTIONS = new Set(["schedule_bootstrap", "schedule_upsert"]);
 const CASH_ACTIONS = new Set(["cash_bootstrap", "cash_save_day", "cash_delete_day", "rating_update"]);
-const RECORDS_ACTIONS = new Set(["records_bootstrap", "records_save_manual", "records_delete_manual"]);
+const RECORDS_ACTIONS = new Set(["records_bootstrap", "records_leaderboard_get", "records_save_manual", "records_delete_manual"]);
 const ALLOWED_SHIFT_CODES = new Set(["", "Р", "Х", "О", "СН", "Б", "С", "Р/Б", "СН/Б", "Д"]);
 const OWN_SCHEDULE_ROLES = new Set(["waiter", "bar", "barman", "bartender", "cook", "chef", "hostess"]);
 const CASH_ROLES = new Set(["waiter", "bar", "barman", "bartender"]);
@@ -90,16 +90,19 @@ type RatingCommentRow = {
 };
 
 type RecordCashRow = {
+  user_id?: string | null;
   date: string;
   cash: number | string | null;
 };
 
 type RecordScheduleRow = {
+  user_id?: string | null;
   date: string;
   shift: string | null;
 };
 
 type ManualRecordRow = {
+  user_id?: string | null;
   category: string;
   value: number | string;
   achieved_on: string;
@@ -110,6 +113,16 @@ type PeriodRecord = {
   value: number;
   month: string | null;
   half?: "first" | "second" | null;
+};
+
+type LeaderboardCandidate = {
+  userId: string;
+  name: string;
+  avatar: string | null;
+  value: number;
+  month?: string | null;
+  half?: "first" | "second" | null;
+  achievedOn?: string | null;
 };
 
 function corsHeaders(req: Request): HeadersInit {
@@ -286,6 +299,43 @@ function deriveAutomaticRecords(cashRows: RecordCashRow[], scheduleRows: RecordS
     largestHalfCash: bestPeriod(halfCash, true),
     largestMonthShifts: bestPeriod(monthlyShifts, false),
     largestHalfShifts: bestPeriod(halfShifts, true),
+  };
+}
+
+function groupRecordRows<T extends { user_id?: string | null }>(rows: T[]): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    if (!row.user_id) continue;
+    const current = grouped.get(row.user_id) ?? [];
+    current.push(row);
+    grouped.set(row.user_id, current);
+  }
+  return grouped;
+}
+
+function leaderboardTieKey(candidate: LeaderboardCandidate): string {
+  if (candidate.achievedOn) return candidate.achievedOn;
+  if (!candidate.month) return "";
+  return `${candidate.month}:${candidate.half === "second" ? "2" : candidate.half === "first" ? "1" : "0"}`;
+}
+
+function buildRecordLeaderboard(candidates: LeaderboardCandidate[], comparisonUserId: string | null) {
+  const ranked = candidates
+    .filter((candidate) => candidate.value > 0)
+    .sort((left, right) => {
+      const valueDifference = right.value - left.value;
+      if (valueDifference !== 0) return valueDifference;
+      const periodDifference = leaderboardTieKey(right).localeCompare(leaderboardTieKey(left));
+      if (periodDifference !== 0) return periodDifference;
+      return left.name.localeCompare(right.name, "uk");
+    })
+    .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
+
+  return {
+    top: ranked.slice(0, 5),
+    comparison: comparisonUserId
+      ? ranked.find((candidate) => candidate.userId === comparisonUserId) ?? null
+      : null,
   };
 }
 
@@ -520,6 +570,109 @@ Deno.serve(async (req: Request) => {
         })),
         automatic: deriveAutomaticRecords(cashRows, scheduleRows),
         manual: manualRecords,
+      });
+    }
+
+    if (action === "records_leaderboard_get") {
+      if (!canUseRecords(profile)) return json(req, { ok: false, error: "Records access denied" }, 403);
+
+      const usersResult = await serviceClient
+        .from("users")
+        .select("id,login,display_name,role,role2,avatar,fired")
+        .or("fired.is.null,fired.eq.false")
+        .order("display_name", { ascending: true });
+      if (usersResult.error) throw usersResult.error;
+
+      const allUsers = (usersResult.data ?? []) as LegacyStaff[];
+      const recordsStaff = allUsers.filter(isRecordsStaff);
+      const currentStaff = allUsers.find((staff) => staff.id === profile.legacy_user_id);
+      if (!currentStaff) return json(req, { ok: false, error: "Staff member not found" }, 404);
+      if (recordsStaff.length === 0) return json(req, { ok: false, error: "No active waiters found" }, 404);
+
+      const requestedUserId = typeof body.user_id === "string" ? body.user_id.trim().slice(0, 120) : "";
+      const requestedStaff = recordsStaff.find((staff) => staff.id === requestedUserId);
+      const comparisonStaff = isAdmin(profile)
+        ? requestedStaff ?? recordsStaff[0]
+        : isRecordsStaff(currentStaff) ? currentStaff : undefined;
+      if (!comparisonStaff) return json(req, { ok: false, error: "Waiter profile not found" }, 404);
+
+      const waiterIds = recordsStaff.map((staff) => staff.id);
+      const [cashRows, scheduleRows, manualResult] = await Promise.all([
+        loadAllPages<RecordCashRow>((from, to) => serviceClient
+          .from("cash")
+          .select("user_id,date,cash")
+          .in("user_id", waiterIds)
+          .order("user_id", { ascending: true })
+          .order("date", { ascending: true })
+          .range(from, to)),
+        loadAllPages<RecordScheduleRow>((from, to) => serviceClient
+          .from("schedule")
+          .select("user_id,date,shift")
+          .in("user_id", waiterIds)
+          .order("user_id", { ascending: true })
+          .order("date", { ascending: true })
+          .range(from, to)),
+        serviceClient
+          .from("staff_records")
+          .select("user_id,category,value,achieved_on,updated_at")
+          .in("user_id", waiterIds),
+      ]);
+      if (manualResult.error) throw manualResult.error;
+
+      const cashByUser = groupRecordRows(cashRows);
+      const scheduleByUser = groupRecordRows(scheduleRows);
+      const manualByUser = groupRecordRows((manualResult.data ?? []) as ManualRecordRow[]);
+      const candidates = {
+        largestMonthCash: [] as LeaderboardCandidate[],
+        largestHalfCash: [] as LeaderboardCandidate[],
+        largestTip: [] as LeaderboardCandidate[],
+        platesAtOnce: [] as LeaderboardCandidate[],
+        tablesAtOnce: [] as LeaderboardCandidate[],
+        largestMonthShifts: [] as LeaderboardCandidate[],
+        largestHalfShifts: [] as LeaderboardCandidate[],
+      };
+
+      for (const staff of recordsStaff) {
+        const identity = {
+          userId: staff.id,
+          name: staff.display_name || staff.login,
+          avatar: staff.avatar,
+        };
+        const automatic = deriveAutomaticRecords(
+          cashByUser.get(staff.id) ?? [],
+          scheduleByUser.get(staff.id) ?? [],
+        );
+        candidates.largestMonthCash.push({ ...identity, ...automatic.largestMonthCash });
+        candidates.largestHalfCash.push({ ...identity, ...automatic.largestHalfCash });
+        candidates.largestMonthShifts.push({ ...identity, ...automatic.largestMonthShifts });
+        candidates.largestHalfShifts.push({ ...identity, ...automatic.largestHalfShifts });
+
+        for (const record of manualByUser.get(staff.id) ?? []) {
+          const candidate = {
+            ...identity,
+            value: numberOf(record.value),
+            achievedOn: record.achieved_on,
+          };
+          if (record.category === "largest_tip") candidates.largestTip.push(candidate);
+          if (record.category === "plates_at_once") candidates.platesAtOnce.push(candidate);
+          if (record.category === "tables_at_once") candidates.tablesAtOnce.push(candidate);
+        }
+      }
+
+      const comparisonUserId = comparisonStaff.id;
+      return json(req, {
+        ok: true,
+        comparisonUserId,
+        waiterCount: recordsStaff.length,
+        leaderboards: {
+          largestMonthCash: buildRecordLeaderboard(candidates.largestMonthCash, comparisonUserId),
+          largestHalfCash: buildRecordLeaderboard(candidates.largestHalfCash, comparisonUserId),
+          largestTip: buildRecordLeaderboard(candidates.largestTip, comparisonUserId),
+          platesAtOnce: buildRecordLeaderboard(candidates.platesAtOnce, comparisonUserId),
+          tablesAtOnce: buildRecordLeaderboard(candidates.tablesAtOnce, comparisonUserId),
+          largestMonthShifts: buildRecordLeaderboard(candidates.largestMonthShifts, comparisonUserId),
+          largestHalfShifts: buildRecordLeaderboard(candidates.largestHalfShifts, comparisonUserId),
+        },
       });
     }
 
