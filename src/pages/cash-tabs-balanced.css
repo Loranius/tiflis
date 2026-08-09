@@ -1,0 +1,21 @@
+/* The cash page has exactly two views, so both tab targets stay equal. */
+.cash-tabs-v2.cash-tabs-two-v4 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  overflow-x: hidden !important;
+}
+
+.cash-tabs-v2.cash-tabs-two-v4 > button {
+  width: 100%;
+  min-width: 0 !important;
+  min-height: 44px;
+  padding-inline: 14px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .cash-tabs-v2.cash-tabs-two-v4 > button {
+    min-height: 44px !important;
+    padding-inline: 11px;
+  }
+}

@@ -19,6 +19,7 @@ import { CashLeaderboard } from '../components/CashLeaderboard';
 import { secureApi } from '../lib/secureApi';
 import './cash.css';
 import './cash-practical.css';
+import './cash-tabs-balanced.css';
 import './cash-identity.css';
 
 type CashTab = 'overview' | 'leaderboard';
