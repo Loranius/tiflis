@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Settings,
   Soup,
+  Trophy,
   Users,
   X,
   type LucideIcon,
@@ -30,6 +31,7 @@ const icons: Record<PageKey, LucideIcon> = {
   today: Home,
   schedule: CalendarDays,
   cash: Banknote,
+  records: Trophy,
   menu: Soup,
   reserve: ClipboardList,
   staff: Users,
@@ -56,6 +58,7 @@ const legacyDesktopOrder: PageKey[] = [
   'today',
   'schedule',
   'cash',
+  'records',
   'staff',
   'menu',
   'reserve',
@@ -64,7 +67,7 @@ const legacyDesktopOrder: PageKey[] = [
   'admin',
 ];
 
-const preferredWarmOrder: PageKey[] = ['schedule', 'cash', 'menu', 'reserve', 'duties', 'handover', 'staff', 'admin'];
+const preferredWarmOrder: PageKey[] = ['schedule', 'cash', 'records', 'menu', 'reserve', 'duties', 'handover', 'staff', 'admin'];
 
 type NavigatorWithConnection = Navigator & {
   connection?: {

@@ -11,6 +11,7 @@ import {
   loadHandoverPage,
   loadLoginPage,
   loadMenuPage,
+  loadRecordsPage,
   loadReservePage,
   loadSchedulePage,
   loadStaffPage,
@@ -20,6 +21,7 @@ const LoginPage = lazy(() => loadLoginPage().then((module) => ({ default: module
 const DashboardPage = lazy(() => loadDashboardPage().then((module) => ({ default: module.DashboardPage })));
 const SchedulePage = lazy(() => loadSchedulePage().then((module) => ({ default: module.SchedulePage })));
 const CashPage = lazy(() => loadCashPage().then((module) => ({ default: module.CashPage })));
+const RecordsPage = lazy(() => loadRecordsPage().then((module) => ({ default: module.RecordsPage })));
 const MenuPage = lazy(() => loadMenuPage().then((module) => ({ default: module.MenuPage })));
 const ReservePage = lazy(() => loadReservePage().then((module) => ({ default: module.ReservePage })));
 const StaffPage = lazy(() => loadStaffPage().then((module) => ({ default: module.StaffPage })));
@@ -103,6 +105,7 @@ export default function App() {
           <Route path="/today" element={<ProtectedPage page="today"><DashboardPage /></ProtectedPage>} />
           <Route path="/schedule" element={<ProtectedPage page="schedule"><SchedulePage /></ProtectedPage>} />
           <Route path="/cash" element={<ProtectedPage page="cash"><CashPage /></ProtectedPage>} />
+          <Route path="/records" element={<ProtectedPage page="records"><RecordsPage /></ProtectedPage>} />
           <Route path="/menu" element={<ProtectedPage page="menu"><MenuPage /></ProtectedPage>} />
           <Route path="/reserve" element={<ProtectedPage page="reserve"><ReservePage /></ProtectedPage>} />
           <Route path="/staff" element={<ProtectedPage page="staff"><StaffPage /></ProtectedPage>} />

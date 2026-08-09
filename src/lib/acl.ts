@@ -1,6 +1,6 @@
 import type { StaffRole, StaffUser } from '../types';
 
-export type PageKey = 'today' | 'schedule' | 'cash' | 'menu' | 'reserve' | 'staff' | 'duties' | 'handover' | 'admin';
+export type PageKey = 'today' | 'schedule' | 'cash' | 'records' | 'menu' | 'reserve' | 'staff' | 'duties' | 'handover' | 'admin';
 export type ActionKey =
   | 'editSchedule'
   | 'editOwnShift'
@@ -30,6 +30,12 @@ export const pages: Record<PageKey, PageAccess> = {
     title: 'Каса',
     shortTitle: 'Каса',
     roles: ['sysadmin', 'admin', 'waiter', 'bar'],
+  },
+  records: {
+    path: '/records',
+    title: 'Рекорди',
+    shortTitle: 'Рекорди',
+    roles: ['sysadmin', 'admin', 'waiter'],
   },
   menu: {
     path: '/menu',
