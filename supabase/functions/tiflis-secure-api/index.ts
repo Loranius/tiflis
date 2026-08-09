@@ -10,10 +10,15 @@ const MAX_TEXT_LENGTH = 3500;
 const TELEGRAM_ACTIONS = new Set(["send_personal", "broadcast"]);
 const SCHEDULE_ACTIONS = new Set(["schedule_bootstrap", "schedule_upsert"]);
 const CASH_ACTIONS = new Set(["cash_bootstrap", "cash_save_day", "cash_delete_day", "rating_update"]);
+const RECORDS_ACTIONS = new Set(["records_bootstrap", "records_save_manual", "records_delete_manual"]);
 const ALLOWED_SHIFT_CODES = new Set(["", "Р", "Х", "О", "СН", "Б", "С", "Р/Б", "СН/Б", "Д"]);
 const OWN_SCHEDULE_ROLES = new Set(["waiter", "bar", "barman", "bartender", "cook", "chef", "hostess"]);
 const CASH_ROLES = new Set(["waiter", "bar", "barman", "bartender"]);
 const RATING_ROLES = new Set(["waiter", "bar", "barman", "bartender", "hostess"]);
+const RECORD_ROLES = new Set(["waiter"]);
+const MANUAL_RECORD_CATEGORIES = new Set(["largest_tip", "plates_at_once", "tables_at_once"]);
+const NON_WORK_SHIFT_CODES = new Set(["", "Х", "О"]);
+const HISTORY_PAGE_SIZE = 1000;
 
 const WAITER_SHIFT_TYPES = [
   { code: "", label: "Не призначено", tone: "neutral" },
@@ -84,6 +89,29 @@ type RatingCommentRow = {
   created_at: string | null;
 };
 
+type RecordCashRow = {
+  date: string;
+  cash: number | string | null;
+};
+
+type RecordScheduleRow = {
+  date: string;
+  shift: string | null;
+};
+
+type ManualRecordRow = {
+  category: string;
+  value: number | string;
+  achieved_on: string;
+  updated_at: string;
+};
+
+type PeriodRecord = {
+  value: number;
+  month: string | null;
+  half?: "first" | "second" | null;
+};
+
 function corsHeaders(req: Request): HeadersInit {
   const origin = req.headers.get("origin") ?? "";
   if (!origin || (ALLOWED_ORIGINS.size && !ALLOWED_ORIGINS.has(origin))) return {};
@@ -149,6 +177,14 @@ function isRatingStaff(staff: LegacyStaff): boolean {
   return staffRoles(staff).some((role) => RATING_ROLES.has(role));
 }
 
+function isRecordsStaff(staff: LegacyStaff): boolean {
+  return staffRoles(staff).some((role) => RECORD_ROLES.has(role));
+}
+
+function canUseRecords(profile: StaffProfile): boolean {
+  return profile.active && (isAdmin(profile) || profileRoles(profile).some((role) => RECORD_ROLES.has(role)));
+}
+
 function cleanText(value: unknown, maxLength = MAX_TEXT_LENGTH): string {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
@@ -163,6 +199,108 @@ function parseMoney(value: unknown, max: number): number | null {
   const parsed = normalized === "" || normalized === null || normalized === undefined ? 0 : Number(normalized);
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > max) return null;
   return Math.round(parsed * 100) / 100;
+}
+
+function parseManualRecordValue(category: string, value: unknown): number | null {
+  const normalized = typeof value === "string" ? value.replace(",", ".").trim() : value;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  if (category === "largest_tip") {
+    return parsed <= 1_000_000 ? Math.round(parsed * 100) / 100 : null;
+  }
+  return Number.isInteger(parsed) && parsed <= 200 ? parsed : null;
+}
+
+function addPeriodTotal(totals: Map<string, number>, key: string, value: number) {
+  totals.set(key, (totals.get(key) ?? 0) + value);
+}
+
+function bestPeriod(totals: Map<string, number>, withHalf: boolean): PeriodRecord {
+  let bestKey: string | null = null;
+  let bestValue = 0;
+  for (const [key, value] of totals) {
+    if (value > bestValue || (value === bestValue && bestKey !== null && key > bestKey)) {
+      bestKey = key;
+      bestValue = value;
+    }
+  }
+
+  if (!bestKey) {
+    return withHalf
+      ? { value: 0, month: null, half: null }
+      : { value: 0, month: null };
+  }
+
+  const [month = bestKey, half] = bestKey.split(":");
+  return withHalf
+    ? {
+      value: Math.round(bestValue * 100) / 100,
+      month,
+      half: half === "second" ? "second" : "first",
+    }
+    : { value: Math.round(bestValue * 100) / 100, month };
+}
+
+function kyivDateKey(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Kyiv",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+  return `${year}-${month}-${day}`;
+}
+
+function deriveAutomaticRecords(cashRows: RecordCashRow[], scheduleRows: RecordScheduleRow[]) {
+  const today = kyivDateKey();
+  const monthlyCash = new Map<string, number>();
+  const halfCash = new Map<string, number>();
+  for (const row of cashRows) {
+    const amount = Math.max(0, numberOf(row.cash));
+    if (amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(row.date) || row.date > today) continue;
+    const month = row.date.slice(0, 7);
+    const day = Number(row.date.slice(8, 10));
+    const half = day <= 14 ? "first" : "second";
+    addPeriodTotal(monthlyCash, month, amount);
+    addPeriodTotal(halfCash, `${month}:${half}`, amount);
+  }
+
+  const monthlyShifts = new Map<string, number>();
+  const halfShifts = new Map<string, number>();
+  for (const row of scheduleRows) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date) || row.date > today) continue;
+    const shift = canonicalShift(row.shift);
+    if (NON_WORK_SHIFT_CODES.has(shift)) continue;
+    const month = row.date.slice(0, 7);
+    const day = Number(row.date.slice(8, 10));
+    const half = day <= 14 ? "first" : "second";
+    addPeriodTotal(monthlyShifts, month, 1);
+    addPeriodTotal(halfShifts, `${month}:${half}`, 1);
+  }
+
+  return {
+    largestMonthCash: bestPeriod(monthlyCash, false),
+    largestHalfCash: bestPeriod(halfCash, true),
+    largestMonthShifts: bestPeriod(monthlyShifts, false),
+    largestHalfShifts: bestPeriod(halfShifts, true),
+  };
+}
+
+async function loadAllPages<T>(
+  loadPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += HISTORY_PAGE_SIZE) {
+    const result = await loadPage(from, from + HISTORY_PAGE_SIZE - 1);
+    if (result.error) throw result.error;
+    const page = result.data ?? [];
+    rows.push(...page);
+    if (page.length < HISTORY_PAGE_SIZE) break;
+  }
+  return rows;
 }
 
 function parseMonth(value: unknown): { month: string; start: string; end: string } | null {
@@ -236,7 +374,12 @@ Deno.serve(async (req: Request) => {
   }
 
   const action = typeof body.action === "string" ? body.action : "";
-  if (!TELEGRAM_ACTIONS.has(action) && !SCHEDULE_ACTIONS.has(action) && !CASH_ACTIONS.has(action)) {
+  if (
+    !TELEGRAM_ACTIONS.has(action)
+    && !SCHEDULE_ACTIONS.has(action)
+    && !CASH_ACTIONS.has(action)
+    && !RECORDS_ACTIONS.has(action)
+  ) {
     return json(req, { ok: false, error: "Unsupported action" }, 400);
   }
 
@@ -271,7 +414,11 @@ Deno.serve(async (req: Request) => {
         const role = normalizeRole(String(item.key).replace(/^schedule_order_/, ""));
         orders[role] = [...new Set([...(orders[role] ?? []), ...parseOrder(item.value)])];
       }
-      const entries = (scheduleResult.data ?? []).map((entry) => ({ ...entry, shift: canonicalShift(entry.shift) }));
+      const entries = (scheduleResult.data ?? []).map((entry: {
+        user_id: string | null;
+        date: string;
+        shift: string | null;
+      }) => ({ ...entry, shift: canonicalShift(entry.shift) }));
       return json(req, {
         ok: true,
         month: range.month,
@@ -302,6 +449,124 @@ Deno.serve(async (req: Request) => {
         if (error) throw error;
       }
       return json(req, { ok: true, saved: { user_id: targetUserId, date, shift } });
+    }
+
+    if (action === "records_bootstrap") {
+      if (!canUseRecords(profile)) return json(req, { ok: false, error: "Records access denied" }, 403);
+
+      const usersResult = await serviceClient
+        .from("users")
+        .select("id,login,display_name,role,role2,avatar,fired")
+        .or("fired.is.null,fired.eq.false")
+        .order("display_name", { ascending: true });
+      if (usersResult.error) throw usersResult.error;
+
+      const allUsers = (usersResult.data ?? []) as LegacyStaff[];
+      const recordsStaff = allUsers.filter(isRecordsStaff);
+      const currentStaff = allUsers.find((staff) => staff.id === profile.legacy_user_id);
+      if (!currentStaff) return json(req, { ok: false, error: "Staff member not found" }, 404);
+
+      const requestedUserId = typeof body.user_id === "string" ? body.user_id.trim().slice(0, 120) : "";
+      const requestedStaff = recordsStaff.find((staff) => staff.id === requestedUserId);
+      const viewStaff = isAdmin(profile)
+        ? requestedStaff ?? recordsStaff[0]
+        : isRecordsStaff(currentStaff) ? currentStaff : undefined;
+      if (!viewStaff) return json(req, { ok: false, error: "Waiter profile not found" }, 404);
+
+      const [cashRows, scheduleRows, manualResult] = await Promise.all([
+        loadAllPages<RecordCashRow>((from, to) => serviceClient
+          .from("cash")
+          .select("date,cash")
+          .eq("user_id", viewStaff.id)
+          .order("date", { ascending: true })
+          .range(from, to)),
+        loadAllPages<RecordScheduleRow>((from, to) => serviceClient
+          .from("schedule")
+          .select("date,shift")
+          .eq("user_id", viewStaff.id)
+          .order("date", { ascending: true })
+          .range(from, to)),
+        serviceClient
+          .from("staff_records")
+          .select("category,value,achieved_on,updated_at")
+          .eq("user_id", viewStaff.id),
+      ]);
+      if (manualResult.error) throw manualResult.error;
+
+      const manualRecords = Object.fromEntries(
+        ((manualResult.data ?? []) as ManualRecordRow[]).map((record) => [
+          record.category,
+          {
+            value: numberOf(record.value),
+            achievedOn: record.achieved_on,
+            updatedAt: record.updated_at,
+          },
+        ]),
+      );
+
+      const visibleUsers = isAdmin(profile) ? recordsStaff : [viewStaff];
+      return json(req, {
+        ok: true,
+        viewUserId: viewStaff.id,
+        me: {
+          legacyUserId: profile.legacy_user_id,
+          canViewAll: isAdmin(profile),
+          canEditAll: isAdmin(profile),
+        },
+        users: visibleUsers.map((staff) => ({
+          id: staff.id,
+          name: staff.display_name || staff.login,
+          avatar: staff.avatar,
+        })),
+        automatic: deriveAutomaticRecords(cashRows, scheduleRows),
+        manual: manualRecords,
+      });
+    }
+
+    if (action === "records_save_manual" || action === "records_delete_manual") {
+      if (!canUseRecords(profile)) return json(req, { ok: false, error: "Records access denied" }, 403);
+      const targetUserId = typeof body.user_id === "string" ? body.user_id.trim().slice(0, 120) : "";
+      const category = typeof body.category === "string" ? body.category.trim() : "";
+      const ownRow = targetUserId === profile.legacy_user_id;
+      if (!targetUserId || !MANUAL_RECORD_CATEGORIES.has(category)) {
+        return json(req, { ok: false, error: "Invalid record" }, 400);
+      }
+      if (!isAdmin(profile) && !ownRow) return json(req, { ok: false, error: "Insufficient permissions" }, 403);
+
+      const { data: target, error: targetError } = await serviceClient
+        .from("users")
+        .select("id,login,display_name,role,role2,avatar,fired")
+        .eq("id", targetUserId)
+        .single();
+      if (targetError || !target || target.fired === true || !isRecordsStaff(target as LegacyStaff)) {
+        return json(req, { ok: false, error: "Waiter profile not found" }, 404);
+      }
+
+      if (action === "records_delete_manual") {
+        const { error } = await serviceClient
+          .from("staff_records")
+          .delete()
+          .eq("user_id", targetUserId)
+          .eq("category", category);
+        if (error) throw error;
+        return json(req, { ok: true });
+      }
+
+      const achievedOn = parseIsoDate(body.achieved_on);
+      const value = parseManualRecordValue(category, body.value);
+      if (!achievedOn || achievedOn > kyivDateKey() || value === null) {
+        return json(req, { ok: false, error: "Invalid record value" }, 400);
+      }
+
+      const { error } = await serviceClient.from("staff_records").upsert({
+        user_id: targetUserId,
+        category,
+        value,
+        achieved_on: achievedOn,
+        updated_by: profile.legacy_user_id,
+      }, { onConflict: "user_id,category" });
+      if (error) throw error;
+      return json(req, { ok: true });
     }
 
     if (action === "cash_bootstrap") {

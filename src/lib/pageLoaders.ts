@@ -4,6 +4,7 @@ export const loadLoginPage = () => import('../pages/LoginPage');
 export const loadDashboardPage = () => import('../pages/DashboardPage');
 export const loadSchedulePage = () => import('../pages/SchedulePage');
 export const loadCashPage = () => import('../pages/CashPage');
+export const loadRecordsPage = () => import('../pages/RecordsPage');
 export const loadMenuPage = () => import('../pages/MenuPage');
 export const loadReservePage = () => import('../pages/ReservePage');
 export const loadStaffPage = () => import('../pages/StaffPage');
@@ -15,6 +16,7 @@ const pageLoaders: Record<PageKey, () => Promise<unknown>> = {
   today: loadDashboardPage,
   schedule: loadSchedulePage,
   cash: loadCashPage,
+  records: loadRecordsPage,
   menu: loadMenuPage,
   reserve: loadReservePage,
   staff: loadStaffPage,
