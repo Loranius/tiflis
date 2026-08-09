@@ -6,12 +6,14 @@ import {
   Coins,
   Edit3,
   LayoutGrid,
+  Medal,
   Plus,
   RefreshCw,
   ShieldCheck,
   Trash2,
   Trophy,
   UtensilsCrossed,
+  UserRound,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -23,6 +25,17 @@ import './records.css';
 
 type ManualRecordCategory = 'largest_tip' | 'plates_at_once' | 'tables_at_once';
 type HalfKey = 'first' | 'second';
+type RecordsView = 'personal' | 'leaderboard';
+type LeaderboardKey =
+  | 'largestMonthCash'
+  | 'largestHalfCash'
+  | 'largestTip'
+  | 'platesAtOnce'
+  | 'tablesAtOnce'
+  | 'largestMonthShifts'
+  | 'largestHalfShifts';
+type LeaderboardValueKind = 'money' | 'plates' | 'tables' | 'shifts';
+type LeaderboardDetailKind = 'month' | 'half' | 'date';
 
 interface RecordsStaff {
   id: string;
@@ -60,6 +73,29 @@ interface RecordsBootstrapResponse {
   manual: Partial<Record<ManualRecordCategory, ManualRecord>>;
 }
 
+interface RankedRecord {
+  rank: number;
+  userId: string;
+  name: string;
+  avatar: string | null;
+  value: number;
+  month?: string | null;
+  half?: HalfKey | null;
+  achievedOn?: string | null;
+}
+
+interface RecordsLeaderboardGroup {
+  top: RankedRecord[];
+  comparison: RankedRecord | null;
+}
+
+interface RecordsLeaderboardResponse {
+  ok: true;
+  comparisonUserId: string;
+  waiterCount: number;
+  leaderboards: Record<LeaderboardKey, RecordsLeaderboardGroup>;
+}
+
 interface ManualRecordDefinition {
   title: string;
   description: string;
@@ -68,6 +104,15 @@ interface ManualRecordDefinition {
   placeholder: string;
   max: number;
   step: string;
+  icon: LucideIcon;
+}
+
+interface LeaderboardDefinition {
+  key: LeaderboardKey;
+  title: string;
+  eyebrow: string;
+  valueKind: LeaderboardValueKind;
+  detailKind: LeaderboardDetailKind;
   icon: LucideIcon;
 }
 
@@ -111,6 +156,64 @@ const MANUAL_RECORDS: Record<ManualRecordCategory, ManualRecordDefinition> = {
 };
 
 const MANUAL_ORDER = Object.keys(MANUAL_RECORDS) as ManualRecordCategory[];
+const LEADERBOARD_RECORDS: LeaderboardDefinition[] = [
+  {
+    key: 'largestMonthCash',
+    title: 'Каса за місяць',
+    eyebrow: 'Найбільша особиста каса',
+    valueKind: 'money',
+    detailKind: 'month',
+    icon: Banknote,
+  },
+  {
+    key: 'largestHalfCash',
+    title: 'Каса за півмісяця',
+    eyebrow: 'Найкраща половина місяця',
+    valueKind: 'money',
+    detailKind: 'half',
+    icon: CalendarDays,
+  },
+  {
+    key: 'largestTip',
+    title: 'Найбільші чайові',
+    eyebrow: 'Ручний рекорд',
+    valueKind: 'money',
+    detailKind: 'date',
+    icon: Coins,
+  },
+  {
+    key: 'platesAtOnce',
+    title: 'Тарілок за раз',
+    eyebrow: 'Ручний рекорд',
+    valueKind: 'plates',
+    detailKind: 'date',
+    icon: UtensilsCrossed,
+  },
+  {
+    key: 'tablesAtOnce',
+    title: 'Столиків одночасно',
+    eyebrow: 'Ручний рекорд',
+    valueKind: 'tables',
+    detailKind: 'date',
+    icon: LayoutGrid,
+  },
+  {
+    key: 'largestMonthShifts',
+    title: 'Змін за місяць',
+    eyebrow: 'Найбільша кількість змін',
+    valueKind: 'shifts',
+    detailKind: 'month',
+    icon: CalendarCheck2,
+  },
+  {
+    key: 'largestHalfShifts',
+    title: 'Змін за півмісяця',
+    eyebrow: 'Найбільша кількість змін',
+    valueKind: 'shifts',
+    detailKind: 'half',
+    icon: CalendarCheck2,
+  },
+];
 const MONTH_FORMATTER = new Intl.DateTimeFormat('uk-UA', { month: 'long', year: 'numeric' });
 const DATE_FORMATTER = new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
 const NUMBER_FORMATTER = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 });
@@ -170,13 +273,38 @@ function shiftValue(record: PeriodRecord): string {
     : '—';
 }
 
+function leaderboardValue(definition: LeaderboardDefinition, record: RankedRecord): string {
+  if (definition.valueKind === 'money') return MONEY_FORMATTER.format(record.value);
+  if (definition.valueKind === 'plates') {
+    return `${NUMBER_FORMATTER.format(record.value)} ${plural(record.value, 'тарілка', 'тарілки', 'тарілок')}`;
+  }
+  if (definition.valueKind === 'tables') {
+    return `${NUMBER_FORMATTER.format(record.value)} ${plural(record.value, 'столик', 'столики', 'столиків')}`;
+  }
+  return `${NUMBER_FORMATTER.format(record.value)} ${plural(record.value, 'зміна', 'зміни', 'змін')}`;
+}
+
+function leaderboardDetail(definition: LeaderboardDefinition, record: RankedRecord): string {
+  if (definition.detailKind === 'date') {
+    return record.achievedOn ? `Досягнуто ${dateLabel(record.achievedOn)}` : 'Дата не вказана';
+  }
+  if (definition.detailKind === 'half') {
+    return halfLabel({ value: record.value, month: record.month ?? null, half: record.half ?? null });
+  }
+  return monthLabel(record.month ?? null);
+}
+
 export function RecordsPage() {
   const { user } = useAuth();
   const today = useKyivDay();
   const requestId = useRef(0);
+  const leaderboardRequestId = useRef(0);
   const [viewUserId, setViewUserId] = useState(user?.id || '');
+  const [activeView, setActiveView] = useState<RecordsView>('personal');
   const [data, setData] = useState<RecordsBootstrapResponse | null>(null);
+  const [leaderboard, setLeaderboard] = useState<RecordsLeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
@@ -209,9 +337,47 @@ export function RecordsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const loadLeaderboard = useCallback(async (forceRefresh = false) => {
+    if (!viewUserId) return;
+    const id = ++leaderboardRequestId.current;
+    setLeaderboardLoading(true);
+    setLeaderboard(null);
+    setError(null);
+    try {
+      const response = await secureApi<RecordsLeaderboardResponse>({
+        action: 'records_leaderboard_get',
+        user_id: viewUserId,
+      }, 'tiflis-secure-api', { forceRefresh });
+      if (leaderboardRequestId.current !== id) return;
+      setLeaderboard(response);
+      if (response.comparisonUserId !== viewUserId) setViewUserId(response.comparisonUserId);
+    } catch (reason) {
+      if (leaderboardRequestId.current !== id) return;
+      setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити топ офіціантів.');
+    } finally {
+      if (leaderboardRequestId.current === id) setLeaderboardLoading(false);
+    }
+  }, [viewUserId]);
+
+  useEffect(() => {
+    if (activeView === 'leaderboard') void loadLeaderboard();
+  }, [activeView, loadLeaderboard]);
+
   const selectedStaff = useMemo(
     () => data?.users.find((staff) => staff.id === data.viewUserId) || null,
     [data],
+  );
+  const comparisonRecord = useMemo(() => {
+    if (!leaderboard) return null;
+    for (const definition of LEADERBOARD_RECORDS) {
+      const group = leaderboard.leaderboards[definition.key];
+      if (group.comparison) return group.comparison;
+    }
+    return null;
+  }, [leaderboard]);
+  const comparisonName = selectedStaff?.name || comparisonRecord?.name || 'ваш профіль';
+  const comparisonIsOwnProfile = Boolean(
+    data && leaderboard && data.me.legacyUserId === leaderboard.comparisonUserId,
   );
   const canEdit = Boolean(data && (data.me.canEditAll || data.viewUserId === data.me.legacyUserId));
 
@@ -254,6 +420,7 @@ export function RecordsPage() {
         achieved_on: editor.achievedOn,
       });
       setEditor(null);
+      setLeaderboard(null);
       await load(true);
     } catch (reason) {
       setEditorError(reason instanceof Error ? reason.message : 'Не вдалося зберегти рекорд.');
@@ -274,6 +441,7 @@ export function RecordsPage() {
         category: editor.category,
       });
       setEditor(null);
+      setLeaderboard(null);
       await load(true);
     } catch (reason) {
       setEditorError(reason instanceof Error ? reason.message : 'Не вдалося видалити рекорд.');
@@ -286,12 +454,33 @@ export function RecordsPage() {
     <div className="records-page">
       <section className="records-hero">
         <div>
-          <span className="eyebrow">Особистий прогрес</span>
+          <span className="eyebrow">Особистий прогрес і командний топ</span>
           <h2>Рекорди</h2>
-          <p>Каса та зміни рахуються автоматично за всю історію. Особисті досягнення можна додати вручну.</p>
+          <p>Переглядай власні досягнення або порівнюй результат із п’ятьма найкращими офіціантами в кожній категорії.</p>
         </div>
         <span className="records-hero-mark" aria-hidden="true"><Trophy size={34} /></span>
       </section>
+
+      <nav className="records-view-tabs" aria-label="Режим перегляду рекордів">
+        <button
+          type="button"
+          className={activeView === 'personal' ? 'is-active' : ''}
+          aria-pressed={activeView === 'personal'}
+          onClick={() => setActiveView('personal')}
+        >
+          <UserRound size={17} />
+          <span>Особисті рекорди</span>
+        </button>
+        <button
+          type="button"
+          className={activeView === 'leaderboard' ? 'is-active' : ''}
+          aria-pressed={activeView === 'leaderboard'}
+          onClick={() => setActiveView('leaderboard')}
+        >
+          <Medal size={17} />
+          <span>Топ офіціантів</span>
+        </button>
+      </nav>
 
       {error ? (
         <div className="records-alert" role="alert">
@@ -300,14 +489,21 @@ export function RecordsPage() {
         </div>
       ) : null}
 
-      {loading ? (
+      {activeView === 'personal' && loading ? (
         <div className="records-loading" aria-live="polite">
           <RefreshCw className="is-spinning" size={23} />
           <span>Збираємо рекорди з історії…</span>
         </div>
       ) : null}
 
-      {!loading && data ? (
+      {activeView === 'leaderboard' && leaderboardLoading ? (
+        <div className="records-loading" aria-live="polite">
+          <RefreshCw className="is-spinning" size={23} />
+          <span>Рахуємо місця серед усіх офіціантів…</span>
+        </div>
+      ) : null}
+
+      {activeView === 'personal' && !loading && data ? (
         <>
           <section className="records-person-bar">
             <div className="records-person">
@@ -427,6 +623,120 @@ export function RecordsPage() {
                 );
               })}
             </div>
+          </section>
+        </>
+      ) : null}
+
+      {activeView === 'leaderboard' && !leaderboardLoading && leaderboard ? (
+        <>
+          <section className="records-leaderboard-toolbar">
+            <span className="records-leaderboard-mark" aria-hidden="true"><Medal size={24} /></span>
+            <div>
+              <span className="eyebrow">Командний рейтинг</span>
+              <h3>Топ офіціантів</h3>
+              <p>
+                П’ять найкращих результатів у кожній категорії серед {leaderboard.waiterCount}{' '}
+                {plural(leaderboard.waiterCount, 'офіціанта', 'офіціантів', 'офіціантів')}.
+                Порівнюємо: <strong>{comparisonName}</strong>.
+              </p>
+            </div>
+            <div className="records-leaderboard-actions">
+              {data?.me.canViewAll ? (
+                <label>
+                  <span>Порівняти офіціанта</span>
+                  <select value={viewUserId} onChange={(event) => setViewUserId(event.target.value)}>
+                    {data.users.map((staff) => <option value={staff.id} key={staff.id}>{staff.name}</option>)}
+                  </select>
+                </label>
+              ) : null}
+              <button type="button" onClick={() => void loadLeaderboard(true)} aria-label="Оновити топ офіціантів">
+                <RefreshCw size={17} />
+                <span>Оновити топ</span>
+              </button>
+            </div>
+          </section>
+
+          <section className="records-leaderboard-grid" aria-label="Рейтинг рекордів офіціантів">
+            {LEADERBOARD_RECORDS.map((definition) => {
+              const group = leaderboard.leaderboards[definition.key];
+              const comparisonInTop = group.top.some((record) => record.userId === leaderboard.comparisonUserId);
+              const Icon = definition.icon;
+              return (
+                <article className="records-leaderboard-card" key={definition.key}>
+                  <header className="records-leaderboard-card-heading">
+                    <span aria-hidden="true"><Icon size={20} /></span>
+                    <div>
+                      <small>{definition.eyebrow}</small>
+                      <h3>{definition.title}</h3>
+                    </div>
+                    <b>Топ‑5</b>
+                  </header>
+
+                  <div className="records-ranking-list">
+                    {group.top.map((record) => {
+                      const isComparison = record.userId === leaderboard.comparisonUserId;
+                      return (
+                        <div
+                          className={`records-ranking-row rank-${Math.min(record.rank, 5)}${isComparison ? ' is-comparison' : ''}`}
+                          key={record.userId}
+                        >
+                          <span className="records-rank-number" aria-label={`Місце ${record.rank}`}>#{record.rank}</span>
+                          <span className="records-ranking-avatar" aria-hidden="true">
+                            <span>{initials(record.name)}</span>
+                            {record.avatar ? (
+                              <img
+                                src={record.avatar}
+                                alt=""
+                                onError={(event) => { event.currentTarget.hidden = true; }}
+                              />
+                            ) : null}
+                          </span>
+                          <div className="records-ranking-person">
+                            <div>
+                              <strong>{record.name}</strong>
+                              {isComparison ? (
+                                <span>{comparisonIsOwnProfile ? 'Ви' : 'Обраний'}</span>
+                              ) : null}
+                            </div>
+                            <small>{leaderboardDetail(definition, record)}</small>
+                          </div>
+                          <strong className="records-ranking-value">{leaderboardValue(definition, record)}</strong>
+                        </div>
+                      );
+                    })}
+
+                    {group.top.length === 0 ? (
+                      <div className="records-ranking-empty">
+                        <Trophy size={23} />
+                        <span>У цій категорії ще немає результатів.</span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {!comparisonInTop && group.comparison ? (
+                    <footer className="records-comparison-rank">
+                      <span>#{group.comparison.rank}</span>
+                      <div>
+                        <small>{comparisonIsOwnProfile ? 'Ваша позиція' : 'Позиція для порівняння'}</small>
+                        <strong>{group.comparison.name}</strong>
+                      </div>
+                      <b>{leaderboardValue(definition, group.comparison)}</b>
+                    </footer>
+                  ) : null}
+
+                  {!group.comparison && group.top.length > 0 ? (
+                    <footer className="records-comparison-rank is-missing">
+                      <span>—</span>
+                      <div>
+                        <small>{comparisonIsOwnProfile ? 'Ваш результат' : 'Результат для порівняння'}</small>
+                        <strong>{comparisonName}</strong>
+                      </div>
+                      <b>Ще немає даних</b>
+                    </footer>
+                  ) : null}
+                </article>
+              );
+            })}
           </section>
         </>
       ) : null}
