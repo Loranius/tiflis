@@ -21,20 +21,38 @@ const ACTIONS = new Set([
 const ADMIN_ROLES = new Set(["admin", "sysadmin"]);
 const PLAN_TYPES = new Set(["daily", "handover"]);
 const OFF_WAITER_SHIFTS = new Set(["Х", "О", "С"]);
+const DAILY_SETS_VISIBLE_KEY = "daily_sets";
+const DAILY_SETS_ALL_KEY = "daily_sets_all";
+const DAILY_SETS_HALL_KEY = "daily_sets_hall";
+const DAILY_SETS_TERRACE_KEY = "daily_sets_terrace";
+const DAILY_SETS_STORAGE_KEYS = new Set([
+  DAILY_SETS_VISIBLE_KEY,
+  DAILY_SETS_ALL_KEY,
+  DAILY_SETS_HALL_KEY,
+  DAILY_SETS_TERRACE_KEY,
+]);
 
-const DAILY_DUTIES = [
+const DAILY_VISIBLE_DUTIES = [
   { key: "daily_clean_hall", title: "Прибирання залу (парапети, підвіконня, тумби, столешні, тумба з вином, дзеркало)" },
   { key: "daily_fireplace_terrace_doors", title: "Камінний зал, двері на літню терасу" },
   { key: "daily_drinks_bread_dining", title: "Узвар, лимонад, хліб, хлібний столик, їдальня" },
   { key: "daily_refrigerators", title: "Хол. з узваром, бар, кондитерський холодильник, холодильник з морозивом, холодильник з соусами" },
   { key: "daily_tablecloths", title: "Розкладання скатерок" },
   { key: "daily_booths_storage", title: "Кабінки, комора" },
-  { key: "daily_sets", title: "Сети" },
+  { key: DAILY_SETS_VISIBLE_KEY, title: "Сети" },
   { key: "daily_drawer_third", title: "Дровер на 3-й позиції (чистота і фраже)" },
   { key: "daily_new_hall", title: "Новий зал (столи, стільці, спецовниці)" },
   { key: "daily_summer_terrace_cleaning", title: "Прибирання літньої тераси" },
   { key: "daily_evening_flower_watering", title: "Полив квітів ввечері" },
 ] as const;
+
+const DAILY_INTERNAL_DUTIES = [
+  { key: DAILY_SETS_ALL_KEY, title: "Всі сети", hidden: true },
+  { key: DAILY_SETS_HALL_KEY, title: "Сети зал", hidden: true },
+  { key: DAILY_SETS_TERRACE_KEY, title: "Сети лєтка", hidden: true },
+] as const;
+
+const DAILY_DUTIES = [...DAILY_VISIBLE_DUTIES, ...DAILY_INTERNAL_DUTIES] as const;
 
 const HANDOVER_DUTIES = [
   { key: "handover_storage_back_doors", title: "Комора, двоє дверей на чорному ході" },
@@ -163,6 +181,11 @@ function dutyDefinitions(type: PlanType) {
   return type === "daily" ? DAILY_DUTIES : HANDOVER_DUTIES;
 }
 
+function normalizeStoredDutyKey(type: PlanType, dutyKey: string): string {
+  if (type === "daily" && dutyKey === DAILY_SETS_VISIBLE_KEY) return DAILY_SETS_ALL_KEY;
+  return dutyKey;
+}
+
 function isWaiter(user: LegacyUser): boolean {
   return normalizeRole(user.role) === "waiter" || normalizeRole(user.role2) === "waiter";
 }
@@ -284,6 +307,7 @@ async function loadPlan(service: any, type: PlanType, date: string) {
     waiters,
     assignments: ((dutiesResult.data ?? []) as DutyAssignment[]).map((item) => ({
       ...item,
+      duty_key: normalizeStoredDutyKey(type, item.duty_key),
       ...enrichAssignee(item.assignee_id),
     })),
     zones: ((zonesResult.data ?? []) as ZoneAssignment[]).map((item) => ({
@@ -398,6 +422,20 @@ Deno.serve(async (req: Request) => {
         }
         seenDuties.add(dutyKey);
         assignments.push({ duty_key: dutyKey, assignee_id: assigneeId });
+      }
+
+      if (type === "daily") {
+        const setAssignments = assignments.filter((item) => DAILY_SETS_STORAGE_KEYS.has(item.duty_key));
+        const hasAllSets = setAssignments.some((item) => item.duty_key === DAILY_SETS_VISIBLE_KEY || item.duty_key === DAILY_SETS_ALL_KEY);
+        const hallSets = setAssignments.find((item) => item.duty_key === DAILY_SETS_HALL_KEY);
+        const terraceSets = setAssignments.find((item) => item.duty_key === DAILY_SETS_TERRACE_KEY);
+        const invalidSets = setAssignments.length > 2
+          || (hasAllSets && Boolean(hallSets || terraceSets))
+          || (!hasAllSets && Boolean(hallSets) !== Boolean(terraceSets))
+          || Boolean(hallSets && terraceSets && hallSets.assignee_id === terraceSets.assignee_id);
+        if (invalidSets) {
+          return json(req, { ok: false, error: "Для сетів оберіть одного офіціанта на всі сети або двох різних: «Сети зал» і «Сети лєтка»." }, 400);
+        }
       }
 
       const zones: { zone_key: string; slot: number; assignee_id: string }[] = [];

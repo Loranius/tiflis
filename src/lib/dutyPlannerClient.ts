@@ -6,6 +6,7 @@ export type DutyStatus = 'pending' | 'done';
 export interface DutyDefinition {
   key: string;
   title: string;
+  hidden?: boolean;
 }
 
 export interface ZoneDefinition {

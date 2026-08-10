@@ -46,6 +46,19 @@ interface DutyPlannerPageProps {
 type DutySelections = Record<string, string>;
 type ZoneSelections = Record<string, string[]>;
 
+const SETS_VISIBLE_KEY = 'daily_sets';
+const SETS_ALL_KEY = 'daily_sets_all';
+const SETS_HALL_KEY = 'daily_sets_hall';
+const SETS_TERRACE_KEY = 'daily_sets_terrace';
+const SETS_SECONDARY_STATE_KEY = 'daily_sets_secondary';
+const SETS_SPECIAL_KEYS = new Set([
+  SETS_VISIBLE_KEY,
+  SETS_ALL_KEY,
+  SETS_HALL_KEY,
+  SETS_TERRACE_KEY,
+  SETS_SECONDARY_STATE_KEY,
+]);
+
 function tuesdayForWeek(value: string): string {
   const date = new Date(`${value}T12:00:00`);
   const day = date.getDay();
@@ -138,10 +151,16 @@ export function DutyPlannerPage({
     const restored = readDutyPlannerDraft(ownerId, response.planType, response.date);
     if (restored) {
       const dutyMap: DutySelections = {};
-      response.definitions.forEach((definition) => {
+      response.definitions.filter((definition) => !definition.hidden).forEach((definition) => {
         const value = restored.duties[definition.key];
         if (typeof value === 'string') dutyMap[definition.key] = value;
       });
+      if (
+        response.planType === 'daily'
+        && Object.prototype.hasOwnProperty.call(restored.duties, SETS_SECONDARY_STATE_KEY)
+      ) {
+        dutyMap[SETS_SECONDARY_STATE_KEY] = restored.duties[SETS_SECONDARY_STATE_KEY] || '';
+      }
       const zoneMap: ZoneSelections = {};
       response.zones.forEach((zone) => {
         zoneMap[zone.key] = trimZoneValues(restored.zones[zone.key] || []);
@@ -154,7 +173,17 @@ export function DutyPlannerPage({
     }
 
     const dutyMap: DutySelections = {};
-    response.assignments.forEach((item) => { dutyMap[item.duty_key] = item.assignee_id; });
+    response.assignments.forEach((item) => {
+      if (item.duty_key === SETS_ALL_KEY || item.duty_key === SETS_VISIBLE_KEY) {
+        dutyMap[SETS_VISIBLE_KEY] = item.assignee_id;
+      } else if (item.duty_key === SETS_HALL_KEY) {
+        dutyMap[SETS_VISIBLE_KEY] = item.assignee_id;
+      } else if (item.duty_key === SETS_TERRACE_KEY) {
+        dutyMap[SETS_SECONDARY_STATE_KEY] = item.assignee_id;
+      } else {
+        dutyMap[item.duty_key] = item.assignee_id;
+      }
+    });
     const zoneMap: ZoneSelections = {};
     response.zones.forEach((zone) => { zoneMap[zone.key] = []; });
     response.zoneAssignments.forEach((item) => {
@@ -212,6 +241,10 @@ export function DutyPlannerPage({
     });
     return map;
   }, [data]);
+  const visibleDutyDefinitions = useMemo(
+    () => (data?.definitions || []).filter((definition) => !definition.hidden),
+    [data],
+  );
 
   const assignedDutyCount = Object.values(duties).filter(Boolean).length;
   const assignedZoneCount = Object.values(zones).flat().filter(Boolean).length;
@@ -236,6 +269,42 @@ export function DutyPlannerPage({
   function setDuty(dutyKey: string, assigneeId: string) {
     setDuties((current) => ({ ...current, [dutyKey]: assigneeId }));
     setDirty(true);
+    setNotice(null);
+  }
+
+  function setSetsPrimary(assigneeId: string) {
+    setDuties((current) => {
+      const next = { ...current, [SETS_VISIBLE_KEY]: assigneeId };
+      if (!assigneeId) delete next[SETS_SECONDARY_STATE_KEY];
+      else if (next[SETS_SECONDARY_STATE_KEY] === assigneeId) next[SETS_SECONDARY_STATE_KEY] = '';
+      return next;
+    });
+    setDirty(true);
+    setNotice(null);
+  }
+
+  function addSetsSecondary() {
+    setDuties((current) => {
+      if (!current[SETS_VISIBLE_KEY] || Object.prototype.hasOwnProperty.call(current, SETS_SECONDARY_STATE_KEY)) return current;
+      return { ...current, [SETS_SECONDARY_STATE_KEY]: '' };
+    });
+    setNotice(null);
+  }
+
+  function setSetsSecondary(assigneeId: string) {
+    setDuties((current) => ({ ...current, [SETS_SECONDARY_STATE_KEY]: assigneeId }));
+    setDirty(true);
+    setNotice(null);
+  }
+
+  function removeSetsSecondary() {
+    const hadAssignment = Boolean(duties[SETS_SECONDARY_STATE_KEY]);
+    setDuties((current) => {
+      const next = { ...current };
+      delete next[SETS_SECONDARY_STATE_KEY];
+      return next;
+    });
+    if (hadAssignment) setDirty(true);
     setNotice(null);
   }
 
@@ -277,10 +346,25 @@ export function DutyPlannerPage({
   }
 
   function draft(): DutyPlanDraft {
+    const assignments = Object.entries(duties)
+      .filter(([dutyKey, assigneeId]) => Boolean(assigneeId) && !SETS_SPECIAL_KEYS.has(dutyKey))
+      .map(([dutyKey, assigneeId]) => ({ duty_key: dutyKey, assignee_id: assigneeId }));
+
+    const setsPrimary = duties[SETS_VISIBLE_KEY] || '';
+    const setsSecondary = duties[SETS_SECONDARY_STATE_KEY] || '';
+    if (planType === 'daily' && setsPrimary) {
+      if (setsSecondary) {
+        assignments.push(
+          { duty_key: SETS_HALL_KEY, assignee_id: setsPrimary },
+          { duty_key: SETS_TERRACE_KEY, assignee_id: setsSecondary },
+        );
+      } else {
+        assignments.push({ duty_key: SETS_ALL_KEY, assignee_id: setsPrimary });
+      }
+    }
+
     return {
-      assignments: Object.entries(duties)
-        .filter(([, assigneeId]) => Boolean(assigneeId))
-        .map(([dutyKey, assigneeId]) => ({ duty_key: dutyKey, assignee_id: assigneeId })),
+      assignments,
       zones: planType === 'daily'
         ? Object.entries(zones).flatMap(([zoneKey, assignees]) => assignees
           .map((assigneeId, index) => ({ zone_key: zoneKey, slot: index + 1, assignee_id: assigneeId }))
@@ -355,6 +439,14 @@ export function DutyPlannerPage({
     return <option value={value} disabled>{saved?.assignee_name || value} · не працює цього дня</option>;
   }
 
+  function staleSetsOption(slot: 'primary' | 'secondary', value: string) {
+    if (!value || workerMap.has(value)) return null;
+    const saved = slot === 'primary'
+      ? savedAssigneeMap.get(SETS_ALL_KEY) || savedAssigneeMap.get(SETS_HALL_KEY)
+      : savedAssigneeMap.get(SETS_TERRACE_KEY);
+    return <option value={value} disabled>{saved?.assignee_name || value} · не працює цього дня</option>;
+  }
+
   function staleZoneOption(zoneKey: string, slot: number, value: string) {
     if (!value || workerMap.has(value)) return null;
     const saved = savedZoneMap.get(zoneKey)?.get(slot + 1);
@@ -408,8 +500,76 @@ export function DutyPlannerPage({
                 <table className="duty-planner-table-v1">
                   <thead><tr><th>Обов’язок</th><th>Відповідальний офіціант</th></tr></thead>
                   <tbody>
-                    {data.definitions.map((duty) => {
+                    {visibleDutyDefinitions.map((duty) => {
                       const value = duties[duty.key] || '';
+
+                      if (planType === 'daily' && duty.key === SETS_VISIBLE_KEY) {
+                        const secondaryVisible = Object.prototype.hasOwnProperty.call(duties, SETS_SECONDARY_STATE_KEY);
+                        const secondaryValue = duties[SETS_SECONDARY_STATE_KEY] || '';
+                        const splitSets = Boolean(value && secondaryValue);
+                        const primarySaved = splitSets
+                          ? savedAssigneeMap.get(SETS_HALL_KEY)
+                          : savedAssigneeMap.get(SETS_ALL_KEY) || savedAssigneeMap.get(SETS_HALL_KEY);
+                        const secondarySaved = savedAssigneeMap.get(SETS_TERRACE_KEY);
+                        const stale = Boolean(
+                          (value && !workerMap.has(value))
+                          || (secondaryValue && !workerMap.has(secondaryValue)),
+                        );
+                        const primaryWorker = workerMap.get(value);
+                        const secondaryWorker = workerMap.get(secondaryValue);
+
+                        return (
+                          <tr key={duty.key} className={stale ? 'has-stale-assignment' : ''}>
+                            <td>{duty.title}</td>
+                            <td>{data.permissions.canManage ? (
+                              <div className="duty-planner-zone-rows-v2">
+                                <span className="duty-planner-person-v1">{splitSets ? 'Сети зал' : 'Всі сети'}</span>
+                                <div className="duty-planner-zone-row-v2">
+                                  <select value={value} onChange={(event) => setSetsPrimary(event.target.value)}>
+                                    <option value="">— Не призначено —</option>
+                                    {staleSetsOption('primary', value)}
+                                    {data.workingWaiters
+                                      .filter((worker) => !secondaryValue || worker.id !== secondaryValue)
+                                      .map((worker) => <option value={worker.id} key={worker.id}>{workerLabel(worker)}</option>)}
+                                  </select>
+                                  {value && !secondaryVisible ? (
+                                    <button type="button" className="is-add" onClick={addSetsSecondary} aria-label="Додати другого офіціанта на сети"><Plus size={18} /></button>
+                                  ) : null}
+                                </div>
+                                {secondaryVisible ? (
+                                  <>
+                                    <span className="duty-planner-person-v1">Сети лєтка</span>
+                                    <div className="duty-planner-zone-row-v2">
+                                      <select value={secondaryValue} onChange={(event) => setSetsSecondary(event.target.value)}>
+                                        <option value="">— Не призначено —</option>
+                                        {staleSetsOption('secondary', secondaryValue)}
+                                        {data.workingWaiters
+                                          .filter((worker) => !value || worker.id !== value)
+                                          .map((worker) => <option value={worker.id} key={worker.id}>{workerLabel(worker)}</option>)}
+                                      </select>
+                                      <button type="button" className="is-remove" onClick={removeSetsSecondary} aria-label="Прибрати другого офіціанта з сетів"><Trash2 size={17} /></button>
+                                    </div>
+                                  </>
+                                ) : null}
+                              </div>
+                            ) : value ? (
+                              <div className="duty-planner-zone-people-v1">
+                                <span className={`duty-planner-person-v1 ${!primaryWorker ? 'is-stale' : ''}`}>
+                                  {primaryWorker?.name || primarySaved?.assignee_name || value}
+                                  <small>{splitSets ? 'Сети зал' : 'Всі сети'} · {primaryWorker?.shift || primarySaved?.assignee_shift || 'не в графіку'}</small>
+                                </span>
+                                {splitSets ? (
+                                  <span className={`duty-planner-person-v1 ${!secondaryWorker ? 'is-stale' : ''}`}>
+                                    {secondaryWorker?.name || secondarySaved?.assignee_name || secondaryValue}
+                                    <small>Сети лєтка · {secondaryWorker?.shift || secondarySaved?.assignee_shift || 'не в графіку'}</small>
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : <span className="duty-planner-empty-v1">Не призначено</span>}</td>
+                          </tr>
+                        );
+                      }
+
                       const assignment = savedAssigneeMap.get(duty.key);
                       return (
                         <tr key={duty.key} className={value && !workerMap.has(value) ? 'has-stale-assignment' : ''}>
