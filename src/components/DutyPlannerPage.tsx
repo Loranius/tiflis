@@ -274,7 +274,7 @@ export function DutyPlannerPage({
 
   function setSetsPrimary(assigneeId: string) {
     setDuties((current) => {
-      const next = { ...current, [SETS_VISIBLE_KEY]: assigneeId };
+      const next: DutySelections = { ...current, [SETS_VISIBLE_KEY]: assigneeId };
       if (!assigneeId) delete next[SETS_SECONDARY_STATE_KEY];
       else if (next[SETS_SECONDARY_STATE_KEY] === assigneeId) next[SETS_SECONDARY_STATE_KEY] = '';
       return next;
