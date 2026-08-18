@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { CashLeaderboard } from '../components/CashLeaderboard';
 import { secureApi } from '../lib/secureApi';
+import { getKyivDateKey } from '../lib/time';
 import './cash.css';
 import './cash-practical.css';
 import './cash-tabs-balanced.css';
@@ -86,6 +87,18 @@ interface DayEditorState {
   tips: string;
   extra: string;
   note: string;
+}
+
+interface PayrollPeriodSummary {
+  cash: number;
+  tips: number;
+  extra: number;
+  cashDays: number;
+  rateDays: number;
+  wage: number;
+  averageCash: number;
+  bestCash: number;
+  bestDate: string | null;
 }
 
 const MONTHS = [
@@ -180,21 +193,67 @@ function inDayRange(value: string, month: string, fromDay: number, toDay: number
   return value >= dateForDay(month, fromDay) && value <= dateForDay(month, toDay);
 }
 
+function defaultLeaderboardPeriod(): LeaderboardPeriod {
+  const day = Number(getKyivDateKey().slice(8, 10));
+  return day >= 1 && day <= 14 ? 'first' : 'second';
+}
+
+function summarizePayrollPeriod(
+  entries: CashEntry[],
+  extras: ExtraWage[],
+  month: string,
+  cashFromDay: number,
+  cashToDay: number,
+  rateFromDay: number,
+  rateToDay: number,
+  extraFromDay: number,
+  extraToDay: number,
+): PayrollPeriodSummary {
+  const cashEntries = entries.filter((entry) => inDayRange(entry.date, month, cashFromDay, cashToDay));
+  const rateEntries = entries.filter((entry) => inDayRange(entry.date, month, rateFromDay, rateToDay));
+  const extraRows = extras.filter((entry) => inDayRange(entry.date, month, extraFromDay, extraToDay));
+  const positiveCashEntries = cashEntries.filter((entry) => asNumber(entry.cash) > 0);
+  const cash = cashEntries.reduce((sum, entry) => sum + asNumber(entry.cash), 0);
+  const tips = cashEntries.reduce((sum, entry) => sum + asNumber(entry.tips), 0);
+  const extra = extraRows.reduce((sum, entry) => sum + asNumber(entry.amount), 0);
+  const rateDays = rateEntries.filter((entry) => asNumber(entry.cash) > 0).length;
+  const wage = cash * 0.04 + rateDays * 200 + extra;
+  const bestEntry = positiveCashEntries.reduce<CashEntry | null>((best, entry) => {
+    if (!best || asNumber(entry.cash) > asNumber(best.cash)) return entry;
+    return best;
+  }, null);
+
+  return {
+    cash,
+    tips,
+    extra,
+    cashDays: positiveCashEntries.length,
+    rateDays,
+    wage,
+    averageCash: positiveCashEntries.length ? cash / positiveCashEntries.length : 0,
+    bestCash: asNumber(bestEntry?.cash),
+    bestDate: bestEntry?.date || null,
+  };
+}
+
 function summarizeCash(entries: CashEntry[], extras: ExtraWage[], month: string, daysInMonth: number) {
+  const first = summarizePayrollPeriod(entries, extras, month, 1, 14, 1, 15, 1, 15);
+  const second = summarizePayrollPeriod(entries, extras, month, 15, daysInMonth, 16, daysInMonth, 16, daysInMonth);
   const scopedEntries = entries.filter((entry) => inDayRange(entry.date, month, 1, daysInMonth));
-  const scopedExtras = extras.filter((entry) => inDayRange(entry.date, month, 1, daysInMonth));
   const positiveEntries = scopedEntries.filter((entry) => asNumber(entry.cash) > 0);
-  const cash = scopedEntries.reduce((sum, entry) => sum + asNumber(entry.cash), 0);
-  const tips = scopedEntries.reduce((sum, entry) => sum + asNumber(entry.tips), 0);
-  const extra = scopedExtras.reduce((sum, entry) => sum + asNumber(entry.amount), 0);
-  const workDays = positiveEntries.length;
-  const wage = cash * 0.04 + workDays * 200 + extra;
+  const cash = first.cash + second.cash;
+  const tips = first.tips + second.tips;
+  const extra = first.extra + second.extra;
+  const workDays = first.rateDays + second.rateDays;
+  const wage = first.wage + second.wage;
   const bestEntry = positiveEntries.reduce<CashEntry | null>((best, entry) => {
     if (!best || asNumber(entry.cash) > asNumber(best.cash)) return entry;
     return best;
   }, null);
 
   return {
+    first,
+    second,
     cash,
     tips,
     extra,
@@ -210,26 +269,23 @@ function summarizeCash(entries: CashEntry[], extras: ExtraWage[], month: string,
 
 export function CashPage() {
   const { user } = useAuth();
-  const [month, setMonth] = useState(() => monthKey(new Date()));
+  const [month, setMonth] = useState(() => getKyivDateKey().slice(0, 7));
   const [viewUserId, setViewUserId] = useState(user?.id || '');
   const [tab, setTab] = useState<CashTab>('overview');
-  const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>('first');
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>(() => defaultLeaderboardPeriod());
   const [data, setData] = useState<CashBootstrapResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [optionalOpen, setOptionalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
-  const [editor, setEditor] = useState<DayEditorState>(() => {
-    const now = new Date();
-    return {
-      date: `${monthKey(now)}-${String(now.getDate()).padStart(2, '0')}`,
-      cash: '',
-      tips: '',
-      extra: '',
-      note: '',
-    };
-  });
+  const [editor, setEditor] = useState<DayEditorState>(() => ({
+    date: getKyivDateKey(),
+    cash: '',
+    tips: '',
+    extra: '',
+    note: '',
+  }));
 
   useEffect(() => {
     if (user && !viewUserId) setViewUserId(user.id);
@@ -279,9 +335,10 @@ export function CashPage() {
   );
   const selectedStaff = data?.users.find((staff) => staff.id === data.viewUserId) || null;
   const canEdit = Boolean(data && (data.me.canEditAll || data.viewUserId === data.me.legacyUserId));
-  const currentMonth = monthKey(new Date());
+  const todayKey = getKyivDateKey();
+  const currentMonth = todayKey.slice(0, 7);
   const defaultDate = month === currentMonth
-    ? dateForDay(month, new Date().getDate())
+    ? todayKey
     : dateForDay(month, 1);
   const selectedEntry = entryByDate.get(editor.date);
   const selectedExtra = extraByDate.get(editor.date);
@@ -515,19 +572,30 @@ export function CashPage() {
 
       <nav className="cash-tabs-v2 cash-tabs-two-v4" aria-label="Розділи каси">
         <button type="button" className={tab === 'overview' ? 'is-active' : ''} onClick={() => setTab('overview')}>Огляд</button>
-        <button type="button" className={tab === 'leaderboard' ? 'is-active' : ''} onClick={() => setTab('leaderboard')}>Топ каси</button>
+        <button
+          type="button"
+          className={tab === 'leaderboard' ? 'is-active' : ''}
+          onClick={() => {
+            setLeaderboardPeriod(defaultLeaderboardPeriod());
+            setTab('leaderboard');
+          }}
+        >
+          Топ каси
+        </button>
       </nav>
 
       {!loading && data && tab === 'overview' ? (
         <section className="cash-expanded-overview-v4">
-          <article><Banknote size={20} /><span>Каса за місяць</span><strong>{money(summary.cash)}</strong><small>{summary.workDays} днів із внесеною касою</small></article>
-          <article><TrendingUp size={20} /><span>Зарплата</span><strong>{money(summary.wage)}</strong><small>4% + 200 ₴/день + доплати</small></article>
-          <article><Coins size={20} /><span>Чайові</span><strong>{money(summary.tips)}</strong><small>середні: {money(summary.averageTips)}</small></article>
-          <article><Sparkles size={20} /><span>Доплати</span><strong>{money(summary.extra)}</strong><small>додаткові нарахування</small></article>
-          <article><CalendarCheck2 size={20} /><span>Днів із касою</span><strong>{summary.workDays}</strong><small>записи з сумою більше нуля</small></article>
+          <article><Banknote size={20} /><span>Каса · 1–14</span><strong>{money(summary.first.cash)}</strong><small>{summary.first.cashDays} днів із касою · 4% у першій виплаті</small></article>
+          <article><TrendingUp size={20} /><span>Зарплата · 1 половина</span><strong>{money(summary.first.wage)}</strong><small>4% каси 1–14 + 200 ₴ за дні 1–15 + доплати 1–15</small></article>
+          <article><Banknote size={20} /><span>Каса · 15–{daysInMonth}</span><strong>{money(summary.second.cash)}</strong><small>{summary.second.cashDays} днів із касою · каса 15-го вже тут</small></article>
+          <article><TrendingUp size={20} /><span>Зарплата · 2 половина</span><strong>{money(summary.second.wage)}</strong><small>4% каси 15–{daysInMonth} + 200 ₴ за дні 16–{daysInMonth} + доплати 16–{daysInMonth}</small></article>
+          <article><Coins size={20} /><span>Чайові за місяць</span><strong>{money(summary.tips)}</strong><small>середні: {money(summary.averageTips)}</small></article>
+          <article><Sparkles size={20} /><span>Доплати за місяць</span><strong>{money(summary.extra)}</strong><small>1–15 у першій виплаті · 16–{daysInMonth} у другій</small></article>
+          <article><CalendarCheck2 size={20} /><span>Днів із касою</span><strong>{summary.workDays}</strong><small>ставка 200 ₴ кожного дня врахована лише один раз</small></article>
           <article><BarChart3 size={20} /><span>Середня каса</span><strong>{money(summary.averageCash)}</strong><small>за робочий день</small></article>
           <article><TrendingUp size={20} /><span>Найкращий день</span><strong>{money(summary.bestCash)}</strong><small>{summary.bestDate ? formatCompactDay(summary.bestDate) : 'Записів ще немає'}</small></article>
-          <article><WalletCards size={20} /><span>Середня зарплата</span><strong>{money(summary.averageWage)}</strong><small>за день із касою</small></article>
+          <article><WalletCards size={20} /><span>Зарплата за місяць</span><strong>{money(summary.wage)}</strong><small>сума двох окремих розрахункових половин</small></article>
         </section>
       ) : null}
 
