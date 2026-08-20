@@ -110,6 +110,25 @@ function initials(name: string): string {
     .map((part) => part[0]?.toUpperCase() || '').join('');
 }
 
+function updateAssignmentStatus(
+  plan: DutyPlanResponse | null,
+  assignmentId: number,
+  status: DutyAssignment['status'],
+): DutyPlanResponse | null {
+  if (!plan) return plan;
+  let changed = false;
+  const assignments = plan.assignments.map((assignment) => {
+    if (assignment.id !== assignmentId || assignment.status === status) return assignment;
+    changed = true;
+    return {
+      ...assignment,
+      status,
+      completed_at: status === 'done' ? new Date().toISOString() : null,
+    };
+  });
+  return changed ? { ...plan, assignments } : plan;
+}
+
 export function TodayOperationsWidget({ compact = false }: { compact?: boolean }) {
   const date = useKyivDay();
   const isTuesday = useMemo(() => isKyivWeekday(date, 2), [date]);
@@ -217,8 +236,10 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
     setSavingId(task.id);
     setDutiesError(null);
     try {
-      await setPlannedDutyStatus(task.id, next);
-      await loadDuties();
+      const response = await setPlannedDutyStatus(task.id, next);
+      const savedStatus = response.assignment.status;
+      setDaily((current) => updateAssignmentStatus(current, task.id, savedStatus));
+      setHandover((current) => updateAssignmentStatus(current, task.id, savedStatus));
     } catch (reason) {
       setDutiesError(reason instanceof Error ? reason.message : 'Статус не оновлено.');
     } finally {
@@ -258,7 +279,7 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
                 : 'Зону не призначено';
     const firstTask = allAssignments[0];
     const firstTaskTitle = firstTask
-      ? (dailyAssignments.some((task) => task.id === firstTask.id)
+      ? (dailyAssignments.some((item) => item.id === firstTask.id)
         ? dailyDefinitions.get(firstTask.duty_key)
         : handoverDefinitions.get(firstTask.duty_key)) || firstTask.duty_key
       : null;
