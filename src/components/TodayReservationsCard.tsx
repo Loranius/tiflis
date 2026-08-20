@@ -48,6 +48,8 @@ interface TodayReservationsResponse {
   reservations: TodayReservation[];
 }
 
+const AUTO_REFRESH_MIN_INTERVAL_MS = 30_000;
+
 function tableLabel(reservation: TodayReservation): string {
   const labels = [reservation.tableLabel, ...reservation.mergedTables].filter(Boolean);
   return labels.length > 1 ? `Столи ${labels.join(' + ')}` : `Стіл ${labels[0] || '—'}`;
@@ -65,15 +67,20 @@ export function TodayReservationsCard({ compact = false }: { compact?: boolean }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
+  const lastRequestAt = useRef(0);
 
   const load = useCallback(async (forceRefresh = false) => {
     const id = ++requestId.current;
+    lastRequestAt.current = Date.now();
     setLoading(true);
     setError(null);
     try {
       const response = await secureApi<TodayReservationsResponse>({
         action: 'today_reservations_get',
-      }, 'tiflis-today-reserve-api', { forceRefresh });
+      }, 'tiflis-today-reserve-api', {
+        forceRefresh,
+        cacheTtlMs: 15_000,
+      });
       if (requestId.current !== id) return;
       setData(response);
     } catch (reason) {
@@ -87,16 +94,19 @@ export function TodayReservationsCard({ compact = false }: { compact?: boolean }
   useEffect(() => { void load(); }, [dayKey, load]);
 
   useEffect(() => {
-    const refresh = () => { void load(); };
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') refresh();
+    const refreshIfStale = () => {
+      if (Date.now() - lastRequestAt.current < AUTO_REFRESH_MIN_INTERVAL_MS) return;
+      void load();
     };
-    window.addEventListener('focus', refresh);
-    window.addEventListener('online', refresh);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshIfStale();
+    };
+    window.addEventListener('focus', refreshIfStale);
+    window.addEventListener('online', refreshIfStale);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      window.removeEventListener('focus', refresh);
-      window.removeEventListener('online', refresh);
+      window.removeEventListener('focus', refreshIfStale);
+      window.removeEventListener('online', refreshIfStale);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [load]);
