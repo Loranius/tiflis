@@ -63,24 +63,36 @@ function WelcomeWidget() {
 }
 
 export function DashboardPage() {
+  const { user } = useAuth();
+  const roles = useMemo(
+    () => new Set([user?.role, user?.role2].filter((role): role is NonNullable<typeof role> => Boolean(role))),
+    [user?.role, user?.role2],
+  );
+  const canUseCash = roles.has('admin') || roles.has('sysadmin') || roles.has('waiter') || roles.has('bar');
+  const canUseTodayReservations = roles.has('waiter');
+
   return (
     <div className="today-page-v6">
       <WelcomeWidget />
 
-      <div className="today-dashboard-cash-v2">
-        <Suspense fallback={<DashboardCardSkeleton label="Завантаження каси за сьогодні" />}>
-          <TodayCashCard compact />
-        </Suspense>
-      </div>
+      {canUseCash ? (
+        <div className="today-dashboard-cash-v2">
+          <Suspense fallback={<DashboardCardSkeleton label="Завантаження каси за сьогодні" />}>
+            <TodayCashCard compact />
+          </Suspense>
+        </div>
+      ) : null}
 
       <div className="today-dashboard-support-v2" aria-label="Зміна сьогодні">
         <Suspense fallback={<DashboardCardSkeleton label="Завантаження робочого дня" />}>
           <TodayOperationsWidget compact />
         </Suspense>
 
-        <Suspense fallback={<DashboardCardSkeleton label="Завантаження найближчих резервів" />}>
-          <TodayReservationsCard compact />
-        </Suspense>
+        {canUseTodayReservations ? (
+          <Suspense fallback={<DashboardCardSkeleton label="Завантаження найближчих резервів" />}>
+            <TodayReservationsCard compact />
+          </Suspense>
+        ) : null}
       </div>
     </div>
   );
