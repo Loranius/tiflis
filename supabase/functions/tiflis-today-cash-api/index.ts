@@ -155,27 +155,28 @@ Deno.serve(async (req: Request) => {
     if (action === "today_cash_get") {
       if (!allowed) return json(req, { ok: true, date, canUseCash: false, entry: null });
 
-      const { data: staff, error: staffError } = await service
-        .from("users")
-        .select("id,fired")
-        .eq("id", profile.legacy_user_id)
-        .single();
-      if (staffError || !staff || staff.fired === true) {
+      const [staffResult, cashResult] = await Promise.all([
+        service
+          .from("users")
+          .select("id,fired")
+          .eq("id", profile.legacy_user_id)
+          .single(),
+        service
+          .from("cash")
+          .select("id,user_id,date,cash,tips,first_cash")
+          .eq("user_id", profile.legacy_user_id)
+          .eq("date", date)
+          .maybeSingle(),
+      ]);
+      if (staffResult.error || !staffResult.data || staffResult.data.fired === true) {
         return json(req, { ok: false, error: "Staff member not found" }, 404);
       }
-
-      const { data, error } = await service
-        .from("cash")
-        .select("id,user_id,date,cash,tips,first_cash")
-        .eq("user_id", profile.legacy_user_id)
-        .eq("date", date)
-        .maybeSingle();
-      if (error) throw error;
+      if (cashResult.error) throw cashResult.error;
       return json(req, {
         ok: true,
         date,
         canUseCash: true,
-        entry: publicEntry((data as CashRow | null) ?? null),
+        entry: publicEntry((cashResult.data as CashRow | null) ?? null),
       });
     }
 
@@ -190,21 +191,22 @@ Deno.serve(async (req: Request) => {
       return json(req, { ok: false, error: "Некоректна сума." }, 400);
     }
 
-    const { data: staff, error: staffError } = await service
-      .from("users")
-      .select("id,fired")
-      .eq("id", profile.legacy_user_id)
-      .single();
-    if (staffError || !staff || staff.fired === true) {
+    const [staffResult, existingResult] = await Promise.all([
+      service
+        .from("users")
+        .select("id,fired")
+        .eq("id", profile.legacy_user_id)
+        .single(),
+      service
+        .from("cash")
+        .select("first_cash")
+        .eq("user_id", profile.legacy_user_id)
+        .eq("date", date)
+        .maybeSingle(),
+    ]);
+    if (staffResult.error || !staffResult.data || staffResult.data.fired === true) {
       return json(req, { ok: false, error: "Staff member not found" }, 404);
     }
-
-    const existingResult = await service
-      .from("cash")
-      .select("first_cash")
-      .eq("user_id", profile.legacy_user_id)
-      .eq("date", date)
-      .maybeSingle();
     if (existingResult.error) throw existingResult.error;
 
     if (cash === 0 && tips === 0) {
