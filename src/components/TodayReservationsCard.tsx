@@ -84,7 +84,7 @@ export function TodayReservationsCard({ compact = false }: { compact?: boolean }
     }
   }, []);
 
-  useEffect(() => { void load(true); }, [dayKey, load]);
+  useEffect(() => { void load(); }, [dayKey, load]);
 
   useEffect(() => {
     const refresh = () => { void load(); };
