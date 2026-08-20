@@ -80,7 +80,7 @@ export function TodayCashCard({ compact = false }: { compact?: boolean }) {
 
   useEffect(() => {
     setNotice(null);
-    void load(true);
+    void load();
   }, [dayKey, load]);
 
   const originalCash = valueString(data?.entry?.cash);
