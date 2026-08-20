@@ -16,6 +16,7 @@ interface SecureApiOptions {
 
 interface ResponseCacheEntry {
   expiresAt: number;
+  domain: string;
   generation: number;
   value: SecureApiEnvelope;
 }
@@ -25,24 +26,46 @@ const DEFAULT_READ_CACHE_TTL_MS = 5_000;
 const MAX_RESPONSE_CACHE_ENTRIES = 24;
 const inFlightRequests = new Map<string, Promise<unknown>>();
 const responseCache = new Map<string, ResponseCacheEntry>();
+const cacheGenerations = new Map<string, number>();
 let accessTokenRequest: Promise<string> | null = null;
 let refreshTokenRequest: Promise<string> | null = null;
-let cacheGeneration = 0;
 
-function requestKey(functionSlug: string, body: Record<string, unknown>, token: string): string {
-  const sessionFingerprint = token.slice(-18);
-  return `${sessionFingerprint}:${functionSlug}:${JSON.stringify(body)}`;
+function cacheDomain(action: string, functionSlug: string): string {
+  if (action.startsWith('today_cash_') || action.startsWith('cash_')) return 'cash';
+  if (action.startsWith('schedule_')) return 'schedule';
+  if (action.startsWith('menu_')) return 'menu';
+  if (action.startsWith('records_')) return 'records';
+  if (action.startsWith('planner_')) return 'duties';
+  if (action.startsWith('today_reservations_') || action.startsWith('reserve_')) return 'reserve';
+  if (action.startsWith('staff_')) return 'staff';
+  if (action.startsWith('admin_')) return 'admin';
+  return functionSlug;
 }
 
-function invalidateResponseCache() {
-  cacheGeneration += 1;
-  responseCache.clear();
-  inFlightRequests.clear();
+function domainGeneration(domain: string): number {
+  return cacheGenerations.get(domain) || 0;
+}
+
+function requestKey(
+  functionSlug: string,
+  body: Record<string, unknown>,
+  token: string,
+  generation: number,
+): string {
+  const sessionFingerprint = token.slice(-18);
+  return `${sessionFingerprint}:${generation}:${functionSlug}:${JSON.stringify(body)}`;
+}
+
+function invalidateResponseCache(domain: string) {
+  cacheGenerations.set(domain, domainGeneration(domain) + 1);
+  for (const [key, entry] of responseCache) {
+    if (entry.domain === domain) responseCache.delete(key);
+  }
 }
 
 function pruneResponseCache(now = Date.now()) {
   for (const [key, entry] of responseCache) {
-    if (entry.expiresAt <= now || entry.generation !== cacheGeneration) {
+    if (entry.expiresAt <= now || entry.generation !== domainGeneration(entry.domain)) {
       responseCache.delete(key);
     }
   }
@@ -58,12 +81,14 @@ function rememberResponse(
   key: string,
   value: SecureApiEnvelope,
   ttlMs: number,
+  domain: string,
   generation: number,
 ) {
-  if (ttlMs <= 0 || generation !== cacheGeneration) return;
+  if (ttlMs <= 0 || generation !== domainGeneration(domain)) return;
   responseCache.delete(key);
   responseCache.set(key, {
     expiresAt: Date.now() + ttlMs,
+    domain,
     generation,
     value,
   });
@@ -174,21 +199,28 @@ export async function secureApi<T extends SecureApiEnvelope>(
   const resolvedFunctionSlug = functionSlug === 'tiflis-secure-api' && action === 'cash_bootstrap'
     ? 'tiflis-cash-anonymous-api'
     : functionSlug;
+  const domain = cacheDomain(action, resolvedFunctionSlug);
 
-  if (options.invalidateCache ?? !isRead) invalidateResponseCache();
+  if (options.invalidateCache ?? !isRead) invalidateResponseCache(domain);
 
   const token = await getAccessToken();
-  const key = requestKey(resolvedFunctionSlug, body, token);
+  const generation = domainGeneration(domain);
+  const key = requestKey(resolvedFunctionSlug, body, token, generation);
   const cacheTtlMs = isRead
     ? Math.max(0, options.cacheTtlMs ?? (isBootstrap ? DEFAULT_BOOTSTRAP_CACHE_TTL_MS : DEFAULT_READ_CACHE_TTL_MS))
     : 0;
   const shouldCache = cacheTtlMs > 0 && !options.signal;
-  const shouldDedupe = options.dedupe ?? isRead;
+  const shouldDedupe = options.forceRefresh ? false : (options.dedupe ?? isRead);
 
   if (shouldCache && !options.forceRefresh) {
     pruneResponseCache();
     const cached = responseCache.get(key);
-    if (cached && cached.expiresAt > Date.now() && cached.generation === cacheGeneration) {
+    if (
+      cached
+      && cached.expiresAt > Date.now()
+      && cached.domain === domain
+      && cached.generation === generation
+    ) {
       responseCache.delete(key);
       responseCache.set(key, cached);
       return cached.value as T;
@@ -196,22 +228,20 @@ export async function secureApi<T extends SecureApiEnvelope>(
   }
 
   if (!shouldDedupe || options.signal) {
-    const generation = cacheGeneration;
     const payload = await executeSecureApi<T>(body, resolvedFunctionSlug, options, token);
-    if (shouldCache) rememberResponse(key, payload, cacheTtlMs, generation);
+    if (shouldCache) rememberResponse(key, payload, cacheTtlMs, domain, generation);
     return payload;
   }
 
   const existing = inFlightRequests.get(key);
   if (existing) return existing as Promise<T>;
 
-  const generation = cacheGeneration;
   const request = executeSecureApi<T>(body, resolvedFunctionSlug, options, token);
   inFlightRequests.set(key, request);
   void request.then(
     (payload) => {
       if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
-      if (shouldCache) rememberResponse(key, payload, cacheTtlMs, generation);
+      if (shouldCache) rememberResponse(key, payload, cacheTtlMs, domain, generation);
     },
     () => {
       if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
