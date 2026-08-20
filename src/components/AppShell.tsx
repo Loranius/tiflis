@@ -25,7 +25,7 @@ import {
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { accessiblePages, pages, type PageKey } from '../lib/acl';
-import { preloadPage, preloadPages } from '../lib/pageLoaders';
+import { preloadPage } from '../lib/pageLoaders';
 
 const icons: Record<PageKey, LucideIcon> = {
   today: Home,
@@ -66,15 +66,6 @@ const legacyDesktopOrder: PageKey[] = [
   'handover',
   'admin',
 ];
-
-const preferredWarmOrder: PageKey[] = ['schedule', 'cash', 'records', 'menu', 'reserve', 'duties', 'handover', 'staff', 'admin'];
-
-type NavigatorWithConnection = Navigator & {
-  connection?: {
-    saveData?: boolean;
-    effectiveType?: string;
-  };
-};
 
 type MobileSlot = 'schedule' | 'role' | 'home' | 'menu';
 
@@ -166,22 +157,6 @@ export const AppShell = memo(function AppShell() {
   useEffect(() => {
     previousActiveRef.current = activeKey;
   }, [activeKey]);
-
-  useEffect(() => {
-    if (!user) return;
-    const connection = (navigator as NavigatorWithConnection).connection;
-    if (connection?.saveData || connection?.effectiveType?.includes('2g')) return;
-
-    const likelyPages = preferredWarmOrder
-      .filter((page) => page !== activeKey && navigation.includes(page))
-      .slice(0, 2);
-    if (likelyPages.length === 0) return;
-
-    const timer = window.setTimeout(() => {
-      void preloadPages(likelyPages);
-    }, 1400);
-    return () => window.clearTimeout(timer);
-  }, [activeKey, navigation, user]);
 
   useEffect(() => {
     setMoreOpen(false);
