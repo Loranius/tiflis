@@ -1,0 +1,245 @@
+.cash-combo-badge {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid rgba(222, 231, 224, .1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .025);
+  color: #a9b5ac;
+  white-space: nowrap;
+}
+
+.cash-combo-badge svg {
+  flex: 0 0 auto;
+}
+
+.cash-combo-badge b {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+
+.cash-combo-badge.is-leader {
+  border-color: rgba(215, 182, 108, .32);
+  background: rgba(215, 182, 108, .09);
+  color: #edd28d;
+}
+
+.cash-combo-badge.is-chase {
+  border-color: rgba(111, 198, 153, .26);
+  background: rgba(79, 180, 119, .08);
+  color: #96dfb3;
+}
+
+.cash-combo-badge.is-breakthrough {
+  border-color: rgba(183, 193, 121, .25);
+  background: rgba(183, 193, 121, .065);
+  color: #d2d990;
+}
+
+.cash-combo-badge.is-comeback {
+  border-color: rgba(125, 181, 153, .2);
+  background: rgba(125, 181, 153, .055);
+  color: #a5cdb7;
+}
+
+.cash-podium-card .cash-combo-badge {
+  position: relative;
+  z-index: 2;
+  margin-top: 1px;
+}
+
+.cash-live-result .cash-combo-badge {
+  justify-self: end;
+}
+
+.cash-combo-card {
+  --combo-accent: #9fb6a7;
+  --combo-border: rgba(159, 182, 167, .2);
+  --combo-bg: rgba(159, 182, 167, .045);
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--combo-border);
+  border-radius: 15px;
+  background:
+    radial-gradient(circle at 7% 18%, var(--combo-bg), transparent 32%),
+    rgba(255, 255, 255, .016);
+}
+
+.cash-combo-card.is-leader {
+  --combo-accent: #e4c87c;
+  --combo-border: rgba(215, 182, 108, .27);
+  --combo-bg: rgba(215, 182, 108, .1);
+}
+
+.cash-combo-card.is-chase {
+  --combo-accent: #8edcaf;
+  --combo-border: rgba(79, 180, 119, .25);
+  --combo-bg: rgba(79, 180, 119, .09);
+}
+
+.cash-combo-card.is-breakthrough {
+  --combo-accent: #ccd58a;
+  --combo-border: rgba(183, 193, 121, .23);
+  --combo-bg: rgba(183, 193, 121, .075);
+}
+
+.cash-combo-card.is-comeback {
+  --combo-accent: #9fc8b1;
+  --combo-border: rgba(125, 181, 153, .21);
+  --combo-bg: rgba(125, 181, 153, .065);
+}
+
+.cash-combo-card__top {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+}
+
+.cash-combo-card__icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--combo-border);
+  border-radius: 12px;
+  background: var(--combo-bg);
+  color: var(--combo-accent);
+}
+
+.cash-combo-card__copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.cash-combo-card__copy > span {
+  color: var(--muted);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.cash-combo-card__copy > strong {
+  overflow: hidden;
+  color: #dce4de;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cash-combo-card__copy > small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cash-combo-card__score {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+}
+
+.cash-combo-card__score b {
+  color: var(--combo-accent);
+  font-size: 23px;
+  line-height: 1;
+  font-weight: 950;
+}
+
+.cash-combo-card__score span {
+  color: var(--muted);
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.cash-combo-card__track {
+  height: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(222, 231, 224, .08);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .2);
+}
+
+.cash-combo-card__track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(79, 180, 119, .78), var(--combo-accent));
+  box-shadow: 0 0 16px var(--combo-bg);
+  transition: width .45s cubic-bezier(.2, .8, .2, 1);
+}
+
+.cash-combo-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cash-combo-card__meta strong {
+  color: var(--combo-accent);
+  font-size: 8px;
+}
+
+.cash-combo-card__meta span {
+  color: var(--muted);
+  font-size: 7px;
+  text-align: right;
+}
+
+@media (max-width: 520px) {
+  .cash-live-result .cash-combo-badge {
+    min-width: 38px;
+    min-height: 25px;
+    padding: 3px 7px;
+  }
+
+  .cash-combo-card {
+    padding: 12px;
+  }
+
+  .cash-combo-card__top {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 9px;
+  }
+
+  .cash-combo-card__icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  .cash-combo-card__copy > small {
+    white-space: normal;
+    line-height: 1.35;
+  }
+
+  .cash-combo-card__score b {
+    font-size: 20px;
+  }
+
+  .cash-combo-card__score span {
+    display: none;
+  }
+
+  .cash-combo-card__meta {
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cash-combo-card__track > span {
+    transition: none;
+  }
+}

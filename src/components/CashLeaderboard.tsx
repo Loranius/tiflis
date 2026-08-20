@@ -1,5 +1,4 @@
 import {
-  Activity,
   Award,
   Crown,
   Flame,
@@ -15,12 +14,25 @@ import {
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import './cash-leaderboard.css';
 import './cash-leaderboard-enhanced.css';
+import './cash-combo.css';
 
 export type CashLeaderboardPeriod = 'first' | 'second' | 'month' | 'year';
 
 type TimelinePoint = {
   rank: number;
   progress: number;
+};
+
+type ComboTone = 'leader' | 'chase' | 'breakthrough' | 'comeback';
+
+type RankCombo = {
+  tone: ComboTone;
+  label: string;
+  streak: number;
+  goal: string;
+  level: string;
+  nextMilestone: number | null;
+  milestoneProgress: number;
 };
 
 export interface CashLeaderboardRow {
@@ -46,6 +58,7 @@ interface CashLeaderboardProps {
 }
 
 const PODIUM_EMOJI = ['🥇', '🥈', '🥉'];
+const COMBO_MILESTONES = [3, 5, 10, 20] as const;
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Адміністрація',
   sysadmin: 'Системний адміністратор',
@@ -102,9 +115,11 @@ function rankStatus(rank: number): string {
 }
 
 function personalGoal(rank: number): string {
-  if (rank === 1) return 'Зберегти перше місце';
-  if (rank <= 3) return 'Піднятися на наступне місце';
-  return 'Увійти до топ-3';
+  if (rank === 1) return 'Збережи лідерство';
+  if (rank === 2) return 'Наступна ціль — #1';
+  if (rank === 3) return 'Закріпись у топ-3';
+  if (rank === 4) return 'До топ-3 — одне місце';
+  return `Наступна ціль — #${Math.max(1, rank - 1)}`;
 }
 
 function safeRelative(row: CashLeaderboardRow): number {
@@ -122,17 +137,151 @@ function rankMovement(row: CashLeaderboardRow): number {
   return Number(previous.rank) - Number(latest.rank);
 }
 
-function recentHistory(row: CashLeaderboardRow): Array<{ date: string; rank: number }> {
+function timelineRanks(row: CashLeaderboardRow): number[] {
   const timeline = row.timeline || {};
-  return Object.keys(timeline)
+  const ranks = Object.keys(timeline)
     .sort()
-    .slice(-7)
-    .map((date) => ({ date, rank: Math.max(1, Number(timeline[date]?.rank ?? row.rank)) }));
+    .map((date) => Math.max(1, Number(timeline[date]?.rank ?? row.rank)))
+    .filter((rank) => Number.isFinite(rank));
+  return ranks.length ? ranks : [Math.max(1, Number(row.rank) || 1)];
 }
 
-function shortDay(value: string): string {
-  return new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'short' })
-    .format(new Date(`${value}T12:00:00`));
+function trailingWhere(ranks: number[], predicate: (rank: number) => boolean): number {
+  let streak = 0;
+  for (let index = ranks.length - 1; index >= 0; index -= 1) {
+    if (!predicate(ranks[index] ?? Number.POSITIVE_INFINITY)) break;
+    streak += 1;
+  }
+  return Math.max(1, streak);
+}
+
+function trailingWithoutDrop(ranks: number[]): number {
+  if (!ranks.length) return 1;
+  let streak = 1;
+  for (let index = ranks.length - 1; index > 0; index -= 1) {
+    const current = ranks[index] ?? Number.POSITIVE_INFINITY;
+    const previous = ranks[index - 1] ?? Number.POSITIVE_INFINITY;
+    if (current > previous) break;
+    streak += 1;
+  }
+  return streak;
+}
+
+function comboLevel(streak: number): string {
+  if (streak >= 20) return 'Легендарна серія';
+  if (streak >= 10) return 'Сильна форма';
+  if (streak >= 5) return 'Стабільність';
+  if (streak >= 3) return 'Серія';
+  return 'Старт';
+}
+
+function rankCombo(row: CashLeaderboardRow): RankCombo {
+  const rank = Math.max(1, Number(row.rank) || 1);
+  const ranks = timelineRanks(row);
+  let tone: ComboTone;
+  let label: string;
+  let streak: number;
+  let goal: string;
+
+  if (rank === 1) {
+    tone = 'leader';
+    label = 'Утримання лідерства';
+    streak = trailingWhere(ranks, (value) => value === 1);
+    goal = 'Утримай #1 у наступний рейтинговий день';
+  } else if (rank <= 3) {
+    tone = 'chase';
+    label = 'Погоня в топ-3';
+    streak = trailingWhere(ranks, (value) => value <= 3);
+    goal = rank === 2 ? 'До #1 — одне місце' : 'Закріпись у топ-3 та атакуй #2';
+  } else if (rank <= 5) {
+    tone = 'breakthrough';
+    label = 'Прорив без падіння';
+    streak = trailingWithoutDrop(ranks);
+    goal = rank === 4 ? 'До топ-3 — одне місце' : 'Продовжуй прорив — наступна ціль #4';
+  } else {
+    tone = 'comeback';
+    label = 'Камбек';
+    streak = trailingWithoutDrop(ranks);
+    goal = `Продовжуй камбек — наступна ціль #${rank - 1}`;
+  }
+
+  const nextMilestone = COMBO_MILESTONES.find((milestone) => milestone > streak) ?? null;
+  const previousMilestone = [...COMBO_MILESTONES].reverse().find((milestone) => milestone <= streak) ?? 0;
+  const milestoneProgress = nextMilestone
+    ? Math.max(8, Math.min(100, ((streak - previousMilestone) / (nextMilestone - previousMilestone)) * 100))
+    : 100;
+
+  return {
+    tone,
+    label,
+    streak,
+    goal,
+    level: comboLevel(streak),
+    nextMilestone,
+    milestoneProgress,
+  };
+}
+
+function rankingDayLabel(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'рейтинговий день';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'рейтингові дні';
+  return 'рейтингових днів';
+}
+
+function ComboIcon({ tone, size = 14 }: { tone: ComboTone; size?: number }) {
+  if (tone === 'leader') return <Crown size={size} />;
+  if (tone === 'chase') return <Zap size={size} />;
+  if (tone === 'breakthrough') return <TrendingUp size={size} />;
+  return <Flame size={size} />;
+}
+
+function ComboBadge({ row }: { row: CashLeaderboardRow }) {
+  const combo = rankCombo(row);
+  return (
+    <span
+      className={`cash-combo-badge is-${combo.tone}`}
+      title={`${combo.label}: ${combo.streak} ${rankingDayLabel(combo.streak)}`}
+      aria-label={`${combo.label}, серія ${combo.streak}`}
+    >
+      <ComboIcon tone={combo.tone} size={12} />
+      <b>×{combo.streak}</b>
+    </span>
+  );
+}
+
+function ComboPanel({ row }: { row: CashLeaderboardRow }) {
+  const combo = rankCombo(row);
+  return (
+    <div className={`cash-combo-card is-${combo.tone}`}>
+      <div className="cash-combo-card__top">
+        <span className="cash-combo-card__icon" aria-hidden="true">
+          <ComboIcon tone={combo.tone} size={20} />
+        </span>
+        <div className="cash-combo-card__copy">
+          <span>Поточна серія</span>
+          <strong>{combo.label}</strong>
+          <small>{combo.goal}</small>
+        </div>
+        <div className="cash-combo-card__score">
+          <b>×{combo.streak}</b>
+          <span>{rankingDayLabel(combo.streak)}</span>
+        </div>
+      </div>
+      <div className="cash-combo-card__track" aria-label={`Прогрес серії: ${combo.level}`}>
+        <span style={{ width: `${combo.milestoneProgress}%` }} />
+      </div>
+      <div className="cash-combo-card__meta">
+        <strong>{combo.level}</strong>
+        <span>
+          {combo.nextMilestone
+            ? `Ще ${combo.nextMilestone - combo.streak} до серії ×${combo.nextMilestone}`
+            : 'Серія вийшла на максимальний рівень'}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function MovementBadge({ row, compact = false }: { row: CashLeaderboardRow; compact?: boolean }) {
@@ -141,7 +290,7 @@ function MovementBadge({ row, compact = false }: { row: CashLeaderboardRow; comp
   const symbol = movement > 0 ? '▲' : movement < 0 ? '▼' : '—';
   const text = movement === 0 ? 'без змін' : `${Math.abs(movement)} ${Math.abs(movement) === 1 ? 'місце' : 'місця'}`;
   return (
-    <span className={`cash-rank-movement ${tone} ${compact ? 'is-compact' : ''}`} title="Зміна позиції відносно попереднього дня">
+    <span className={`cash-rank-movement ${tone} ${compact ? 'is-compact' : ''}`} title="Зміна позиції відносно попереднього рейтингового дня">
       <b>{symbol}</b><span>{text}</span>
     </span>
   );
@@ -203,7 +352,6 @@ export function CashLeaderboard({
   }, [leader, mine, sorted]);
 
   const selected = sorted.find((row) => rowIdentity(row) === selectedId) || mine || leader;
-  const selectedHistory = selected ? recentHistory(selected) : [];
 
   function selectRow(row: CashLeaderboardRow) {
     setSelectedId(rowIdentity(row));
@@ -219,7 +367,7 @@ export function CashLeaderboard({
         <div>
           <span className="eyebrow">Рейтинг каси</span>
           <h3>Топ команди</h3>
-          <p>Місця формуються за результатами поточного періоду. Чужі суми приховані — видно лише позицію та її динаміку.</p>
+          <p>Місця формуються за результатами поточного періоду. Чужі суми приховані — видно позицію, серію та її динаміку.</p>
         </div>
         <span className="cash-live-heading-mark"><Trophy size={25} /></span>
       </header>
@@ -285,7 +433,7 @@ export function CashLeaderboard({
                     <small>{roleLabel(row)}</small>
                   </span>
                   <span className="cash-podium-status">{rankStatus(row.rank)}</span>
-                  <MovementBadge row={row} compact />
+                  <ComboBadge row={row} />
                   {row.mine ? <b>Ви</b> : null}
                 </button>
               ))}
@@ -330,7 +478,7 @@ export function CashLeaderboard({
                     <small>{roleLabel(row)}</small>
                   </span>
                   <span className="cash-live-result">
-                    <MovementBadge row={row} compact />
+                    <ComboBadge row={row} />
                     {row.mine ? <b>Ви</b> : null}
                   </span>
                 </button>
@@ -357,19 +505,7 @@ export function CashLeaderboard({
                 <div><span style={{ width: `${Math.max(7, safeRelative(selected))}%` }} /></div>
               </div>
 
-              {selectedHistory.length > 1 ? (
-                <div className="cash-rank-history">
-                  <header><Activity size={15} /><span>Позиція за останні дні</span></header>
-                  <div>
-                    {selectedHistory.map((point) => (
-                      <span key={point.date} className={point.rank <= 3 ? 'is-top' : ''}>
-                        <small>{shortDay(point.date)}</small>
-                        <b>#{point.rank}</b>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
+              <ComboPanel row={selected} />
 
               {selected.mine ? (
                 <button type="button" className="cash-league-entry-button" onClick={scrollToEntry}>
@@ -402,8 +538,8 @@ export function CashLeaderboard({
       <footer className="cash-live-privacy">
         <Medal size={17} />
         <div>
-          <strong>Місця й динаміка — без чужих сум</strong>
-          <span>{canViewAll ? 'Команда бачить імена, аватарки, позиції та рух у рейтингу. Фінансові суми інших працівників у цьому модулі не показуються.' : 'Ви бачите порядок місць, зміну позицій і власний прогрес без чужих фінансових даних.'}</span>
+          <strong>Місця, серії й динаміка — без чужих сум</strong>
+          <span>{canViewAll ? 'Команда бачить імена, аватарки, позиції, серії та рух у рейтингу. Фінансові суми інших працівників у цьому модулі не показуються.' : 'Ви бачите порядок місць, серії, зміну позицій і власний прогрес без чужих фінансових даних.'}</span>
         </div>
         {sorted[0] ? <Trophy size={18} /> : <Sparkles size={18} />}
       </footer>
