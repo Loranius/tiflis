@@ -4,6 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const BOT_TOKEN = Deno.env.get("BOT_TOKEN") ?? "";
+const ALLOWED_ORIGINS = new Set((Deno.env.get("ALLOWED_ORIGINS") ?? "").split(",").map((value) => value.trim()).filter(Boolean));
 const WINDOW_MS = 15 * 60 * 1000;
 const RESET_TTL_MS = 10 * 60 * 1000;
 const ACTIONS = new Set(["reset_request", "reset_confirm"]);
@@ -12,21 +13,26 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 }) as any;
 
-const CORS: HeadersInit = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
-  "Access-Control-Max-Age": "86400",
-};
+function corsHeaders(req: Request): HeadersInit {
+  const origin = req.headers.get("origin") ?? "";
+  if (!origin || (ALLOWED_ORIGINS.size > 0 && !ALLOWED_ORIGINS.has(origin))) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+    "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
+  };
+}
 
-function json(data: unknown, status = 200): Response {
+function json(req: Request, data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      ...CORS,
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
+      ...corsHeaders(req),
     },
   });
 }
@@ -73,7 +79,7 @@ function timingSafeEqual(left: string, right: string): boolean {
 }
 
 async function rateKey(req: Request, action: string, login: string): Promise<string> {
-  const ip = (req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || "unknown")
+  const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "unknown")
     .split(",")[0]
     .trim();
   return sha256(`${ip}|password-reset|${action}|${login.toLocaleLowerCase("uk-UA")}`);
@@ -253,32 +259,32 @@ async function ensureAuthAccount(legacy: Record<string, any>, password: string):
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-  if (req.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
+  if (req.method !== "POST") return json(req, { ok: false, error: "Method not allowed" }, 405);
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-    return json({ ok: false, error: "Server configuration error" }, 503);
+    return json(req, { ok: false, error: "Server configuration error" }, 503);
   }
 
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
-    return json({ ok: false, error: "Invalid JSON" }, 400);
+    return json(req, { ok: false, error: "Invalid JSON" }, 400);
   }
 
   const action = cleanText(body.action, 40);
-  if (!ACTIONS.has(action)) return json({ ok: false, error: "Unsupported action" }, 400);
+  if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Unsupported action" }, 400);
 
   try {
     if (action === "reset_request") {
       const login = cleanLogin(body.login);
       if (!validLogin(login)) {
-        return json({ ok: true, message: "Якщо акаунт і Telegram прив’язані, код уже надіслано." });
+        return json(req, { ok: true, message: "Якщо акаунт і Telegram прив’язані, код уже надіслано." });
       }
 
       const rate = await consumeRate(req, action, login, 4);
       if (!rate.allowed) {
-        return json({ ok: false, error: "Забагато запитів. Повторіть через 15 хвилин." }, 429);
+        return json(req, { ok: false, error: "Забагато запитів. Повторіть через 15 хвилин." }, 429);
       }
 
       const { data: user, error: userError } = await admin
@@ -289,7 +295,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       if (userError) throw userError;
       if (!user || user.fired === true || !(user.chat_id || user.tg_id)) {
-        return json({ ok: true, message: "Якщо акаунт і Telegram прив’язані, код уже надіслано." });
+        return json(req, { ok: true, message: "Якщо акаунт і Telegram прив’язані, код уже надіслано." });
       }
 
       const code = resetCode();
@@ -321,13 +327,13 @@ Deno.serve(async (req: Request) => {
 
       if (!delivery.ok) {
         await admin.from("password_reset_requests").delete().eq("id", request.id);
-        return json({
+        return json(req, {
           ok: false,
           error: "Не вдалося доставити код у Telegram. Відкрийте чат із ботом, натисніть /start і повторіть спробу.",
         }, 502);
       }
 
-      return json({ ok: true, message: "Код і нагадування логіна надіслано у ваш Telegram." });
+      return json(req, { ok: true, message: "Код і нагадування логіна надіслано у ваш Telegram." });
     }
 
     const login = cleanLogin(body.login);
@@ -335,12 +341,12 @@ Deno.serve(async (req: Request) => {
     const password = String(body.password || "");
     const confirmation = String(body.password_confirm || "");
     if (!validLogin(login) || !/^\d{6}$/.test(code) || !validPassword(password) || password !== confirmation) {
-      return json({ ok: false, error: "Перевірте код і новий пароль. Пароль має містити щонайменше 8 символів, літеру та цифру." }, 400);
+      return json(req, { ok: false, error: "Перевірте код і новий пароль. Пароль має містити щонайменше 8 символів, літеру та цифру." }, 400);
     }
 
     const rate = await consumeRate(req, action, login, 8);
     if (!rate.allowed) {
-      return json({ ok: false, error: "Забагато спроб. Запросіть новий код пізніше." }, 429);
+      return json(req, { ok: false, error: "Забагато спроб. Запросіть новий код пізніше." }, 429);
     }
 
     const { data: user, error: userError } = await admin
@@ -351,7 +357,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (userError) throw userError;
     if (!user || user.fired === true) {
-      return json({ ok: false, error: "Код недійсний або прострочений." }, 400);
+      return json(req, { ok: false, error: "Код недійсний або прострочений." }, 400);
     }
 
     const { data: request, error: requestError } = await admin
@@ -373,7 +379,7 @@ Deno.serve(async (req: Request) => {
           .update({ attempts: Math.min(10, Number(request.attempts || 0) + 1) })
           .eq("id", request.id);
       }
-      return json({ ok: false, error: "Код недійсний або прострочений." }, 400);
+      return json(req, { ok: false, error: "Код недійсний або прострочений." }, 400);
     }
 
     await ensureAuthAccount(user, password);
@@ -389,9 +395,9 @@ Deno.serve(async (req: Request) => {
     if (legacyResult.error) throw legacyResult.error;
     if (rateResult.error) throw rateResult.error;
 
-    return json({ ok: true, message: "Пароль оновлено. Тепер можна увійти до порталу." });
+    return json(req, { ok: true, message: "Пароль оновлено. Тепер можна увійти до порталу." });
   } catch (error) {
     console.error("tiflis-password-reset-api failed", error);
-    return json({ ok: false, error: "Операцію не виконано. Спробуйте ще раз або зверніться до адміністратора." }, 502);
+    return json(req, { ok: false, error: "Операцію не виконано. Спробуйте ще раз або зверніться до адміністратора." }, 502);
   }
 });

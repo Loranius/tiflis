@@ -78,7 +78,7 @@ function timingSafeEqual(left: string, right: string): boolean {
 }
 
 async function rateKey(req: Request, action: string, login: string): Promise<string> {
-  const ip = (req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || "unknown").split(",")[0].trim();
+  const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "unknown").split(",")[0].trim();
   return sha256(`${ip}|${action}|${login.toLocaleLowerCase("uk-UA")}`);
 }
 

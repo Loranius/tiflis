@@ -17,8 +17,18 @@ const ACTIONS = new Set([
   "staff_create",
   "staff_set_active",
   "staff_reset_password",
+  "birthdays_bootstrap",
+  "birthdays_save",
+  "birthdays_delete",
 ]);
 const ADMIN_ROLES = new Set(["admin", "sysadmin"]);
+const BIRTHDAY_POSITIONS = new Set([
+  "admin", "bartender", "waiter", "hostess", "runner", "sommelier",
+  "head_chef", "cook", "cook_assistant", "housekeeping", "facilities",
+  "purchasing",
+]);
+const BIRTHDAY_COOK_DETAILS = new Set(["hot", "cold", "pastry", "grill"]);
+const BIRTHDAY_HOUSEKEEPING_DETAILS = new Set(["cleaner", "wash_white", "wash_black"]);
 const ROLE_KEYS = new Set([
   "admin", "chef", "cook", "waiter", "bar", "barman", "hostess",
   "runner", "sommelier", "trainee", "staff",
@@ -169,6 +179,39 @@ function cleanHandle(value: unknown, maxLength = 64): string | null {
 function parseTraineeDays(value: unknown): number | null {
   const parsed = Number(value ?? 0);
   return Number.isInteger(parsed) && parsed >= 0 && parsed <= 3650 ? parsed : null;
+}
+
+function parseBirthdayPosition(value: unknown, allowEmpty = false): string | null | "invalid" {
+  const position = cleanText(value, 30);
+  if (!position) return allowEmpty ? null : "invalid";
+  return BIRTHDAY_POSITIONS.has(position) ? position : "invalid";
+}
+
+function parseBirthdayPositionDetail(position: string | null, value: unknown): string | null | "invalid" {
+  const detail = cleanText(value, 30) || null;
+  if (position === "cook") return !detail || BIRTHDAY_COOK_DETAILS.has(detail) ? detail : "invalid";
+  if (position === "housekeeping") return !detail || BIRTHDAY_HOUSEKEEPING_DETAILS.has(detail) ? detail : "invalid";
+  return detail ? "invalid" : null;
+}
+
+function parseBirthdayDate(
+  monthValue: unknown,
+  dayValue: unknown,
+): { month: number; day: number } | null | "invalid" {
+  const hasMonth = monthValue !== null && monthValue !== undefined && monthValue !== "";
+  const hasDay = dayValue !== null && dayValue !== undefined && dayValue !== "";
+  if (!hasMonth && !hasDay) return null;
+  if (hasMonth !== hasDay) return "invalid";
+
+  const month = Number(monthValue);
+  const day = Number(dayValue);
+  if (!Number.isInteger(month) || month < 1 || month > 12) return "invalid";
+  if (!Number.isInteger(day) || day < 1 || day > 31) return "invalid";
+
+  const REFERENCE_LEAP_YEAR = 2028;
+  const probe = new Date(Date.UTC(REFERENCE_LEAP_YEAR, month - 1, day));
+  if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return "invalid";
+  return { month, day };
 }
 
 function parseStaffSave(body: Record<string, unknown>, current: LegacyStaff, admin: boolean): StaffSaveInput | null {
@@ -378,6 +421,19 @@ Deno.serve(async (req: Request) => {
       return json(req, { ok: true });
     }
 
+    if (action === "birthdays_bootstrap") {
+      const { data, error } = await admin
+        .from("staff_birthdays")
+        .select("id,full_name,position,position_detail,position2,position2_detail,birthday_month,birthday_day,avatar,updated_at")
+        .order("full_name", { ascending: true });
+      if (error) throw error;
+      return json(req, {
+        ok: true,
+        permissions: { canManage: isAdmin(profile) },
+        people: data ?? [],
+      });
+    }
+
     if (!isAdmin(profile)) return json(req, { ok: false, error: "Insufficient permissions" }, 403);
 
     if (action === "staff_create") {
@@ -465,8 +521,61 @@ Deno.serve(async (req: Request) => {
       return json(req, { ok: true });
     }
 
+    if (action === "birthdays_save") {
+      const id = Number(body.id);
+      const hasId = Number.isInteger(id) && id > 0;
+      const fullName = cleanText(body.full_name, 120);
+      const position = parseBirthdayPosition(body.position);
+      const position2 = parseBirthdayPosition(body.position2, true);
+      if (!fullName || position === "invalid" || position2 === "invalid") {
+        return json(req, { ok: false, error: "Invalid birthday entry" }, 400);
+      }
+      if (position2 && position2 === position) {
+        return json(req, { ok: false, error: "Друга посада має відрізнятись від першої" }, 400);
+      }
+      const positionDetail = parseBirthdayPositionDetail(position, body.position_detail);
+      const position2Detail = parseBirthdayPositionDetail(position2, body.position2_detail);
+      if (positionDetail === "invalid" || position2Detail === "invalid") {
+        return json(req, { ok: false, error: "Invalid position detail" }, 400);
+      }
+      const birthday = parseBirthdayDate(body.birthday_month, body.birthday_day);
+      if (birthday === "invalid") return json(req, { ok: false, error: "Invalid birthday" }, 400);
+      const avatar = parseAvatar(body.avatar);
+      if (avatar === "invalid") return json(req, { ok: false, error: "Invalid avatar URL" }, 400);
+
+      const row = {
+        full_name: fullName,
+        position,
+        position_detail: positionDetail,
+        position2,
+        position2_detail: position2Detail,
+        birthday_month: birthday?.month ?? null,
+        birthday_day: birthday?.day ?? null,
+        avatar,
+        updated_by: profile.legacy_user_id,
+      };
+
+      const { data, error } = hasId
+        ? await admin.from("staff_birthdays").update(row).eq("id", id).select("id").maybeSingle()
+        : await admin.from("staff_birthdays").insert(row).select("id").single();
+      if (error) throw error;
+      if (hasId && !data) return json(req, { ok: false, error: "Birthday entry not found" }, 404);
+      return json(req, { ok: true, id: (data as { id: number }).id });
+    }
+
+    if (action === "birthdays_delete") {
+      const id = Number(body.id);
+      if (!Number.isInteger(id) || id <= 0) return json(req, { ok: false, error: "Invalid birthday entry" }, 400);
+      const { error } = await admin.from("staff_birthdays").delete().eq("id", id);
+      if (error) throw error;
+      return json(req, { ok: true });
+    }
+
     const targetId = cleanText(body.user_id, 120);
     if (!targetId) return json(req, { ok: false, error: "Invalid staff member" }, 400);
+    if (targetId === "sysadmin" && profile.legacy_user_id !== "sysadmin") {
+      return json(req, { ok: false, error: "Protected account" }, 403);
+    }
     const { data: mapped, error: mappedError } = await admin.from("staff_profiles").select("user_id").eq("legacy_user_id", targetId).single();
     if (mappedError || !mapped) return json(req, { ok: false, error: "Auth account is not linked yet" }, 409);
     const password = temporaryPassword();

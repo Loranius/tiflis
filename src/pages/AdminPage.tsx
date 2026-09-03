@@ -17,7 +17,9 @@ import {
   UtensilsCrossed,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback, useEffect, useMemo, useRef, useState,
+} from 'react';
 import { RegistrationAdminPanel } from '../components/RegistrationAdminPanel';
 import { secureApi } from '../lib/secureApi';
 import './admin.css';
@@ -167,6 +169,7 @@ export function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const flashTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -193,8 +196,9 @@ export function AdminPage() {
   }, [data]);
 
   function flash(message: string) {
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
     setSuccess(message);
-    window.setTimeout(() => setSuccess(null), 2400);
+    flashTimer.current = window.setTimeout(() => setSuccess(null), 2400);
   }
 
   async function saveConfig() {

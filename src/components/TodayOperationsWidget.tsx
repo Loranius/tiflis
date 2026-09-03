@@ -228,7 +228,7 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
   const doneCount = allAssignments.filter((item) => item.status === 'done').length;
   const hasPublishedPlan = Boolean(daily?.publication || (isTuesday && handover?.publication));
   const currentStaff = workingTeam.find((staff) => staff.id === daily?.me.id);
-  const currentIsWaiter = currentStaff ? staffRoles(currentStaff).includes('waiter') : true;
+  const currentIsWaiter = currentStaff ? staffRoles(currentStaff).includes('waiter') : null;
   const hasWorkingShift = isWorkingShift(daily?.me.shift);
 
   async function toggleTask(task: DutyAssignment) {
@@ -272,9 +272,11 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
           ? 'Сьогодні у вас немає зміни'
           : !daily?.publication
             ? 'Розподіл ще не опубліковано'
-            : !currentIsWaiter
-              ? 'Зона для цієї ролі не потрібна'
-              : personalZones.length
+            : teamLoading
+              ? 'Визначаємо вашу роль…'
+              : currentIsWaiter === false
+                ? 'Зона для цієї ролі не потрібна'
+                : personalZones.length
                 ? personalZones.map((zone) => zoneDefinitions.get(zone.zone_key) || zone.zone_key).join(' · ')
                 : 'Зону не призначено';
     const firstTask = allAssignments[0];

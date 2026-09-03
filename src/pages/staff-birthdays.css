@@ -1,0 +1,392 @@
+.birthdays-tab-v1 {
+  display: grid;
+  gap: 16px;
+}
+
+.birthdays-command-v1 {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 220px auto;
+  align-items: end;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.birthdays-search-v1 {
+  height: 47px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.birthdays-search-v1:focus-within {
+  border-color: rgba(215, 182, 108, .45);
+  box-shadow: 0 0 0 4px rgba(215, 182, 108, .07);
+}
+
+.birthdays-search-v1 input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.birthdays-search-v1 button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.birthdays-filter-v1 {
+  display: grid;
+  gap: 5px;
+}
+
+.birthdays-filter-v1 > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.birthdays-filter-v1 select {
+  height: 47px;
+  padding: 0 36px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  outline: none;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.birthdays-add-v1 {
+  min-height: 47px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #d7b66c, #b99045);
+  color: #17150f;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.birthdays-alert-v1,
+.birthdays-loading-v1 {
+  border-radius: 15px;
+}
+
+.birthdays-alert-v1 {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 124, 124, .28);
+  background: rgba(239, 124, 124, .08);
+  color: #ffb3b3;
+}
+
+.birthdays-alert-v1 button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .04);
+  color: inherit;
+  cursor: pointer;
+}
+
+.birthdays-loading-v1,
+.birthdays-empty-v1 {
+  min-height: 220px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.birthdays-loading-v1 svg,
+.birthdays-empty-v1 svg { color: var(--gold); }
+
+.birthdays-grid-v1 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.birthdays-grid-v1 > article {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 19px;
+  background: var(--surface);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.birthdays-grid-v1 > article.is-soon {
+  border-color: rgba(215, 182, 108, .4);
+  background: linear-gradient(145deg, var(--surface), rgba(215, 182, 108, .05));
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+
+.birthdays-avatar-v1 {
+  flex: 0 0 auto;
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(215, 182, 108, .23);
+  border-radius: 19px;
+  background:
+    radial-gradient(circle at 35% 25%, rgba(215, 182, 108, .18), transparent 35%),
+    linear-gradient(145deg, var(--wine), #45151e);
+  color: white;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.birthdays-avatar-v1 img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.birthdays-card-copy-v1 {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 5px;
+}
+
+.birthdays-card-copy-v1 > span {
+  overflow: hidden;
+  color: var(--gold);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.birthdays-card-copy-v1 h3 {
+  overflow: hidden;
+  margin: 0;
+  font-family: 'Prata', serif;
+  font-size: 18px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.birthdays-card-footer-v1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.birthdays-card-footer-v1 b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #c5d0c7;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.birthdays-card-footer-v1 b svg { color: var(--gold); }
+
+.birthdays-card-footer-v1 em {
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: rgba(215, 182, 108, .12);
+  color: var(--gold);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.birthdays-grid-v1 > article.is-soon .birthdays-card-footer-v1 em {
+  background: linear-gradient(135deg, #d7b66c, #b99045);
+  color: #17150f;
+}
+
+.birthdays-edit-v1 {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.birthdays-sheet-backdrop-v1 {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(3, 7, 4, .8);
+  backdrop-filter: blur(10px);
+}
+
+.birthdays-editor-sheet-v1 {
+  width: min(100%, 680px);
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  padding: 25px;
+  border: 1px solid rgba(215, 182, 108, .27);
+  border-radius: 25px;
+  background: #111b15;
+  box-shadow: 0 32px 100px rgba(0, 0, 0, .52);
+}
+
+.birthdays-editor-heading-v1 {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 21px;
+}
+
+.birthdays-editor-heading-v1 h3 {
+  margin: 7px 0 0;
+  font-family: 'Prata', serif;
+  font-size: 26px;
+  line-height: 1.18;
+  font-weight: 400;
+}
+
+.birthdays-editor-heading-v1 > button {
+  width: 39px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.birthdays-editor-grid-v1 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.birthdays-editor-grid-v1 label {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.birthdays-editor-grid-v1 label.is-wide { grid-column: 1 / -1; }
+.birthdays-editor-grid-v1 label > span { color: #c7d0c9; font-size: 11px; font-weight: 750; }
+
+.birthdays-editor-grid-v1 input,
+.birthdays-editor-grid-v1 select {
+  width: 100%;
+  height: 47px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  outline: none;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.birthdays-editor-grid-v1 input:focus,
+.birthdays-editor-grid-v1 select:focus {
+  border-color: rgba(215, 182, 108, .46);
+  box-shadow: 0 0 0 4px rgba(215, 182, 108, .07);
+}
+
+.birthdays-editor-actions-v1 {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 21px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.birthdays-editor-actions-v1 button {
+  min-height: 45px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border-radius: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.birthdays-editor-actions-v1 button.is-save {
+  border: 0;
+  background: linear-gradient(135deg, #d7b66c, #b99045);
+  color: #17150f;
+}
+
+.birthdays-editor-actions-v1 button.is-delete {
+  border: 1px solid rgba(239, 124, 124, .26);
+  background: rgba(239, 124, 124, .07);
+  color: #ffadad;
+}
+
+.birthdays-editor-actions-v1 button:disabled { opacity: .62; cursor: wait; }
+
+@media (max-width: 980px) {
+  .birthdays-command-v1 { grid-template-columns: minmax(220px, 1fr) 190px auto; }
+  .birthdays-grid-v1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .birthdays-command-v1 { grid-template-columns: 1fr; padding: 10px; }
+  .birthdays-add-v1 { grid-column: auto; }
+  .birthdays-grid-v1 { grid-template-columns: 1fr; }
+  .birthdays-sheet-backdrop-v1 { align-items: end; padding: 0; }
+  .birthdays-editor-sheet-v1 {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 22px 22px 0 0;
+  }
+  .birthdays-editor-grid-v1 { grid-template-columns: 1fr; }
+  .birthdays-editor-grid-v1 label.is-wide { grid-column: auto; }
+  .birthdays-editor-actions-v1 { align-items: stretch; flex-direction: column-reverse; }
+  .birthdays-editor-actions-v1 button { width: 100%; }
+}
