@@ -15,6 +15,7 @@
   --wine-soft: rgba(125, 38, 53, 0.18);
   --green: #55bd7e;
   --danger: #ef8383;
+  --action-success: linear-gradient(135deg, #24593a, #2f6848);
   --shadow-sm: 0 10px 30px rgba(0, 0, 0, 0.18);
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
   --radius-sm: 12px;
