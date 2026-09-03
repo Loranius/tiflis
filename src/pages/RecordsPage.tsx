@@ -452,15 +452,6 @@ export function RecordsPage() {
 
   return (
     <div className="records-page">
-      <section className="records-hero">
-        <div>
-          <span className="eyebrow">Особистий прогрес і командний топ</span>
-          <h2>Рекорди</h2>
-          <p>Переглядай власні досягнення або порівнюй результат із п’ятьма найкращими офіціантами в кожній категорії.</p>
-        </div>
-        <span className="records-hero-mark" aria-hidden="true"><Trophy size={34} /></span>
-      </section>
-
       <nav className="records-view-tabs" aria-label="Режим перегляду рекордів">
         <button
           type="button"

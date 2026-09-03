@@ -353,15 +353,6 @@ export function ReservePage() {
 
   return (
     <div className="reserve-page-v2">
-      <section className="reserve-hero-v2">
-        <div>
-          <span className="eyebrow">Карта сервісу</span>
-          <h2>Резерви без накладок</h2>
-          <p>Зали, реальні столи, об’єднання, часові конфлікти й статус гостей в одному живому робочому просторі.</p>
-        </div>
-        <div className="reserve-hero-mark"><Armchair size={36} /></div>
-      </section>
-
       <section className="reserve-date-control-v2">
         <button type="button" onClick={() => setSelectedDate((date) => addDays(date, -7))} aria-label="Попередній тиждень"><ChevronLeft size={20} /></button>
         <div className="reserve-date-strip-v2">

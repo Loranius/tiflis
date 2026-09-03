@@ -95,25 +95,6 @@
     overflow-wrap: anywhere;
   }
 
-  /* Compact working heroes leave more room for actual restaurant data. */
-  body [class*='-hero-v2'] {
-    min-height: 104px !important;
-    padding: 18px 17px !important;
-    border-radius: 19px !important;
-  }
-
-  body [class*='-hero-v2'] h2 {
-    margin: 5px 0 6px !important;
-    font-size: clamp(25px, 7.5vw, 32px) !important;
-    line-height: 1.08 !important;
-  }
-
-  body [class*='-hero-v2'] p {
-    max-width: 680px !important;
-    font-size: 12px !important;
-    line-height: 1.5 !important;
-  }
-
   /* Bottom navigation: thumb-sized targets + safe area + guaranteed content clearance. */
   body .mobile-nav.legacy-mobile-nav {
     left: max(8px, env(safe-area-inset-left)) !important;
@@ -460,15 +441,6 @@
     padding-inline: max(12px, env(safe-area-inset-left)) !important;
   }
 
-  body [class*='-hero-v2'] {
-    min-height: 96px !important;
-    padding: 16px 15px !important;
-  }
-
-  body [class*='-hero-v2'] h2 {
-    font-size: clamp(24px, 8vw, 30px) !important;
-  }
-
   body .mobile-more-sheet.tiflis-modal-surface,
   body .mobile-more-sheet {
     width: 100% !important;
@@ -636,8 +608,7 @@
 @media (prefers-reduced-motion: reduce) {
   body .mobile-more-sheet,
   body .mobile-more-backdrop,
-  body .mobile-nav-item,
-  body [class*='-hero-v2'] {
+  body .mobile-nav-item {
     scroll-behavior: auto !important;
     transition: none !important;
   }

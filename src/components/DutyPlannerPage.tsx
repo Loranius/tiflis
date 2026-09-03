@@ -12,7 +12,6 @@ import {
   Trash2,
   UsersRound,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
@@ -37,10 +36,6 @@ import './duty-planner.css';
 
 interface DutyPlannerPageProps {
   planType: DutyPlanType;
-  eyebrow: string;
-  title: string;
-  description: string;
-  icon: LucideIcon;
 }
 
 type DutySelections = Record<string, string>;
@@ -124,13 +119,7 @@ function trimZoneValues(values: string[]): string[] {
   return next.slice(0, 3);
 }
 
-export function DutyPlannerPage({
-  planType,
-  eyebrow,
-  title,
-  description,
-  icon: Icon,
-}: DutyPlannerPageProps) {
+export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
   const { user } = useAuth();
   const ownerId = user?.id || 'active-session';
   const [date, setDate] = useState(() => restoredInitialDate(ownerId, planType));
@@ -458,11 +447,6 @@ export function DutyPlannerPage({
 
   return (
     <div className="duty-planner-page-v1">
-      <section className={`duty-planner-hero-v1 is-${planType}`}>
-        <div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2><p>{description}</p></div>
-        <div className="duty-planner-mark-v1"><Icon size={34} /></div>
-      </section>
-
       <section className="duty-planner-toolbar-v1">
         <div className="duty-planner-date-v1">
           <button type="button" onClick={() => requestDate(addDays(date, -dateStep))} aria-label="Попередня дата"><ChevronLeft size={18} /></button>
