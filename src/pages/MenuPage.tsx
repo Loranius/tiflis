@@ -322,6 +322,22 @@ export function MenuPage() {
     }
   }
 
+  async function toggleStop(item: MenuItem) {
+    const nextStopped = !item.stopped;
+    setError(null);
+    try {
+      await secureApi<{ ok: true; item: { id: number; stopped: boolean } }>({
+        action: 'menu_toggle_stop',
+        id: item.id,
+        stopped: nextStopped,
+      }, 'tiflis-menu-api');
+      setItems((current) => current.map((existing) => (existing.id === item.id ? { ...existing, stopped: nextStopped } : existing)));
+      setSelected((current) => (current && current.id === item.id ? { ...current, stopped: nextStopped } : current));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не вдалося змінити статус позиції.');
+    }
+  }
+
   async function deleteItem() {
     if (!editor?.id) return;
     setSaving(true);
@@ -430,7 +446,19 @@ export function MenuPage() {
           <div className="menu-detail-facts-v3 menu-detail-facts-v4"><span><b>Категорія</b>{categoryLabel(selected.category)}</span><span><b>Статус</b>{selected.stopped ? 'У стопі' : 'Доступна'}</span></div>
           {(selected.cook_time_normal !== null || selected.cook_time_busy !== null) ? <div className="menu-detail-times-v2"><span><Clock3 size={17} /><b>Звичайно</b>{selected.cook_time_normal !== null ? `${selected.cook_time_normal} хв` : 'не вказано'}</span><span><AlertTriangle size={17} /><b>При завантаженні</b>{selected.cook_time_busy !== null ? `${selected.cook_time_busy} хв` : 'не вказано'}</span></div> : null}
           {(selected.allergens || []).length > 0 ? <div className="menu-detail-allergens-v2"><strong>Алергени</strong><div>{(selected.allergens || []).map((allergen) => <span key={allergen}>{allergen}</span>)}</div></div> : null}
-          <div className="menu-detail-actions-v2"><span />{data?.permissions.canEdit ? <button type="button" className="is-edit" onClick={() => { setEditor(createEditor(selected)); setSelected(null); }}><Edit3 size={17} /> Редагувати</button> : null}</div>
+          <div className="menu-detail-actions-v2">
+            {data?.permissions.canToggleStop ? (
+              <button
+                type="button"
+                className={selected.stopped ? 'is-return' : 'is-stop'}
+                onClick={() => void toggleStop(selected)}
+              >
+                {selected.stopped ? <Check size={17} /> : <AlertTriangle size={17} />}
+                {selected.stopped ? 'Зняти зі стопу' : 'У стоп-лист'}
+              </button>
+            ) : <span />}
+            {data?.permissions.canEdit ? <button type="button" className="is-edit" onClick={() => { setEditor(createEditor(selected)); setSelected(null); }}><Edit3 size={17} /> Редагувати</button> : null}
+          </div>
         </div>
       </section></div> : null}
 

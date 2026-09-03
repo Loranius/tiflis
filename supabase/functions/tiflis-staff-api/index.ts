@@ -467,6 +467,9 @@ Deno.serve(async (req: Request) => {
 
     const targetId = cleanText(body.user_id, 120);
     if (!targetId) return json(req, { ok: false, error: "Invalid staff member" }, 400);
+    if (targetId === "sysadmin" && profile.legacy_user_id !== "sysadmin") {
+      return json(req, { ok: false, error: "Protected account" }, 403);
+    }
     const { data: mapped, error: mappedError } = await admin.from("staff_profiles").select("user_id").eq("legacy_user_id", targetId).single();
     if (mappedError || !mapped) return json(req, { ok: false, error: "Auth account is not linked yet" }, 409);
     const password = temporaryPassword();
