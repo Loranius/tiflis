@@ -39,7 +39,7 @@ interface BirthdayEditor {
 const POSITION_ORDER = [
   'admin', 'bartender', 'waiter', 'hostess', 'runner', 'sommelier',
   'head_chef', 'cook', 'cook_assistant', 'housekeeping', 'facilities',
-  'hearth_keeper', 'purchasing',
+  'purchasing',
 ];
 
 const POSITION_LABELS: Record<string, string> = {
@@ -54,7 +54,6 @@ const POSITION_LABELS: Record<string, string> = {
   cook_assistant: 'Помічник кухаря',
   housekeeping: 'Господині',
   facilities: 'Завгосп',
-  hearth_keeper: 'Камінщик',
   purchasing: 'Закупівник',
 };
 

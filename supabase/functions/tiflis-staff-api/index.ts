@@ -25,7 +25,7 @@ const ADMIN_ROLES = new Set(["admin", "sysadmin"]);
 const BIRTHDAY_POSITIONS = new Set([
   "admin", "bartender", "waiter", "hostess", "runner", "sommelier",
   "head_chef", "cook", "cook_assistant", "housekeeping", "facilities",
-  "hearth_keeper", "purchasing",
+  "purchasing",
 ]);
 const BIRTHDAY_COOK_DETAILS = new Set(["hot", "cold", "pastry", "grill"]);
 const BIRTHDAY_HOUSEKEEPING_DETAILS = new Set(["cleaner", "wash_white", "wash_black"]);

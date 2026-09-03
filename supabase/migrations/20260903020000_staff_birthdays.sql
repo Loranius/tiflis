@@ -11,7 +11,7 @@ create table if not exists public.staff_birthdays (
   position text not null check (position in (
     'admin', 'bartender', 'waiter', 'hostess', 'runner', 'sommelier',
     'head_chef', 'cook', 'cook_assistant', 'housekeeping', 'facilities',
-    'hearth_keeper', 'purchasing'
+    'purchasing'
   )),
   position_detail text check (
     (position = 'cook' and position_detail in ('hot', 'cold', 'pastry', 'grill'))
@@ -21,7 +21,7 @@ create table if not exists public.staff_birthdays (
   position2 text check (position2 is null or position2 in (
     'admin', 'bartender', 'waiter', 'hostess', 'runner', 'sommelier',
     'head_chef', 'cook', 'cook_assistant', 'housekeeping', 'facilities',
-    'hearth_keeper', 'purchasing'
+    'purchasing'
   )),
   position2_detail text check (
     (position2 = 'cook' and position2_detail in ('hot', 'cold', 'pastry', 'grill'))
@@ -108,7 +108,7 @@ values
   ('Марина', 'housekeeping', 'cleaner', null, null, 9, 17),
   ('Валя', 'housekeeping', 'cleaner', null, null, null, null),
   ('Ольга', 'housekeeping', 'cleaner', null, null, 6, 8),
-  ('Ігор', 'hearth_keeper', null, null, null, 5, 2),
+  ('Ігор', 'facilities', null, null, null, 5, 2),
   ('Наташа', 'purchasing', null, null, null, null, null);
 
 commit;
