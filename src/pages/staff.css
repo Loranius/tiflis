@@ -157,6 +157,10 @@
 }
 
 .staff-metrics-v2 svg { color: var(--gold); }
+.staff-metrics-v2 .staff-role-icon-v1 {
+  font-size: 19px;
+  line-height: 1;
+}
 .staff-metrics-v2 span {
   color: var(--muted);
   font-size: 10px;

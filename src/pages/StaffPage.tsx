@@ -12,7 +12,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  ShieldCheck,
   Sparkles,
   UserCheck,
   UserRoundX,
@@ -237,10 +236,21 @@ export function StaffPage() {
 
   const metrics = useMemo(() => {
     const active = members.filter((member) => !member.fired);
-    const authLinked = active.filter((member) => member.authLinked).length;
-    const telegram = active.filter((member) => member.telegramLinked).length;
-    const birthdays = active.filter((member) => member.birthday).length;
-    return { active: active.length, authLinked, telegram, birthdays, archived: members.length - active.length };
+    return { archived: members.length - active.length };
+  }, [members]);
+
+  const roleCounts = useMemo(() => {
+    const counts = new Map<string, { label: string; icon: string; order: number; count: number }>();
+    members.filter((member) => !member.fired).forEach((member) => {
+      const role = member.role === 'sysadmin' ? 'admin' : member.role;
+      if (role === 'chef') return;
+      const meta = ROLE_META[role];
+      const label = meta?.label || role;
+      const current = counts.get(label) || { label, icon: meta?.icon || '👤', order: meta?.order ?? 999, count: 0 };
+      current.count += 1;
+      counts.set(label, current);
+    });
+    return [...counts.values()].sort((left, right) => left.order - right.order || left.label.localeCompare(right.label, 'uk'));
   }, [members]);
 
   async function saveProfile() {
@@ -360,10 +370,13 @@ export function StaffPage() {
       </section>
 
       <section className="staff-metrics-v2">
-        <article><UserCheck size={19} /><span>Активна команда</span><strong>{metrics.active}</strong></article>
-        <article><ShieldCheck size={19} /><span>Auth підключено</span><strong>{metrics.authLinked}</strong></article>
-        <article><MessageCircle size={19} /><span>Telegram зв’язано</span><strong>{metrics.telegram}</strong></article>
-        <article><Cake size={19} /><span>Дні народження</span><strong>{metrics.birthdays}</strong></article>
+        {roleCounts.map((role) => (
+          <article key={role.label}>
+            <span className="staff-role-icon-v1" aria-hidden="true">{role.icon}</span>
+            <span>{role.label}</span>
+            <strong>{role.count}</strong>
+          </article>
+        ))}
       </section>
 
       {error ? <div className="staff-alert-v2" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
