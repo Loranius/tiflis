@@ -47,7 +47,7 @@ jobs:
           count=0
           for file in supabase/functions/*/index.ts; do
             echo "::group::Deno check $file"
-            deno check --node-modules-dir=auto "$file"
+            deno check --node-modules-dir=auto --minimum-dependency-age=0 "$file"
             echo "::endgroup::"
             count=$((count + 1))
           done
