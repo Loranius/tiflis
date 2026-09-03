@@ -21,7 +21,10 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { secureApi } from '../lib/secureApi';
+import { StaffBirthdaysTab } from './StaffBirthdaysTab';
 import './staff.css';
+
+type StaffPageTab = 'team' | 'birthdays';
 
 interface StaffRoleOption {
   key: string;
@@ -162,6 +165,7 @@ function createEditor(member?: StaffMember): StaffEditor {
 }
 
 export function StaffPage() {
+  const [tab, setTab] = useState<StaffPageTab>('team');
   const [data, setData] = useState<StaffBootstrapResponse | null>(null);
   const [members, setMembers] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -345,6 +349,14 @@ export function StaffPage() {
         <div className="staff-hero-mark"><UsersRound size={36} /></div>
       </section>
 
+      <nav className="staff-tabs-v1" role="tablist" aria-label="Розділи персоналу">
+        <button type="button" role="tab" aria-selected={tab === 'team'} className={tab === 'team' ? 'is-active' : ''} onClick={() => setTab('team')}><UsersRound size={16} /> Команда</button>
+        <button type="button" role="tab" aria-selected={tab === 'birthdays'} className={tab === 'birthdays' ? 'is-active' : ''} onClick={() => setTab('birthdays')}><Cake size={16} /> День народження</button>
+      </nav>
+
+      {tab === 'birthdays' ? <StaffBirthdaysTab /> : null}
+
+      {tab === 'team' ? <>
       <section className="staff-command-v2">
         <label className="staff-search-v2"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Імʼя, логін, роль або соцмережа…" />{search ? <button type="button" onClick={() => setSearch('')}><X size={15} /></button> : null}</label>
         <label className="staff-role-filter-v2"><span>Роль</span><select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}><option value="all">Уся команда</option>{roles.map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>
@@ -401,6 +413,7 @@ export function StaffPage() {
       </section></div> : null}
 
       {credential ? <div className="staff-sheet-backdrop-v2"><section className="staff-credential-sheet-v2" role="dialog" aria-modal="true"><div className="staff-credential-icon-v2"><KeyRound size={30} /></div><span className="eyebrow">Показується один раз</span><h3>{credential.title}</h3><p>Передайте ці дані працівнику безпечним каналом. Після закриття пароль неможливо буде переглянути повторно.</p><div className="staff-credential-values-v2"><label><span>Логін</span><strong>{credential.login}</strong></label><label><span>Тимчасовий пароль</span><strong>{credential.password}</strong></label></div><button type="button" className="is-copy" onClick={() => void copyCredentials()}>{copied ? <Check size={17} /> : <Copy size={17} />}{copied ? 'Скопійовано' : 'Скопіювати дані'}</button><button type="button" className="is-close" onClick={() => setCredential(null)}>Я передав дані — закрити</button></section></div> : null}
+      </> : null}
     </div>
   );
 }
