@@ -40,6 +40,7 @@ function portalVendorChunk(id: string): string | undefined {
     || id.includes('/node_modules/react-router/')
     || id.includes('/node_modules/scheduler/')
   ) return 'react-vendor';
+  if (id.includes('/node_modules/lucide-react/')) return 'icons-vendor';
   return undefined;
 }
 

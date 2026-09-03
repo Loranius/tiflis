@@ -20,8 +20,10 @@ import {
   type DutyPlanResponse,
 } from '../lib/dutyPlannerClient';
 import { secureApi } from '../lib/secureApi';
-import { isKyivWeekday } from '../lib/time';
+import { addDaysToDateKey, getKyivHour, isKyivWeekday } from '../lib/time';
 import './today-operations.css';
+
+const NEXT_DAY_CUTOFF_HOUR = 13;
 
 interface ScheduleStaff {
   id: string;
@@ -130,8 +132,19 @@ function updateAssignmentStatus(
 }
 
 export function TodayOperationsWidget({ compact = false }: { compact?: boolean }) {
-  const date = useKyivDay();
-  const isTuesday = useMemo(() => isKyivWeekday(date, 2), [date]);
+  const kyivDay = useKyivDay();
+  const tomorrowKey = useMemo(() => addDaysToDateKey(kyivDay, 1), [kyivDay]);
+  const [now, setNow] = useState(() => new Date());
+  const isPastCutoff = useMemo(() => getKyivHour(now) >= NEXT_DAY_CUTOFF_HOUR, [now]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const [effectiveDate, setEffectiveDate] = useState(kyivDay);
+  const isShowingTomorrow = effectiveDate === tomorrowKey;
+  const isTuesday = useMemo(() => isKyivWeekday(effectiveDate, 2), [effectiveDate]);
   const [daily, setDaily] = useState<DutyPlanResponse | null>(null);
   const [handover, setHandover] = useState<DutyPlanResponse | null>(null);
   const [workingTeam, setWorkingTeam] = useState<WorkingStaff[]>([]);
@@ -145,18 +158,34 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
     setDutiesLoading(true);
     setDutiesError(null);
     try {
-      const [dailyResult, handoverResult] = await Promise.all([
-        loadDutyPlan('daily', date),
-        isTuesday ? loadDutyPlan('handover', date) : Promise.resolve(null),
+      let resolvedDate = kyivDay;
+      let dailyResult: DutyPlanResponse | null = null;
+
+      // After the admin's next-day cutoff, look ahead to tomorrow's plan first —
+      // once it's published, that's the shift staff actually need to see.
+      if (isPastCutoff) {
+        const tomorrowResult = await loadDutyPlan('daily', tomorrowKey);
+        if (tomorrowResult.publication) {
+          resolvedDate = tomorrowKey;
+          dailyResult = tomorrowResult;
+        }
+      }
+
+      const resolvedIsTuesday = isKyivWeekday(resolvedDate, 2);
+      const [finalDaily, finalHandover] = await Promise.all([
+        dailyResult ? Promise.resolve(dailyResult) : loadDutyPlan('daily', resolvedDate),
+        resolvedIsTuesday ? loadDutyPlan('handover', resolvedDate) : Promise.resolve(null),
       ]);
-      setDaily(dailyResult);
-      setHandover(handoverResult);
+
+      setEffectiveDate(resolvedDate);
+      setDaily(finalDaily);
+      setHandover(finalHandover);
     } catch (reason) {
       setDutiesError(reason instanceof Error ? reason.message : 'Не вдалося завантажити обов’язки.');
     } finally {
       setDutiesLoading(false);
     }
-  }, [date, isTuesday]);
+  }, [kyivDay, tomorrowKey, isPastCutoff]);
 
   const loadTeam = useCallback(async () => {
     setTeamLoading(true);
@@ -164,11 +193,11 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
     try {
       const response = await secureApi<ScheduleBootstrapResponse>({
         action: 'schedule_bootstrap',
-        month: date.slice(0, 7),
+        month: effectiveDate.slice(0, 7),
       });
       const shifts = new Map(
         response.entries
-          .filter((entry) => entry.date === date && isWorkingShift(entry.shift))
+          .filter((entry) => entry.date === effectiveDate && isWorkingShift(entry.shift))
           .map((entry) => [entry.user_id, String(entry.shift)]),
       );
       const team = response.users
@@ -185,7 +214,7 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
     } finally {
       setTeamLoading(false);
     }
-  }, [date]);
+  }, [effectiveDate]);
 
   useEffect(() => { void loadDuties(); }, [loadDuties]);
   useEffect(() => { void loadTeam(); }, [loadTeam]);
@@ -269,7 +298,7 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
       : dutiesError
         ? 'Не вдалося завантажити зону'
         : !hasWorkingShift
-          ? 'Сьогодні у вас немає зміни'
+          ? `${isShowingTomorrow ? 'Завтра' : 'Сьогодні'} у вас немає зміни`
           : !daily?.publication
             ? 'Розподіл ще не опубліковано'
             : teamLoading
@@ -339,7 +368,7 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
         <Link className="today-dashboard-row-v2 today-dashboard-team-row-v2" to="/schedule">
           <span className="today-dashboard-row-icon-v2" aria-hidden="true"><UsersRound size={20} /></span>
           <span className="today-dashboard-row-copy-v2">
-            <strong>Команда сьогодні</strong>
+            <strong>{isShowingTomorrow ? 'Команда завтра' : 'Команда сьогодні'}</strong>
             <small>{teamLoading ? 'Завантажуємо команду…' : teamError ? 'Не вдалося завантажити команду' : `${workingTeam.length} ${workingTeam.length === 1 ? 'працівник' : 'працівників'} у зміні`}</small>
           </span>
           {!teamLoading && workingTeam.length ? (
@@ -363,9 +392,9 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
       <section className="today-personal-work-v5" aria-labelledby="today-personal-work-title">
         <header className="today-personal-heading-v5">
           <div>
-            <span className="eyebrow">Моя зміна</span>
+            <span className="eyebrow">{isShowingTomorrow ? 'Завтра' : 'Моя зміна'}</span>
             <h2 id="today-personal-work-title">Моя зона й обов’язки</h2>
-            <p>{daily?.me.shift ? `Зміна ${daily.me.shift}` : 'Робочу зміну на сьогодні не призначено'}</p>
+            <p>{daily?.me.shift ? `Зміна ${daily.me.shift}` : `Робочу зміну на ${isShowingTomorrow ? 'завтра' : 'сьогодні'} не призначено`}</p>
           </div>
           <div className="today-operations-progress-v5" aria-label={`Виконано ${doneCount} із ${allAssignments.length}`}>
             <ClipboardCheck size={20} />
@@ -393,7 +422,7 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
         {!dutiesLoading && !hasWorkingShift ? (
           <div className="today-operations-empty-v5">
             <ClipboardCheck size={26} />
-            <strong>Сьогодні у вас немає робочої зміни</strong>
+            <strong>{isShowingTomorrow ? 'Завтра' : 'Сьогодні'} у вас немає робочої зміни</strong>
             <span>Зона й обов’язки з’являться тут у ваш робочий день.</span>
           </div>
         ) : null}
@@ -431,7 +460,7 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
             ) : null}
 
             {allAssignments.length === 0 ? (
-              <div className="today-no-personal-duties-v5">Особистих обов’язків на сьогодні не призначено.</div>
+              <div className="today-no-personal-duties-v5">Особистих обов’язків на {isShowingTomorrow ? 'завтра' : 'сьогодні'} не призначено.</div>
             ) : null}
           </div>
         ) : null}
@@ -448,9 +477,9 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
       <section className="today-shift-team-v5" aria-labelledby="today-shift-team-title">
         <header>
           <div>
-            <span className="eyebrow">Команда сьогодні</span>
-            <h2 id="today-shift-team-title">Хто сьогодні працює</h2>
-            <p>Уся команда за графіком на поточний день.</p>
+            <span className="eyebrow">{isShowingTomorrow ? 'Завтра' : 'Команда сьогодні'}</span>
+            <h2 id="today-shift-team-title">Хто {isShowingTomorrow ? 'завтра' : 'сьогодні'} працює</h2>
+            <p>Уся команда за графіком на {isShowingTomorrow ? 'завтрашній' : 'поточний'} день.</p>
           </div>
           <span className="today-shift-team-count-v5">
             <UsersRound size={18} />
@@ -509,7 +538,7 @@ export function TodayOperationsWidget({ compact = false }: { compact?: boolean }
         {!teamLoading && workingTeam.length === 0 ? (
           <div className="today-shift-team-empty-v5">
             <UsersRound size={24} />
-            <strong>Працівників на сьогодні не знайдено</strong>
+            <strong>Працівників на {isShowingTomorrow ? 'завтра' : 'сьогодні'} не знайдено</strong>
             <span>Список з’явиться після заповнення графіка.</span>
           </div>
         ) : null}
