@@ -76,21 +76,19 @@ export function DashboardPage() {
       <WelcomeWidget />
 
       {canUseCash ? (
-        <div className="today-dashboard-cash-v2">
-          <Suspense fallback={<DashboardCardSkeleton label="Завантаження каси за сьогодні" />}>
-            <TodayCashCard compact />
-          </Suspense>
-        </div>
+        <Suspense fallback={<DashboardCardSkeleton label="Завантаження каси за сьогодні" />}>
+          <TodayCashCard />
+        </Suspense>
       ) : null}
 
-      <div className="today-dashboard-support-v2" aria-label="Зміна сьогодні">
+      <div className="today-dashboard-cards-v2">
         <Suspense fallback={<DashboardCardSkeleton label="Завантаження робочого дня" />}>
-          <TodayOperationsWidget compact />
+          <TodayOperationsWidget />
         </Suspense>
 
         {canUseTodayReservations ? (
           <Suspense fallback={<DashboardCardSkeleton label="Завантаження найближчих резервів" />}>
-            <TodayReservationsCard compact />
+            <TodayReservationsCard />
           </Suspense>
         ) : null}
       </div>
