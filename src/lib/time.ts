@@ -38,6 +38,16 @@ export function getKyivDateKey(date = new Date()): string {
   return `${datePart(parts, 'year')}-${datePart(parts, 'month')}-${datePart(parts, 'day')}`;
 }
 
+const kyivHourFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: KYIV_TIME_ZONE,
+  hour: '2-digit',
+  hourCycle: 'h23',
+});
+
+export function getKyivHour(date = new Date()): number {
+  return Number(kyivHourFormatter.format(date));
+}
+
 export function addDaysToDateKey(value: string, amount: number): string {
   const { year, month, day } = parseDateKey(value);
   const result = new Date(Date.UTC(year, month - 1, day + amount, 12));
