@@ -300,15 +300,6 @@ export function AdminPage() {
 
   return (
     <div className="admin-page-v2">
-      <section className="admin-hero-v2">
-        <div>
-          <span className="eyebrow">Operations center</span>
-          <h2>Керування без доступу до секретів</h2>
-          <p>Стан модулів, Auth-міграція, повідомлення, конфігурація, матриця прав та незмінний журнал адміністративних дій.</p>
-        </div>
-        <div className="admin-hero-mark"><ServerCog size={36} /></div>
-      </section>
-
       <nav className="admin-tabs-v2" aria-label="Розділи управління">
         {tabs.map((item) => (
           <button type="button" key={item.key} className={tab === item.key ? 'is-active' : ''} onClick={() => setTab(item.key)}>

@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   Check,
-  ChefHat,
   Clock3,
   Edit3,
   Image as ImageIcon,
@@ -356,15 +355,6 @@ export function MenuPage() {
 
   return (
     <div className="menu-page-v2">
-      <section className="menu-hero-v2">
-        <div>
-          <span className="eyebrow">Каталог ресторану</span>
-          <h2>Меню ресторану</h2>
-          <p>Основне меню відкривається першим, а категорії йдуть у робочій черзі подачі.</p>
-        </div>
-        <div className="menu-hero-mark"><ChefHat size={36} /></div>
-      </section>
-
       <section className="menu-command-v2">
         <label className="menu-search-v2">
           <Search size={19} />

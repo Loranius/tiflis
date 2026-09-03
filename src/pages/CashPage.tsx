@@ -411,15 +411,6 @@ export function CashPage() {
 
   return (
     <div className="cash-page-v2">
-      <section className="cash-hero-v2 cash-hero-clean-v4">
-        <div>
-          <span className="eyebrow">Фінанси зміни</span>
-          <h2>Каса</h2>
-          <p>Календар, денний запис і статистика без зайвого шуму.</p>
-        </div>
-        <div className="cash-hero-mark"><WalletCards size={35} /></div>
-      </section>
-
       {error ? (
         <div className="cash-alert-v2" role="alert">
           <span>{error}</span>

@@ -1,5 +1,4 @@
 import {
-  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -305,15 +304,6 @@ export function SchedulePage() {
 
   return (
     <div className="schedule-page-v2">
-      <section className="schedule-hero-v2">
-        <div className="schedule-hero-copy">
-          <span className="eyebrow">Живий модуль</span>
-          <h2>Графік команди</h2>
-          <p>Місячний розклад із швидким редагуванням, персональним режимом і миттєвим збереженням через захищений серверний API.</p>
-        </div>
-        <div className="schedule-hero-mark" aria-hidden="true"><CalendarDays size={34} /></div>
-      </section>
-
       <section className="schedule-toolbar-v2" aria-label="Навігація графіком">
         <div className="schedule-month-nav">
           <button className="schedule-icon-button" type="button" onClick={() => setMonth((value) => moveMonth(value, -1))} aria-label="Попередній місяць"><ChevronLeft size={20} /></button>

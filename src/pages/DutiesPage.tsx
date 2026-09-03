@@ -49,23 +49,9 @@ export function DutiesPage() {
         aria-labelledby={activeTab === 'daily' ? 'duties-tab-daily' : 'duties-tab-handover'}
       >
         {activeTab === 'daily' ? (
-          <DutyPlannerPage
-            key="daily"
-            planType="daily"
-            eyebrow="Робота на день"
-            title="Щоденні обов’язки"
-            description="Адміністратор обирає дату, бачить тільки офіціантів із робочою зміною в графіку, розподіляє обов’язки та зони й надсилає персональні повідомлення в Telegram."
-            icon={ClipboardCheck}
-          />
+          <DutyPlannerPage key="daily" planType="daily" />
         ) : (
-          <DutyPlannerPage
-            key="handover"
-            planType="handover"
-            eyebrow="Щовівторка"
-            title="Здача зміни"
-            description="Чек-лист здачі зміни на вибраний вівторок. Відповідального можна обрати лише серед офіціантів, які цього дня стоять у робочому графіку."
-            icon={Sparkles}
-          />
+          <DutyPlannerPage key="handover" planType="handover" />
         )}
       </section>
     </div>

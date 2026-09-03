@@ -344,11 +344,6 @@ export function StaffPage() {
 
   return (
     <div className="staff-page-v2">
-      <section className="staff-hero-v2">
-        <div><span className="eyebrow">Команда ресторану</span><h2>Люди, ролі та доступ</h2><p>Робочі профілі, зміни, Telegram, друга роль і захищені Auth-акаунти без показу старих паролів у браузері.</p></div>
-        <div className="staff-hero-mark"><UsersRound size={36} /></div>
-      </section>
-
       <nav className="staff-tabs-v1" role="tablist" aria-label="Розділи персоналу">
         <button type="button" role="tab" aria-selected={tab === 'team'} className={tab === 'team' ? 'is-active' : ''} onClick={() => setTab('team')}><UsersRound size={16} /> Команда</button>
         <button type="button" role="tab" aria-selected={tab === 'birthdays'} className={tab === 'birthdays' ? 'is-active' : ''} onClick={() => setTab('birthdays')}><Cake size={16} /> День народження</button>
