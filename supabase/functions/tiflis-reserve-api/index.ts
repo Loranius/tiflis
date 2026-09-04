@@ -236,7 +236,7 @@ async function sendTelegram(destination: number | null, text: string): Promise<b
 }
 
 async function notifyNewReservation(
-  serviceClient: ReturnType<typeof createClient>,
+  serviceClient: any,
   reservation: ReservationRow,
   hallName: string,
   tableLabel: string,
