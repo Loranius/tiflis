@@ -19,6 +19,7 @@ const ACTIONS = new Set([
 ]);
 const MANAGE_ROLES = new Set(["admin", "sysadmin", "hostess", "waiter"]);
 const NOTIFY_ROLES = new Set(["waiter"]);
+const OFF_WAITER_SHIFTS = new Set(["Х", "О", "С"]);
 const STATUSES = new Set(["booked", "occupied", "completed", "cancelled", "no_show"]);
 
 type StaffProfile = {
@@ -67,6 +68,8 @@ type ReservationRow = {
   created_at: string;
   updated_at: string;
 };
+
+type ScheduleRow = { user_id: string; shift: string | null };
 
 type ReservationInput = {
   id: number | null;
@@ -242,11 +245,22 @@ async function notifyNewReservation(
   tableLabel: string,
 ): Promise<void> {
   try {
-    const { data, error } = await serviceClient
-      .from("users")
-      .select("role,role2,chat_id,tg_id,fired")
-      .or("fired.is.null,fired.eq.false");
-    if (error || !data) return;
+    const [usersResult, scheduleResult] = await Promise.all([
+      serviceClient
+        .from("users")
+        .select("id,role,role2,chat_id,tg_id,fired")
+        .or("fired.is.null,fired.eq.false"),
+      serviceClient
+        .from("schedule")
+        .select("user_id,shift")
+        .eq("date", reservation.reserved_date),
+    ]);
+    if (usersResult.error || !usersResult.data) return;
+    if (scheduleResult.error) return;
+
+    const shifts = new Map(
+      ((scheduleResult.data ?? []) as ScheduleRow[]).map((row) => [String(row.user_id), String(row.shift || "").trim()]),
+    );
 
     const tableLine = reservation.merged_tables?.length
       ? `${tableLabel} + ${reservation.merged_tables.join(", ")}`
@@ -260,9 +274,11 @@ async function notifyNewReservation(
     ];
     const text = lines.join("\n");
 
-    const recipients = data.filter((row: any) => {
+    const recipients = usersResult.data.filter((row: any) => {
       if (row.fired === true) return false;
-      return NOTIFY_ROLES.has(normalizeRole(row.role)) || NOTIFY_ROLES.has(normalizeRole(row.role2));
+      if (!NOTIFY_ROLES.has(normalizeRole(row.role)) && !NOTIFY_ROLES.has(normalizeRole(row.role2))) return false;
+      const shift = shifts.get(String(row.id)) || "";
+      return Boolean(shift) && !OFF_WAITER_SHIFTS.has(shift);
     });
     await Promise.allSettled(recipients.map((row: any) => sendTelegram(row.chat_id || row.tg_id, text)));
   } catch (error) {
