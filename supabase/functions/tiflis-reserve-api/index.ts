@@ -4,6 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const BOT_TOKEN = Deno.env.get("BOT_TOKEN") ?? "";
 const ALLOWED_ORIGINS = new Set(
   (Deno.env.get("ALLOWED_ORIGINS") ?? "")
     .split(",")
@@ -17,6 +18,8 @@ const ACTIONS = new Set([
   "reserve_delete",
 ]);
 const MANAGE_ROLES = new Set(["admin", "sysadmin", "hostess", "waiter"]);
+const NOTIFY_ROLES = new Set(["waiter"]);
+const NON_WORK_SHIFT_CODES = new Set(["", "Х", "О"]);
 const STATUSES = new Set(["booked", "occupied", "completed", "cancelled", "no_show"]);
 
 type StaffProfile = {
@@ -65,6 +68,8 @@ type ReservationRow = {
   created_at: string;
   updated_at: string;
 };
+
+type ScheduleRow = { user_id: string; shift: string | null };
 
 type ReservationInput = {
   id: number | null;
@@ -202,6 +207,85 @@ function overlaps(startA: number, durationA: number, startB: number, durationB: 
   return startA < startB + durationB && startB < startA + durationA;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function formatDateUk(value: string): string {
+  return new Intl.DateTimeFormat("uk-UA", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "Europe/Kyiv",
+  }).format(new Date(`${value}T12:00:00+03:00`));
+}
+
+async function sendTelegram(destination: number | null, text: string): Promise<boolean> {
+  if (!BOT_TOKEN || !destination || !Number.isSafeInteger(destination)) return false;
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: destination, text, parse_mode: "HTML", disable_web_page_preview: true }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function notifyNewReservation(
+  serviceClient: any,
+  reservation: ReservationRow,
+  hallName: string,
+  tableLabel: string,
+): Promise<void> {
+  try {
+    const [usersResult, scheduleResult] = await Promise.all([
+      serviceClient
+        .from("users")
+        .select("id,role,role2,chat_id,tg_id,fired")
+        .or("fired.is.null,fired.eq.false"),
+      serviceClient
+        .from("schedule")
+        .select("user_id,shift")
+        .eq("date", reservation.reserved_date),
+    ]);
+    if (usersResult.error || !usersResult.data) return;
+    if (scheduleResult.error) return;
+
+    const shifts = new Map(
+      ((scheduleResult.data ?? []) as ScheduleRow[]).map((row) => [String(row.user_id), String(row.shift || "").trim()]),
+    );
+
+    const tableLine = reservation.merged_tables?.length
+      ? `${tableLabel} + ${reservation.merged_tables.join(", ")}`
+      : tableLabel;
+    const lines = [
+      "🆕 <b>Нове бронювання</b>",
+      `\n👤 ${escapeHtml(reservation.guest_name)}`,
+      `👥 ${reservation.guests} ${reservation.guests === 1 ? "гість" : "гостей"}`,
+      `🍽️ ${escapeHtml(hallName)}, стіл ${escapeHtml(tableLine)}`,
+      `🕒 ${formatDateUk(reservation.reserved_date)} о ${reservation.reserved_time}`,
+    ];
+    const text = lines.join("\n");
+
+    const recipients = usersResult.data.filter((row: any) => {
+      if (row.fired === true) return false;
+      if (!NOTIFY_ROLES.has(normalizeRole(row.role)) && !NOTIFY_ROLES.has(normalizeRole(row.role2))) return false;
+      const shift = shifts.get(String(row.id)) || "";
+      return !NON_WORK_SHIFT_CODES.has(shift);
+    });
+    await Promise.allSettled(recipients.map((row: any) => sendTelegram(row.chat_id || row.tg_id, text)));
+  } catch (error) {
+    console.error("tiflis-reserve-api notifyNewReservation failed", error);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
   if (req.method !== "POST") return json(req, { ok: false, error: "Method not allowed" }, 405);
@@ -302,7 +386,7 @@ Deno.serve(async (req: Request) => {
     if (!input) return json(req, { ok: false, error: "Invalid reservation" }, 400);
 
     const [hallResult, tableResult, hallTablesResult, authorResult] = await Promise.all([
-      serviceClient.from("reserve_halls").select("id,active").eq("id", input.hallId).single(),
+      serviceClient.from("reserve_halls").select("id,name,active").eq("id", input.hallId).single(),
       serviceClient.from("reserve_tables").select("id,hall_id,label,active").eq("id", input.tableId).single(),
       serviceClient.from("reserve_tables").select("id,label,capacity,active").eq("hall_id", input.hallId).eq("active", true),
       serviceClient.from("users").select("login,display_name").eq("id", profile.legacy_user_id).single(),
@@ -383,6 +467,7 @@ Deno.serve(async (req: Request) => {
       .select("id,hall_id,table_id,reserved_date,reserved_time,duration_minutes,guests,guest_name,phone,menu_note,note,status,merged_tables,created_by,updated_by,created_at,updated_at")
       .single();
     if (error) throw error;
+    await notifyNewReservation(serviceClient, data as ReservationRow, String(hallResult.data.name), primaryLabel);
     return json(req, { ok: true, reservation: data, capacity: requestedCapacity });
   } catch (error) {
     console.error("tiflis-reserve-api failed", error);

@@ -9,3 +9,4 @@ dist/
 .agent-data/
 .serena/cache/
 .serena/logs/
+deno.lock

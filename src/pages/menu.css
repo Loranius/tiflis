@@ -751,6 +751,96 @@
   box-shadow: 0 0 0 4px rgba(215, 182, 108, .07);
 }
 
+.menu-photo-editor-v2 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.menu-photo-preview-v2 {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.menu-photo-preview-v2 img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.menu-photo-preview-v2.is-empty {
+  border-style: dashed;
+}
+
+.menu-photo-editor-actions-v2 {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.menu-photo-upload-v2 {
+  position: relative;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid rgba(215, 182, 108, .24);
+  border-radius: 11px;
+  background: var(--gold-soft);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.menu-photo-upload-v2:has(input:focus-visible) {
+  outline: 2px solid rgba(231, 201, 127, .72);
+  outline-offset: 2px;
+}
+
+.menu-photo-upload-v2 input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.menu-photo-editor-actions-v2 button.is-remove {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.menu-photo-editor-actions-v2 button.is-remove:disabled,
+.menu-photo-upload-v2:has(input:disabled) {
+  cursor: default;
+  opacity: .6;
+}
+
 .menu-allergen-editor-v2 {
   display: grid;
   gap: 10px;

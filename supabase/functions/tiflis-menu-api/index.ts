@@ -16,9 +16,18 @@ const ACTIONS = new Set([
   "menu_toggle_stop",
   "menu_save_item",
   "menu_delete_item",
+  "menu_upload_photo",
 ]);
 const STOP_ROLES = new Set(["admin", "sysadmin", "chef", "cook"]);
 const EDIT_ROLES = new Set(["admin", "sysadmin", "chef"]);
+const PHOTOS_BUCKET = "images";
+const PHOTOS_PATH_PREFIX = "menu/";
+const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
+const PHOTO_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
 
 type StaffProfile = {
   legacy_user_id: string | null;
@@ -110,12 +119,16 @@ function parseNullableInteger(value: unknown, max: number): number | null | "inv
 function parsePhoto(value: unknown): string | null | "invalid" {
   const photo = cleanText(value, 1000);
   if (!photo) return null;
-  try {
-    const url = new URL(photo);
-    return url.protocol === "https:" ? url.toString() : "invalid";
-  } catch {
-    return "invalid";
-  }
+  return ownedPhotoPath(photo) ? photo : "invalid";
+}
+
+function ownedPhotoPath(url: string | null): string | null {
+  if (!url) return null;
+  const marker = `/object/public/${PHOTOS_BUCKET}/`;
+  const index = url.indexOf(marker);
+  if (index === -1) return null;
+  const path = url.slice(index + marker.length);
+  return path.startsWith(PHOTOS_PATH_PREFIX) ? path : null;
 }
 
 function parseAllergens(value: unknown): string[] {
@@ -250,9 +263,48 @@ Deno.serve(async (req: Request) => {
       }
       const id = parsePositiveId(body.id);
       if (!id) return json(req, { ok: false, error: "Invalid menu item" }, 400);
+      const { data: existing } = await serviceClient
+        .from("menu_items")
+        .select("photo")
+        .eq("id", id)
+        .maybeSingle();
       const { error } = await serviceClient.from("menu_items").delete().eq("id", id);
       if (error) throw error;
+      const oldPath = ownedPhotoPath(existing?.photo ?? null);
+      if (oldPath) await serviceClient.storage.from(PHOTOS_BUCKET).remove([oldPath]);
       return json(req, { ok: true });
+    }
+
+    if (action === "menu_upload_photo") {
+      if (!hasAnyRole(profile, EDIT_ROLES)) {
+        return json(req, { ok: false, error: "Insufficient permissions" }, 403);
+      }
+      const contentType = cleanText(body.content_type, 40);
+      const extension = PHOTO_EXTENSIONS[contentType];
+      const rawData = cleanText(body.data, 12_000_000);
+      if (!extension || !rawData) {
+        return json(req, { ok: false, error: "Непідтримуваний формат фото" }, 400);
+      }
+
+      const base64 = rawData.includes(",") ? rawData.slice(rawData.indexOf(",") + 1) : rawData;
+      let bytes: Uint8Array;
+      try {
+        bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+      } catch {
+        return json(req, { ok: false, error: "Некоректні дані фото" }, 400);
+      }
+      if (bytes.length === 0 || bytes.length > MAX_PHOTO_BYTES) {
+        return json(req, { ok: false, error: "Фото завелике (максимум 6 МБ)" }, 400);
+      }
+
+      const path = `${PHOTOS_PATH_PREFIX}${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await serviceClient.storage
+        .from(PHOTOS_BUCKET)
+        .upload(path, bytes, { contentType, upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = serviceClient.storage.from(PHOTOS_BUCKET).getPublicUrl(path);
+      return json(req, { ok: true, photo: publicUrlData.publicUrl });
     }
 
     if (!hasAnyRole(profile, EDIT_ROLES)) {
@@ -278,6 +330,11 @@ Deno.serve(async (req: Request) => {
     };
 
     if (item.id) {
+      const { data: existing } = await serviceClient
+        .from("menu_items")
+        .select("photo")
+        .eq("id", item.id)
+        .maybeSingle();
       const { data, error } = await serviceClient
         .from("menu_items")
         .update(payload)
@@ -287,6 +344,10 @@ Deno.serve(async (req: Request) => {
       if (error) {
         if (error.code === "23505") return json(req, { ok: false, error: "Така позиція вже існує" }, 409);
         throw error;
+      }
+      if (existing?.photo && existing.photo !== item.photo) {
+        const oldPath = ownedPhotoPath(existing.photo);
+        if (oldPath) await serviceClient.storage.from(PHOTOS_BUCKET).remove([oldPath]);
       }
       return json(req, { ok: true, item: data });
     }

@@ -158,6 +158,28 @@ function itemSearchText(item: MenuItem): string {
   ].join(' ').toLocaleLowerCase('uk-UA');
 }
 
+const PHOTO_MAX_SOURCE_BYTES = 15 * 1024 * 1024;
+const PHOTO_MAX_DIMENSION = 1600;
+const PHOTO_JPEG_QUALITY = 0.82;
+
+async function resizePhotoFile(file: File): Promise<{ dataUrl: string; contentType: string }> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Canvas недоступний у цьому браузері.');
+    context.drawImage(bitmap, 0, 0, width, height);
+    return { dataUrl: canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY), contentType: 'image/jpeg' };
+  } finally {
+    bitmap.close();
+  }
+}
+
 function createEditor(item?: MenuItem): MenuEditorState {
   return {
     id: item?.id ?? null,
@@ -189,6 +211,7 @@ export function MenuPage() {
   const [busyMode, setBusyMode] = useState(false);
   const [selected, setSelected] = useState<MenuItem | null>(null);
   const [editor, setEditor] = useState<MenuEditorState | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -318,6 +341,32 @@ export function MenuPage() {
       setError(reason instanceof Error ? reason.message : 'Позицію не збережено.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function uploadPhoto(file: File) {
+    if (!file.type.startsWith('image/')) {
+      setError('Оберіть файл зображення.');
+      return;
+    }
+    if (file.size > PHOTO_MAX_SOURCE_BYTES) {
+      setError('Файл завеликий (максимум 15 МБ).');
+      return;
+    }
+    setUploadingPhoto(true);
+    setError(null);
+    try {
+      const { dataUrl, contentType } = await resizePhotoFile(file);
+      const response = await secureApi<{ ok: true; photo: string }>({
+        action: 'menu_upload_photo',
+        data: dataUrl,
+        content_type: contentType,
+      }, 'tiflis-menu-api');
+      setEditor((current) => (current ? { ...current, photo: response.photo } : current));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити фото.');
+    } finally {
+      setUploadingPhoto(false);
     }
   }
 
@@ -463,7 +512,35 @@ export function MenuPage() {
           <label><span>Емодзі</span><input value={editor.emoji} onChange={(event) => setEditor({ ...editor, emoji: event.target.value })} maxLength={16} placeholder="🍽️" /></label>
           <label><span>Час, хв</span><input type="number" min="0" max="1440" value={editor.cookTimeNormal} onChange={(event) => setEditor({ ...editor, cookTimeNormal: event.target.value })} /></label>
           <label><span>При завантаженні, хв</span><input type="number" min="0" max="1440" value={editor.cookTimeBusy} onChange={(event) => setEditor({ ...editor, cookTimeBusy: event.target.value })} /></label>
-          <label className="is-wide"><span>Фото, HTTPS URL</span><input type="url" value={editor.photo} onChange={(event) => setEditor({ ...editor, photo: event.target.value })} maxLength={1000} placeholder="https://…" /></label>
+          <label className="is-wide">
+            <span>Фото</span>
+            <div className="menu-photo-editor-v2">
+              <span className={`menu-photo-preview-v2${editor.photo ? '' : ' is-empty'}`}>
+                {editor.photo ? <img src={editor.photo} alt="" /> : <ImageIcon size={22} />}
+              </span>
+              <div className="menu-photo-editor-actions-v2">
+                <label className="menu-photo-upload-v2">
+                  {uploadingPhoto ? <RefreshCw size={15} className="is-spinning" /> : <ImageIcon size={15} />}
+                  {uploadingPhoto ? 'Завантаження…' : editor.photo ? 'Змінити фото' : 'Завантажити фото'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    disabled={uploadingPhoto}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      event.target.value = '';
+                      if (file) void uploadPhoto(file);
+                    }}
+                  />
+                </label>
+                {editor.photo ? (
+                  <button type="button" className="is-remove" onClick={() => setEditor({ ...editor, photo: '' })} disabled={uploadingPhoto}>
+                    <X size={15} /> Прибрати
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </label>
           <label className="is-wide"><span>Опис і склад</span><textarea value={editor.description} onChange={(event) => setEditor({ ...editor, description: event.target.value })} maxLength={3000} /></label>
         </div>
         <div className="menu-allergen-editor-v2"><strong>Алергени</strong><div>{ALLERGENS.map((allergen) => { const checked = editor.allergens.includes(allergen); return <button type="button" key={allergen} className={checked ? 'is-active' : ''} onClick={() => setEditor({ ...editor, allergens: checked ? editor.allergens.filter((item) => item !== allergen) : [...editor.allergens, allergen] })}>{checked ? <Check size={13} /> : null}{allergen}</button>; })}</div></div>
