@@ -19,7 +19,7 @@ const ACTIONS = new Set([
 ]);
 const MANAGE_ROLES = new Set(["admin", "sysadmin", "hostess", "waiter"]);
 const NOTIFY_ROLES = new Set(["waiter"]);
-const OFF_WAITER_SHIFTS = new Set(["Х", "О", "С"]);
+const NON_WORK_SHIFT_CODES = new Set(["", "Х", "О"]);
 const STATUSES = new Set(["booked", "occupied", "completed", "cancelled", "no_show"]);
 
 type StaffProfile = {
@@ -278,7 +278,7 @@ async function notifyNewReservation(
       if (row.fired === true) return false;
       if (!NOTIFY_ROLES.has(normalizeRole(row.role)) && !NOTIFY_ROLES.has(normalizeRole(row.role2))) return false;
       const shift = shifts.get(String(row.id)) || "";
-      return Boolean(shift) && !OFF_WAITER_SHIFTS.has(shift);
+      return !NON_WORK_SHIFT_CODES.has(shift);
     });
     await Promise.allSettled(recipients.map((row: any) => sendTelegram(row.chat_id || row.tg_id, text)));
   } catch (error) {
