@@ -1,8 +1,10 @@
 import {
-  Cake, Check, Edit3, Plus, RefreshCw, Search, Trash2, X,
+  Cake, Check, Edit3, Image as ImageIcon, Plus, RefreshCw, Search, Trash2, X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Overlay } from '../components/Overlay';
 import { useKyivDay } from '../hooks/useKyivDay';
+import { photoFileProblem, resizePhotoFile } from '../lib/photo';
 import { secureApi } from '../lib/secureApi';
 import './staff-birthdays.css';
 
@@ -110,22 +112,22 @@ function formatBirthday(month: number | null, day: number | null): string {
     .format(new Date(Date.UTC(REFERENCE_LEAP_YEAR, month - 1, day, 12)));
 }
 
-function dayOrdinal(month: number, day: number): number {
-  return Math.floor(
-    (Date.UTC(REFERENCE_LEAP_YEAR, month - 1, day) - Date.UTC(REFERENCE_LEAP_YEAR, 0, 1)) / 86_400_000,
-  );
-}
-
-function daysUntil(month: number, day: number, todayMonth: number, todayDay: number): number {
-  const diff = dayOrdinal(month, day) - dayOrdinal(todayMonth, todayDay);
-  return diff >= 0 ? diff : diff + 366;
+/** Days to the next occurrence on the real calendar (29 February falls on 1 March in other years). */
+function daysUntil(month: number, day: number, todayKey: string): number {
+  const year = Number(todayKey.slice(0, 4));
+  const today = Date.UTC(year, Number(todayKey.slice(5, 7)) - 1, Number(todayKey.slice(8, 10)));
+  const occurrence = (y: number) => Date.UTC(y, month - 1, day);
+  const next = occurrence(year) >= today ? occurrence(year) : occurrence(year + 1);
+  return Math.round((next - today) / 86_400_000);
 }
 
 function countdownLabel(days: number): string {
-  if (days === 0) return 'Сьогодні 🎉';
+  if (days === 0) return 'Сьогодні';
   if (days === 1) return 'Завтра';
-  if (days >= 2 && days <= 4) return `Через ${days} дні`;
-  return `Через ${days} днів`;
+  const mod10 = days % 10;
+  const mod100 = days % 100;
+  const word = mod10 === 1 && mod100 !== 11 ? 'день' : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? 'дні' : 'днів';
+  return `Через ${days} ${word}`;
 }
 
 function createEditor(person?: BirthdayPerson): BirthdayEditor {
@@ -153,6 +155,29 @@ export function StaffBirthdaysTab() {
   const [search, setSearch] = useState('');
   const [positionFilter, setPositionFilter] = useState('all');
   const [editor, setEditor] = useState<BirthdayEditor | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // Editor problems show inside the open dialog; the tab alert sits behind it on the inert page.
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setConfirmDelete(false); setEditorError(null); }, [editor?.id, editor === null]);
+
+  async function uploadPhoto(file: File) {
+    const fileProblem = photoFileProblem(file);
+    if (fileProblem) { setEditorError(fileProblem); return; }
+    setUploading(true);
+    setEditorError(null);
+    try {
+      const { dataUrl, contentType } = await resizePhotoFile(file, 900);
+      const response = await secureApi<{ ok: true; avatar: string }>({ action: 'staff_upload_avatar', data: dataUrl, content_type: contentType }, 'tiflis-staff-api');
+      setEditor((current) => (current ? { ...current, avatar: response.avatar } : current));
+    } catch (reason) {
+      setEditorError(reason instanceof Error ? reason.message : 'Не вдалося завантажити фото.');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -173,8 +198,6 @@ export function StaffBirthdaysTab() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const todayMonth = useMemo(() => Number(todayKey.slice(5, 7)), [todayKey]);
-  const todayDay = useMemo(() => Number(todayKey.slice(8, 10)), [todayKey]);
 
   const usedPositions = useMemo(() => {
     const set = new Set<string>();
@@ -195,30 +218,30 @@ export function StaffBirthdaysTab() {
       return [person.full_name, positionLabel(person)].join(' ').toLocaleLowerCase('uk-UA').includes(query);
     }).sort((left, right) => {
       const leftDays = left.birthday_month && left.birthday_day
-        ? daysUntil(left.birthday_month, left.birthday_day, todayMonth, todayDay)
+        ? daysUntil(left.birthday_month, left.birthday_day, todayKey)
         : null;
       const rightDays = right.birthday_month && right.birthday_day
-        ? daysUntil(right.birthday_month, right.birthday_day, todayMonth, todayDay)
+        ? daysUntil(right.birthday_month, right.birthday_day, todayKey)
         : null;
       if (leftDays === null && rightDays === null) return left.full_name.localeCompare(right.full_name, 'uk');
       if (leftDays === null) return 1;
       if (rightDays === null) return -1;
       return leftDays - rightDays || left.full_name.localeCompare(right.full_name, 'uk');
     });
-  }, [people, positionFilter, search, todayDay, todayMonth]);
+  }, [people, positionFilter, search, todayKey]);
 
   async function savePerson() {
     if (!editor) return;
     if (!editor.fullName.trim()) {
-      setError('Вкажіть імʼя працівника.');
+      setEditorError('Вкажи імʼя.');
       return;
     }
     if ((editor.birthdayMonth === '') !== (editor.birthdayDay === '')) {
-      setError('Вкажіть і місяць, і день народження — або залиште обидва поля порожніми.');
+      setEditorError('Вкажи і місяць, і день — або залиш обидва порожніми.');
       return;
     }
     setSaving(true);
-    setError(null);
+    setEditorError(null);
     try {
       await secureApi<{ ok: true; id: number }>({
         action: 'birthdays_save',
@@ -236,7 +259,7 @@ export function StaffBirthdaysTab() {
       setEditor(null);
       await load();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Не вдалося зберегти запис.');
+      setEditorError(reason instanceof Error ? reason.message : 'Не вдалося зберегти запис.');
     } finally {
       setSaving(false);
     }
@@ -245,13 +268,13 @@ export function StaffBirthdaysTab() {
   async function deletePerson() {
     if (!editor?.id) return;
     setSaving(true);
-    setError(null);
+    setEditorError(null);
     try {
       await secureApi<{ ok: true }>({ action: 'birthdays_delete', id: editor.id }, 'tiflis-staff-api');
       setPeople((current) => current.filter((person) => person.id !== editor.id));
       setEditor(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Не вдалося видалити запис.');
+      setEditorError(reason instanceof Error ? reason.message : 'Не вдалося видалити запис.');
     } finally {
       setSaving(false);
     }
@@ -266,8 +289,8 @@ export function StaffBirthdaysTab() {
     <div className="birthdays-tab-v1">
       <section className="birthdays-command-v1">
         <label className="birthdays-search-v1">
-          <Search size={18} />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Імʼя або посада…" />
+          <Search size={18} aria-hidden="true" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Імʼя або посада" aria-label="Пошук днів народження" />
           {search ? <button type="button" onClick={() => setSearch('')} aria-label="Очистити пошук"><X size={15} /></button> : null}
         </label>
         <label className="birthdays-filter-v1">
@@ -284,15 +307,15 @@ export function StaffBirthdaysTab() {
         ) : null}
       </section>
 
-      {error ? <div className="birthdays-alert-v1" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
+      {error ? <div className="birthdays-alert-v1" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Закрити"><X size={16} aria-hidden="true" /></button></div> : null}
       {loading ? <div className="birthdays-loading-v1"><RefreshCw size={24} className="is-spinning" /><span>Завантажуємо список…</span></div> : null}
-      {!loading && filtered.length === 0 ? <div className="birthdays-empty-v1"><Cake size={30} /><strong>Нікого не знайдено</strong><span>Змініть пошук або посаду.</span></div> : null}
+      {!loading && filtered.length === 0 ? <div className="birthdays-empty-v1"><Cake size={30} aria-hidden="true" /><strong>Нікого не знайдено</strong><span>Зміни пошук або посаду.</span></div> : null}
 
       {!loading ? (
         <section className="birthdays-grid-v1">
           {filtered.map((person) => {
             const days = person.birthday_month && person.birthday_day
-              ? daysUntil(person.birthday_month, person.birthday_day, todayMonth, todayDay)
+              ? daysUntil(person.birthday_month, person.birthday_day, todayKey)
               : null;
             return (
               <article key={person.id} className={days !== null && days <= 6 ? 'is-soon' : ''}>
@@ -303,7 +326,7 @@ export function StaffBirthdaysTab() {
                   <span>{positionLabel(person)}{person.position2 ? ` · ${positionLabel({ position: person.position2, position_detail: person.position2_detail })}` : ''}</span>
                   <h3>{person.full_name}</h3>
                   <div className="birthdays-card-footer-v1">
-                    <b><Cake size={14} /> {formatBirthday(person.birthday_month, person.birthday_day)}</b>
+                    <b><Cake size={14} aria-hidden="true" /> {formatBirthday(person.birthday_month, person.birthday_day)}</b>
                     {days !== null ? <em>{countdownLabel(days)}</em> : null}
                   </div>
                 </div>
@@ -319,11 +342,12 @@ export function StaffBirthdaysTab() {
       ) : null}
 
       {editor ? (
-        <div className="birthdays-sheet-backdrop-v1" onMouseDown={() => !saving && setEditor(null)}>
-          <section className="birthdays-editor-sheet-v1" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+        <Overlay>
+        <div className="birthdays-sheet-backdrop-v1" onMouseDown={() => !saving && !uploading && setEditor(null)}>
+          <section className="birthdays-editor-sheet-v1" role="dialog" aria-modal="true" aria-labelledby="bd-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="birthdays-editor-heading-v1">
-              <div><span className="eyebrow">{editor.id ? 'Редагування' : 'Новий запис'}</span><h3>{editor.fullName || 'Працівник'}</h3></div>
-              <button type="button" onClick={() => setEditor(null)} disabled={saving}><X size={19} /></button>
+              <h3 id="bd-editor-title">{editor.id ? 'Редагувати запис' : 'Нова людина'}</h3>
+              <button type="button" onClick={() => setEditor(null)} disabled={saving || uploading} aria-label="Закрити"><X size={19} /></button>
             </div>
 
             <div className="birthdays-editor-grid-v1">
@@ -405,15 +429,32 @@ export function StaffBirthdaysTab() {
                 <small>Цій людині не прийде Telegram-нагадування про її власний день народження.</small>
               </label>
 
-              <label className="is-wide"><span>Avatar, HTTPS URL</span><input type="url" value={editor.avatar} maxLength={1000} onChange={(event) => setEditor({ ...editor, avatar: event.target.value })} placeholder="https://…" /></label>
+              <div className="is-wide birthdays-photo-v1">
+                <span>Фото</span>
+                <div>
+                  {editor.avatar ? <img src={editor.avatar} alt="" /> : <span className="birthdays-photo-empty-v1"><ImageIcon size={20} aria-hidden="true" /></span>}
+                  <button type="button" className="is-secondary" onClick={() => fileRef.current?.click()} disabled={uploading || saving}>
+                    {uploading ? <RefreshCw size={15} className="is-spinning" aria-hidden="true" /> : null}
+                    {uploading ? 'Завантаження…' : editor.avatar ? 'Змінити фото' : 'Додати фото'}
+                  </button>
+                  {editor.avatar ? <button type="button" className="is-link" onClick={() => setEditor({ ...editor, avatar: '' })} disabled={uploading || saving}>Прибрати</button> : null}
+                  <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden tabIndex={-1} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadPhoto(file); }} />
+                </div>
+              </div>
             </div>
 
+            {editorError ? <p className="birthdays-editor-error-v1" role="alert">{editorError}</p> : null}
             <div className="birthdays-editor-actions-v1">
-              {editor.id ? <button type="button" className="is-delete" onClick={() => void deletePerson()} disabled={saving}><Trash2 size={17} /> Видалити</button> : <span />}
-              <button type="button" className="is-save" onClick={() => void savePerson()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти</button>
+              {editor.id ? (
+                confirmDelete
+                  ? <button type="button" className="is-delete is-confirm" onClick={() => void deletePerson()} disabled={saving}><Trash2 size={17} aria-hidden="true" /> Так, видалити</button>
+                  : <button type="button" className="is-delete" onClick={() => setConfirmDelete(true)} disabled={saving}>Видалити</button>
+              ) : <span />}
+              <button type="button" className="is-save" onClick={() => void savePerson()} disabled={saving || uploading}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти</button>
             </div>
           </section>
         </div>
+        </Overlay>
       ) : null}
     </div>
   );
