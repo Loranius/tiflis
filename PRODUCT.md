@@ -32,6 +32,7 @@ Built for this one restaurant and its real working rules, not a generic HR or PO
 - Primary surfaces, by confirmed importance: **Каса і рекорди** (cash entry, payout, ratings) and **Графік** (monthly schedule), followed by **Сьогодні** (today's team, personal duties, shift handover), **Резерви**, **Меню і стоп-лист**, **Персонал** (profiles, birthdays) and **Управління** (admin).
 - Phones, often one-handed, in a busy and sometimes dim restaurant; frequent short sessions rather than long ones.
 - Telegram bot delivers password-reset codes, broadcasts, duty assignments and day-before birthday reminders; the portal links into the same accounts.
+- Shift hours (owner, November 2026, Kyiv time): Р (work) 12:00–22:00; СН (breakfasts) 11:00–22:00. Cash is entered after the shift ends.
 - Time and dates are Kyiv time (`Europe/Kyiv`). Interface language is Ukrainian.
 
 ## Capabilities and Constraints
