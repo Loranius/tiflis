@@ -34,17 +34,13 @@
   outline-offset: 2px;
 }
 
-/* Gold masthead: the brand field from the Tiflis sign. Slightly deeper in the evening so it does not glare in the hall. */
+/* Gold masthead: the brand field from the Tiflis sign. The one place gold is a background (DESIGN.md exception). */
 .hv3-mast {
   position: relative;
   padding: 22px 20px 72px;
-  border-radius: 0 0 28px 28px;
+  border-radius: 0 0 22px 22px;
   background: var(--t-gold);
-  color: var(--t-surface-2);
-}
-
-.hv3-mast.is-evening {
-  background: #B89C58;
+  color: var(--t-on-gold);
 }
 
 .hv3-mast-row {
@@ -65,10 +61,15 @@
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
-  color: rgba(43, 42, 41, 0.78);
+  color: var(--t-on-gold);
 }
 
-.hv3-mast h1 {
+.hv3-mast-date b {
+  display: block;
+  font-weight: 700;
+}
+
+.hv3-mast .hv3-greeting {
   margin-top: 16px;
   font-size: clamp(23px, 6.4vw, 30px);
   font-weight: 700;
@@ -138,7 +139,7 @@
   top: 0;
   bottom: 0;
   border-radius: 3px;
-  background: rgba(209, 180, 107, 0.45);
+  background: color-mix(in srgb, var(--t-gold) 45%, transparent);
 }
 
 .hv3-track-mark {
@@ -165,10 +166,27 @@
 .hv3-track-ticks {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
   font-size: 12px;
   color: var(--t-text-3);
 }
+
+/* Legend-size variant of the Shift Code Chip (DESIGN.md): breakfasts in gold tint, work in primary text. */
+.hv3-code {
+  display: inline-block;
+  min-width: 26px;
+  margin-right: 4px;
+  padding: 3px 6px;
+  border-radius: 9px;
+  background: var(--t-surface-3);
+  color: var(--t-text);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.hv3-code.is-breakfast { background: var(--t-gold-tint); color: var(--t-gold); }
 
 /* Faces of today's team */
 .hv3-team {
@@ -283,7 +301,7 @@
 }
 
 .hv3-bday.is-today {
-  border-color: rgba(209, 180, 107, 0.4);
+  border-color: var(--t-line-strong);
   background: var(--t-gold-wash);
 }
 
@@ -292,7 +310,10 @@
   color: var(--t-gold);
 }
 
-.hv3 svg:last-child {
+.hv3-bday > svg,
+.hv3-tomorrow > svg,
+.hv3-team > svg,
+.hv3-close.is-done > svg {
   flex: none;
   color: var(--t-text-3);
 }
@@ -325,9 +346,6 @@
   color: var(--t-text-3);
 }
 
-.hv3-pulse-item.is-gold strong {
-  color: var(--t-gold);
-}
 
 /* Close shift (after 22:00) */
 .hv3-close:not(.is-done) {
@@ -336,7 +354,7 @@
   gap: 12px;
   padding: 16px;
   border-radius: var(--t-radius-l);
-  border: 1px solid rgba(209, 180, 107, 0.4);
+  border: 1px solid var(--t-line-strong);
   background: var(--t-surface-2);
 }
 
@@ -365,13 +383,13 @@
 
 .hv3-money input {
   width: 100%;
-  height: 52px;
+  height: 64px;
   padding: 0 36px 0 14px;
   border: 1px solid var(--t-line-strong);
   border-radius: var(--t-radius-m);
   background: var(--t-surface);
   color: var(--t-text);
-  font: 700 20px var(--t-font);
+  font: 700 30px var(--t-font);
   caret-color: var(--t-gold);
   color-scheme: dark;
   appearance: textfield;
@@ -396,7 +414,7 @@
   color: var(--t-text-3);
 }
 
-.hv3-close button {
+.hv3 .hv3-close button {
   min-height: 52px;
   display: inline-flex;
   align-items: center;
@@ -405,13 +423,13 @@
   border: 0;
   border-radius: var(--t-radius-m);
   background: var(--t-gold);
-  color: var(--t-on-gold) !important;
-  font-size: 16px !important;
-  font-weight: 700 !important;
+  color: var(--t-on-gold);
+  font-size: 16px;
+  font-weight: 700;
 }
 
-.hv3-close button:disabled {
-  opacity: 0.6;
+.hv3 .hv3-close button:disabled {
+  opacity: 0.7;
 }
 
 .hv3-close-error {
@@ -609,8 +627,21 @@
     display: none !important;
   }
 
+  /* Home owns its side gutter so the masthead can cancel it exactly and reach both screen edges. */
+  .app-shell[data-page='today'] .page-content {
+    padding-top: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .hv3 {
+    --hv3-gutter-l: max(12px, env(safe-area-inset-left));
+    --hv3-gutter-r: max(12px, env(safe-area-inset-right));
+    padding: 0 var(--hv3-gutter-r) 0 var(--hv3-gutter-l);
+  }
+
   .hv3-mast {
-    margin: -14px calc(-1 * max(14px, env(safe-area-inset-right))) 0 calc(-1 * max(14px, env(safe-area-inset-left)));
+    margin: 0 calc(-1 * var(--hv3-gutter-r)) 0 calc(-1 * var(--hv3-gutter-l));
     padding: calc(18px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 72px max(20px, env(safe-area-inset-left));
   }
 }
@@ -641,8 +672,20 @@
 
   .hv3-mast {
     grid-area: mast;
-    border-radius: 24px;
-    padding: 28px 32px 84px;
+    border-radius: 22px;
+    padding: 28px 32px 80px;
+  }
+
+  /* Wide masthead: the time carries the empty right side of the sign. */
+  .hv3-mast-date {
+    font-size: 15px;
+  }
+
+  .hv3-mast-date b {
+    font-size: 40px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
   }
 
   .hv3-mast img {

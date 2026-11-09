@@ -123,13 +123,33 @@ function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('') || '—';
 }
 
-function dayOfYear(month: number, day: number): number {
-  return Math.floor((Date.UTC(2028, month - 1, day) - Date.UTC(2028, 0, 1)) / 86_400_000);
+/** Days from today (Kyiv date key) to the next occurrence of month/day, on the real calendar.
+    A 29 February birthday falls on 1 March in non-leap years. */
+function daysUntilBirthday(month: number, day: number, todayKey: string): number {
+  const year = Number(todayKey.slice(0, 4));
+  const today = Date.UTC(year, Number(todayKey.slice(5, 7)) - 1, Number(todayKey.slice(8, 10)));
+  const occurrence = (y: number) => Date.UTC(y, month - 1, day);
+  const next = occurrence(year) >= today ? occurrence(year) : occurrence(year + 1);
+  return Math.round((next - today) / 86_400_000);
 }
 
-function daysUntilBirthday(month: number, day: number, todayKey: string): number {
-  const diff = dayOfYear(month, day) - dayOfYear(Number(todayKey.slice(5, 7)), Number(todayKey.slice(8, 10)));
-  return diff >= 0 ? diff : diff + 366;
+function nextMonthKey(todayKey: string): string {
+  const year = Number(todayKey.slice(0, 4));
+  const month = Number(todayKey.slice(5, 7));
+  return month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`;
+}
+
+/** Ukrainian vocative for a first name; names it cannot decline (Latin, nicknames) stay as they are. */
+function vocative(name: string): string {
+  if (!/^[А-ЯЇІЄҐа-яїієґʼ'-]+$/.test(name) || name.length < 3) return name;
+  const lower = name.toLowerCase();
+  if (lower.endsWith('ія')) return `${name.slice(0, -1)}є`;
+  if (lower.endsWith('я')) return `${name.slice(0, -1)}ю`;
+  if (lower.endsWith('а')) return `${name.slice(0, -1)}о`;
+  if (lower.endsWith('й')) return `${name.slice(0, -1)}ю`;
+  if (lower.endsWith('о')) return `${name.slice(0, -1)}е`;
+  if (/[бвгґджзклмнпрстфхцчшщ]$/.test(lower)) return `${name}е`;
+  return name;
 }
 
 function whenLabel(days: number, todayKey: string): string {
@@ -167,6 +187,7 @@ export function DashboardPage() {
   const canCash = roles.has('waiter') || roles.has('bar') || roles.has('admin') || roles.has('sysadmin');
 
   const [schedule, setSchedule] = useState<ScheduleBootstrapResponse | null>(null);
+  const [nextMonthSchedule, setNextMonthSchedule] = useState<ScheduleBootstrapResponse | null>(null);
   const [birthdays, setBirthdays] = useState<BirthdayPerson[]>([]);
   const [daily, setDaily] = useState<DutyPlanResponse | null>(null);
   const [handover, setHandover] = useState<DutyPlanResponse | null>(null);
@@ -185,6 +206,11 @@ export function DashboardPage() {
     await Promise.all([
       secureApi<ScheduleBootstrapResponse>({ action: 'schedule_bootstrap', month: todayKey.slice(0, 7) })
         .then(setSchedule).catch(() => problems.push('графік')),
+      // Late in the month the next shift is often in next month's schedule; a missing one is not an error.
+      Number(todayKey.slice(8, 10)) >= 15
+        ? secureApi<ScheduleBootstrapResponse>({ action: 'schedule_bootstrap', month: nextMonthKey(todayKey) })
+          .then(setNextMonthSchedule).catch(() => setNextMonthSchedule(null))
+        : Promise.resolve(setNextMonthSchedule(null)),
       secureApi<{ ok: true; people: BirthdayPerson[] }>({ action: 'birthdays_bootstrap' }, 'tiflis-staff-api')
         .then((response) => setBirthdays(response.people || [])).catch(() => problems.push('дні народження')),
       loadDutyPlan('daily', todayKey).then(setDaily).catch(() => problems.push('обовʼязки')),
@@ -221,10 +247,10 @@ export function DashboardPage() {
 
   const nextShift = useMemo(() => {
     if (!schedule) return null;
-    return schedule.entries
+    return [...schedule.entries, ...(nextMonthSchedule?.entries || [])]
       .filter((entry) => entry.user_id === meId && entry.date > todayKey && isWorkingShift(entry.shift))
       .sort((left, right) => left.date.localeCompare(right.date))[0] || null;
-  }, [meId, schedule, todayKey]);
+  }, [meId, nextMonthSchedule, schedule, todayKey]);
 
   const team = useMemo(() => {
     if (!schedule) return [];
@@ -289,22 +315,22 @@ export function DashboardPage() {
   const reservationList = reservations?.canView && reservations.publication ? [...reservations.reservations].sort((a, b) => a.time.localeCompare(b.time)) : [];
   const guests = reservationList.reduce((sum, item) => sum + item.guests, 0);
 
-  const firstName = user?.displayName.trim().split(/\s+/)[0] || 'колего';
+  const rawFirstName = user?.displayName.trim().split(/\s+/)[0];
+  const firstName = rawFirstName ? vocative(rawFirstName) : 'колего';
   const dateLabel = capitalize(new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', weekday: 'long', day: 'numeric', month: 'long' }).format(now));
-  const evening = clock.hour >= 19 || clock.hour < 7;
   const zoneText = zones.length ? zones.join(' · ') : null;
 
   return (
     <div className="hv3">
-      <header className={`hv3-mast${evening ? ' is-evening' : ''}`}>
+      <header className="hv3-mast">
         <div className="hv3-mast-row">
           <img src={charcoalWordmark} alt="Tiflis restaurant" width={150} height={95} />
-          <p className="hv3-mast-date">{dateLabel}<br />{hhmm(clock.minutes)}</p>
+          <p className="hv3-mast-date">{dateLabel}<b>{hhmm(clock.minutes)}</b></p>
         </div>
-        <h1>{birthday.mine ? `З днем народження, ${firstName}!` : `${greetingFor(clock.hour)}, ${firstName}`}</h1>
+        <h2 className="hv3-greeting">{birthday.mine ? `З днем народження, ${firstName}!` : `${greetingFor(clock.hour)}, ${firstName}`}</h2>
       </header>
 
-      <section className="hv3-shift" aria-live="polite">
+      <section className="hv3-shift">
         <ShiftSummary
           phase={phase}
           code={myCode}
@@ -315,6 +341,7 @@ export function DashboardPage() {
           todayKey={todayKey}
           loading={loading && !schedule}
           marks={reservationList.map((item) => timeToMinutes(item.time))}
+          cashPending={canCash && !todayCash?.entry}
         />
         {team.length ? (
           <Link to="/schedule" className="hv3-team">
@@ -348,9 +375,9 @@ export function DashboardPage() {
 
       {working || myTasks.length || reservationList.length ? (
         <div className="hv3-pulse" role="list">
-          {isWaiter ? <Pulse label={reservationWord(reservationList.length)} value={String(reservationList.length)} gold /> : null}
-          {isWaiter ? <Pulse label="гостей" value={String(guests)} /> : null}
-          <Pulse label="справи" value={myTasks.length ? `${doneCount}/${myTasks.length}` : '—'} />
+          {isWaiter ? <Pulse label={reservationWord(reservationList.length)} value={String(reservationList.length)} /> : null}
+          {isWaiter ? <Pulse label={guestWord(guests)} value={String(guests)} /> : null}
+          <Pulse label="обовʼязки" value={myTasks.length ? `${doneCount}/${myTasks.length}` : '—'} />
           <Pulse label="на зміні" value={String(team.length)} />
         </div>
       ) : null}
@@ -368,11 +395,11 @@ export function DashboardPage() {
 
       {working ? (
         <section className="hv3-feed" aria-label="Мій день">
-          <FeedItem time={hhmm(start)} past={clock.minutes >= start} title={phase === 'before' ? 'Початок зміни · підготуй' : 'Початок зміни'}>
+          <FeedItem time={hhmm(start)} past={clock.minutes >= start} title={phase === 'before' ? 'Початок зміни · підготовка' : 'Початок зміни'}>
             {myTasks.length ? (
               <div className="hv3-tasks">
                 {myTasks.map((task) => (
-                  <button key={task.id} type="button" className={`hv3-task${task.status === 'done' ? ' is-done' : ''}`} onClick={() => void toggleTask(task)} disabled={savingTask === task.id} aria-pressed={task.status === 'done'}>
+                  <button key={task.id} type="button" className={`hv3-task${task.status === 'done' ? ' is-done' : ''}`} onClick={() => void toggleTask(task)} disabled={savingTask === task.id} role="checkbox" aria-checked={task.status === 'done'}>
                     <span className="hv3-box" aria-hidden="true">{savingTask === task.id ? <RefreshCw size={12} className="hv3-spin" /> : task.status === 'done' ? <Check size={13} /> : null}</span>
                     <span>{titleOf(task)}</span>
                   </button>
@@ -402,7 +429,7 @@ export function DashboardPage() {
           ].sort((left, right) => left.at - right.at).map((item) => item.node)}
 
           <FeedItem time={hhmm(SHIFT_END)} past={phase === 'after'} title="Кінець зміни" last>
-            <small>{canCash ? (phase === 'after' ? 'Каса вище' : 'Після 22:00 тут зʼявиться внесення каси') : 'Гарного вечора'}</small>
+            <small>{canCash ? (phase !== 'after' ? 'Після 22:00 — внесення каси' : todayCash?.entry ? 'Касу внесено' : 'Внеси касу за сьогодні') : 'Гарного вечора'}</small>
           </FeedItem>
         </section>
       ) : null}
@@ -411,7 +438,7 @@ export function DashboardPage() {
         <Link to="/duties" className="hv3-tomorrow">
           <span>
             <strong>Завтра{tomorrowZones.length ? ` · ${tomorrowZones.join(' · ')}` : ''}</strong>
-            <small>{tomorrowTasks.length ? `${tomorrowTasks.length} ${taskWord(tomorrowTasks.length)} уже розподілено` : 'Зону вже призначено'}</small>
+            <small>{tomorrowTasks.length ? `${tomorrowTasks.length} ${taskWord(tomorrowTasks.length)} вже розподілено` : 'Зону вже призначено'}</small>
           </span>
           <ChevronRight size={18} aria-hidden="true" />
         </Link>
@@ -423,7 +450,7 @@ export function DashboardPage() {
 /* ---------- pieces ---------- */
 
 function ShiftSummary({
-  phase, code, start, nowMinutes, zoneText, nextShift, todayKey, loading, marks,
+  phase, code, start, nowMinutes, zoneText, nextShift, todayKey, loading, marks, cashPending,
 }: {
   phase: Phase;
   code: string;
@@ -434,6 +461,7 @@ function ShiftSummary({
   todayKey: string;
   loading: boolean;
   marks: number[];
+  cashPending: boolean;
 }) {
   if (loading) return <div className="hv3-shift-card is-loading" aria-label="Завантажуємо зміну" />;
 
@@ -454,11 +482,11 @@ function ShiftSummary({
   const span = SHIFT_END - start;
   const progress = Math.min(1, Math.max(0, (nowMinutes - start) / span));
   const headline = phase === 'before' ? `Зміна о ${hhmm(start)}` : phase === 'during' ? `Зміна до ${hhmm(SHIFT_END)}` : 'Зміну завершено';
-  const aside = phase === 'before' ? `через ${duration(start - nowMinutes)}` : phase === 'during' ? `ще ${duration(SHIFT_END - nowMinutes)}` : 'внеси касу нижче';
+  const aside = phase === 'before' ? `через ${duration(start - nowMinutes)}` : phase === 'during' ? `ще ${duration(SHIFT_END - nowMinutes)}` : cashPending ? 'чекає на касу' : '';
 
   return (
     <div className="hv3-shift-card">
-      <div className="hv3-shift-row"><strong>{headline}</strong><span>{aside}</span></div>
+      <div className="hv3-shift-row"><strong>{headline}</strong>{aside ? <span>{aside}</span> : null}</div>
       <div className="hv3-track" aria-hidden="true">
         <span className="hv3-track-fill" style={{ width: `${progress * 100}%` }} />
         {marks.filter((mark) => mark >= start && mark <= SHIFT_END).map((mark, index) => (
@@ -466,7 +494,7 @@ function ShiftSummary({
         ))}
         {phase === 'during' ? <span className="hv3-track-now" style={{ left: `${progress * 100}%` }} /> : null}
       </div>
-      <div className="hv3-track-ticks"><span>{hhmm(start)}{zoneText ? ` · ${zoneText}` : ''}</span><span>{code} · {hhmm(SHIFT_END)}</span></div>
+      <div className="hv3-track-ticks"><span><b className={`hv3-code${code.startsWith('СН') ? ' is-breakfast' : ''}`}>{code}</b> {hhmm(start)}–{hhmm(SHIFT_END)}</span>{zoneText ? <span>{zoneText}</span> : null}</div>
     </div>
   );
 }
@@ -491,9 +519,9 @@ function NowMarker({ minutes }: { minutes: number }) {
   );
 }
 
-function Pulse({ label, value, gold = false }: { label: string; value: string; gold?: boolean }) {
+function Pulse({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`hv3-pulse-item${gold ? ' is-gold' : ''}`} role="listitem">
+    <div className="hv3-pulse-item" role="listitem">
       <strong>{value}</strong>
       <small>{label}</small>
     </div>
@@ -558,6 +586,6 @@ function plural(count: number, one: string, few: string, many: string): string {
 }
 
 const peopleWord = (count: number) => plural(count, 'людина', 'людини', 'людей');
-const guestWord = (count: number) => plural(count, 'гість', 'гостя', 'гостей');
+const guestWord = (count: number) => plural(count, 'гість', 'гості', 'гостей');
 const reservationWord = (count: number) => plural(count, 'резерв', 'резерви', 'резервів');
 const taskWord = (count: number) => plural(count, 'обовʼязок', 'обовʼязки', 'обовʼязків');

@@ -227,6 +227,43 @@ components:
     rounded: "{rounded.dialog}"
     padding: "18px"
     width: "min(100%, 420px)"
+  home-masthead:
+    backgroundColor: "{colors.gold}"
+    textColor: "{colors.on-gold}"
+    rounded: "{rounded.dialog}"
+    padding: "22px 20px 72px"
+  home-masthead-wide:
+    backgroundColor: "{colors.gold}"
+    textColor: "{colors.on-gold}"
+    rounded: "{rounded.dialog}"
+    padding: "28px 32px 80px"
+  shift-card:
+    backgroundColor: "{colors.surface-2}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.l}"
+    padding: "14px 16px 12px"
+  team-face:
+    backgroundColor: "{colors.surface-3}"
+    textColor: "{colors.text-2}"
+    rounded: "{rounded.circle}"
+    size: "34px"
+  notice-card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.l}"
+    padding: "12px 14px"
+  pulse-counter:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.m}"
+    padding: "10px 6px"
+  close-shift-card:
+    backgroundColor: "{colors.surface-2}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.l}"
+    padding: "16px"
+  feed-now:
+    textColor: "{colors.gold}"
 ---
 
 # Design System: Tiflis Staff Portal
@@ -239,14 +276,15 @@ A category-standard staff dashboard played straight and finished to banking-app 
 
 The system carries no themed ornament: no wine, menu, Georgian folklore or other motifs, and no gradients, glows or patterns. Character comes from the brand pair (charcoal and gold), confident tabular numbers in one sans, tonal surface steps, and generous 14–20px radii. Gold is scarce and always means something: your money, your action, your current selection.
 
-**Migration state.** The cash screen (`src/pages/CashPage.tsx`, `src/components/CashTopList.tsx`, styles in `src/pages/cash-v3.css`) was the first screen built on this system. The schedule screen (`src/pages/SchedulePage.tsx`, styles in `src/pages/schedule-v3.css`) is the second. The portal tokens (`--t-*`) live in `src/theme/tiflis-theme.css`, which loads last and also rethemes the shared shell (sidebar, top bar, mobile bottom nav, avatars). Every other screen still carries legacy styles: hard-coded greens from the old portal, Prata headings, and older panel patterns. As a bridge, the legacy token names (`--bg`, `--surface`, `--surface-2`, `--surface-3`, `--surface-raised`, `--border`, `--border-strong`, `--text`, `--muted`, `--gold`, `--gold-soft`, `--green`, `--danger`) now resolve to the `--t-*` values, so older screens get the brand ground without being redesigned. The bridge is temporary. When you migrate a screen, use the `--t-*` tokens and the cash-v3 component patterns below, and remove its hard-coded colours and Prata. Don't add new uses of the legacy names.
+**Migration state.** The cash screen (`src/pages/CashPage.tsx`, `src/components/CashTopList.tsx`, styles in `src/pages/cash-v3.css`) was the first screen built on this system. The schedule screen (`src/pages/SchedulePage.tsx`, styles in `src/pages/schedule-v3.css`) is the second. The home page («Сьогодні», `src/pages/DashboardPage.tsx`, styles in `src/pages/home-v3.css`) is the third, and it carries the system's one page-scoped exception: the gold masthead (see The Gold Is Earned Rule). The portal tokens (`--t-*`) live in `src/theme/tiflis-theme.css`, which loads last and also rethemes the shared shell (sidebar, top bar, mobile bottom nav, avatars). Every other screen still carries legacy styles: hard-coded greens from the old portal, Prata headings, and older panel patterns. As a bridge, the legacy token names (`--bg`, `--surface`, `--surface-2`, `--surface-3`, `--surface-raised`, `--border`, `--border-strong`, `--text`, `--muted`, `--gold`, `--gold-soft`, `--green`, `--danger`) now resolve to the `--t-*` values, so older screens get the brand ground without being redesigned. The bridge is temporary. When you migrate a screen, use the `--t-*` tokens and the cash-v3 component patterns below, and remove its hard-coded colours and Prata. Don't add new uses of the legacy names.
 
 **Key Characteristics:**
 - Warm charcoal ground with three tonal surface steps; depth comes from tone, not shadow.
 - Brand gold (#D1B46B) used sparingly, only for meaning.
 - One self-hosted UI sans (Golos Text, 400–700), tabular figures everywhere money appears.
 - Summary first, one gold primary action per view, data in rounded cards.
-- Phone-first single column, which becomes a two-column dashboard at 1024px.
+- Phone-first single column, which becomes a two-column dashboard at 1024px (Home splits at 981px).
+- One page-scoped exception: the Home masthead is a flat gold field carrying the charcoal wordmark. Gold is a background nowhere else.
 - Green and red only for gain and loss, always paired with an arrow or sign.
 - Dense team data stays a people × days table; today and the viewer are marked in place with a faint gold haze, never reordered.
 
@@ -255,11 +293,11 @@ The system carries no themed ornament: no wine, menu, Georgian folklore or other
 A warm near-black ramp built around the logo's charcoal, a single brand gold, and two signal colours kept for movement.
 
 ### Primary
-- **Tiflis Gold** (gold): the brand gold sampled from the supplied logo. Used for the payout figure, the primary button, the active tab underline, the "today" chart label and baseline, the best-day bar, podium ranks (1–3), the "Ти" badge, text links, the keyboard focus ring, the input caret, the active mobile-nav item, and active sidebar icons.
+- **Tiflis Gold** (gold): the brand gold sampled from the supplied logo. Used for the payout figure, the primary button, the active tab underline, the "today" chart label and baseline, the best-day bar, podium ranks (1–3), the "Ти" badge, text links, the keyboard focus ring, the input caret, the active mobile-nav item, and active sidebar icons. On Home it is also the masthead field (the one exception to The Gold Is Earned Rule), the shift countdown, and the now marker on the shift track and in the day feed.
 - **Pressed Gold** (gold-press): pressed state of gold buttons only.
 - **Gold Wash** (gold-tint): a quiet 12% gold field that marks *you* in a list (the highlighted ranking row) and the active mobile-nav item. Selection highlight uses the same gold at 35%.
 - **Gold Haze** (gold-wash): a fainter 7% gold field for marks that span a whole table column or row: today's column and the viewer's own row in the schedule, and today's row in the day list. It is faint enough to cross code tints without fighting them.
-- **Ink on Gold** (on-gold): text and icons placed on gold, and on the confirmed-delete red.
+- **Ink on Gold** (on-gold): text and icons placed on gold, including the date, time and greeting on the Home masthead, and on the confirmed-delete red.
 
 ### Neutral
 - **Night Ground** (ground): page background, `theme-color`, and the boot screen.
@@ -284,7 +322,7 @@ A closed categorical legend used only for schedule shift codes. The letter code 
 - **Cool Bar** (bar) on **Bar Wash** (bar-tint): the bar shift (Б). Mixed codes (Р/Б, СН/Б) set text colour on the bar wash. The cool blue exists only for this and appears nowhere else in the portal.
 
 ### Named Rules
-**The Gold Is Earned Rule.** Gold marks money that belongs to the viewer, the one primary action, or the current selection. It is never a background wash for a section, a decorative border, or a heading colour.
+**The Gold Is Earned Rule.** Gold marks money that belongs to the viewer, the one primary action, or the current selection. It is never a background wash for a section, a decorative border, or a heading colour. The one exception is the Home masthead: on the home page only, a flat gold (#D1B46B) field carries the charcoal wordmark, the date and time, and the greeting, with all text in ink on gold (`--t-on-gold`). It stays flat (no gradient, tint, texture or shadow), and no other page, section or card may use gold as its background.
 
 **The Green Means Gain Rule.** Green and coral appear only for movement and consequence (gain, loss, delete, error) and always with an arrow, sign or word next to them. Green is never a brand or success-decoration colour. This rule retires the old green-era palette.
 
@@ -306,6 +344,7 @@ A closed categorical legend used only for schedule shift codes. The letter code 
 - **Label** (500–600, 14px): segmented options, links, select, empty-state copy (14px/1.5 in text-2), and alerts. Field labels are 13px in text-2.
 - **Caption** (400, 12–12.5px, 1.45): breakdown terms, card meta, record sub-lines, notes, and the privacy line, in text-3.
 - **Micro** (11–11.5px): chart day numbers, the average tag, the "Ти" badge (700), and stat sub-lines.
+- **Masthead** (Home only, 700, in ink on gold): the greeting at clamp 23–30px, 1.15, −0.01em, with balanced wrapping. The date is 13px/600 over the Kyiv time at 700; at ≥981px the date grows to 15px and the time to 40px at −0.02em, tabular.
 - **Codes** (700, 12.5px in table cells, 11px with −0.01em for three-letter codes, 13px in chips, 14px in the brush palette, 11.5px in the legend): shift codes. The table head stacks a 10.5px weekday in text-3 over a 13px/700 day number; names in the sticky column are 13px/500 (14px at ≥1024px).
 
 ### Named Rules
@@ -324,11 +363,13 @@ Order on the phone follows the thumb: a header row with tabs and the month switc
 - **≤ 980px:** the shell switches to the mobile top bar (wordmark 68px with a line-strong divider before the page title) and the floating bottom navigation.
 - **Schedule (phone):** max 1400px wide, 12px rhythm. The month is split into two halves (1–15, 16–end) with a segmented switch that opens on the half containing today. The table scrolls sideways inside its card behind a sticky 92px name column; cells are at least 31px wide and 38px tall, and today's column scrolls into view when it is off-screen. While the admin brush is open it is fixed 96px above the bottom navigation, inset 12px from each side, and the page gains 132px of bottom padding so the last rows stay reachable.
 - **≥ 1024px (schedule):** the whole month shows in one table and the half switch is hidden. The name column grows to 124px, cells shrink to 26px minimum, the gap grows to 16px, and the brush docks bottom-right (560px wide, 24px from the bottom, 32px from the right) with 120px of page padding.
+- **Home (phone, ≤ 980px):** the shell top bar is hidden on this page and Home owns its side gutters (12px, or the safe-area inset when larger), so the gold masthead bleeds to both screen edges and up under the status bar (18px plus the top safe-area inset). Only its bottom corners are rounded. Its 72px bottom padding makes room for the shift card, which overlaps it by 60px with a 6px inset. Below that is one 12px-rhythm column: shift card, birthday notice, pulse counters, alert, close-shift card, day feed, tomorrow card.
+- **≥ 981px (Home):** a two-column grid (1fr : 1fr, 24px column gap, max 1120px). The masthead is a banner across both columns (28/32/80px padding, wordmark 190px), and the time at 40px holds its right side. The shift card overlaps the banner by 64px, inset 24px from the left. The left column stacks the shift card, birthday notice, pulse counters, alert, close-shift and tomorrow cards, each with 12px below it so an absent card leaves no gap. The day feed sits in the right column, spanning every row, and a final 1fr row absorbs its extra height so the left column stays packed at the top. Home splits at the shell's 981px, not at the 1024px dashboard breakpoint.
 - **≥ 1024px:** the overall gap grows to 20px. The overview becomes a two-column grid (1.25fr : 1fr), with payout, stats, action and chart on the left and records spanning the right. The top view splits 1fr : 1.4fr. Segmented controls cap at 420px (three options) or 520px (four). The hero card pads 22px and the chart grows from 132px to 176px tall.
 
 ## Elevation & Depth
 
-The system is flat and tonal. Depth is a step up the ground → surface → surface-2 → surface-3 ramp, plus hairline borders. The only in-content shadow is the small one under the active segment thumb. Overlays use a dark scrim (rgba(8, 8, 7, 0.62)). The top bar uses a translucent ground (88%) with a 16px backdrop blur, and the mobile nav uses translucent surface (96%). The schedule's floating brush palette follows the same rule: it sits on raised charcoal with a strong hairline and no shadow, and the shift picker uses the same scrim.
+The system is flat and tonal. Depth is a step up the ground → surface → surface-2 → surface-3 ramp, plus hairline borders. The only in-content shadow is the small one under the active segment thumb. Overlays use a dark scrim (rgba(8, 8, 7, 0.62)). The top bar uses a translucent ground (88%) with a 16px backdrop blur, and the mobile nav uses translucent surface (96%). The schedule's floating brush palette follows the same rule: it sits on raised charcoal with a strong hairline and no shadow, and the shift picker uses the same scrim. On Home the masthead is flat gold, and the shift card lifts off it by overlap, brand charcoal and a strong hairline, with no shadow. The viewer's face in the team strip carries a 1.5px inset gold ring, which marks selection, not depth.
 
 ### Shadow Vocabulary
 - **Segment thumb** (`box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35)`): only on the selected option of a segmented control, to lift it off the track.
@@ -338,7 +379,7 @@ The system is flat and tonal. Depth is a step up the ground → surface → surf
 
 ## Shapes
 
-Soft, generous rounding with a clear size ladder. 10px for small controls (select, sidebar items), 14px for buttons, inputs, stat tiles, alerts and the highlighted ranking row, 20px for cards and the hero summary, and 22px for dialogs. Segmented controls nest 9px thumbs inside a 12px track with 3px inset. Icon buttons and avatars are full circles, and badges are pills. Chart bars have 6px top corners and 3px bottom corners. Shift-code chips and table cells use 9px, department chips 10px, the brush toggle and shift-picker options 12px, the brush palette 14px, and the schedule table card 20px. Borders are always 1px hairlines in the warm off-white alpha. There is no clipping, angle or ornamental silhouette.
+Soft, generous rounding with a clear size ladder. 10px for small controls (select, sidebar items), 14px for buttons, inputs, stat tiles, alerts and the highlighted ranking row, 20px for cards and the hero summary, and 22px for dialogs. Segmented controls nest 9px thumbs inside a 12px track with 3px inset. Icon buttons and avatars are full circles, and badges are pills. Chart bars have 6px top corners and 3px bottom corners. Shift-code chips and table cells use 9px, department chips 10px, the brush toggle and shift-picker options 12px, the brush palette 14px, and the schedule table card 20px. On Home the masthead uses 22px (bottom corners only on phones, all four at ≥981px), the shift card, notices and close-shift card 20px, pulse counters 14px, the birthday icon tile 12px and task checkboxes 7px; the day feed's rail is a 2px line with 12px ring dots. Borders are always 1px hairlines in the warm off-white alpha. There is no clipping, angle or ornamental silhouette.
 
 ## Components
 
@@ -402,9 +443,37 @@ The admin paint tool. A floating bar on raised charcoal with a strong hairline a
 ### Shift Picker
 A dialog (charcoal surface, strong hairline, 22px radius, 420px max, 18px padding) titled with the person's name (19px/700) over the full date (13.5px, text-2), with a circular close button. Codes sit in a two-column grid of 52px options on brand charcoal (12px radius), each a code chip plus label; the current code gets a gold border and a gold check.
 
+### Home Masthead (signature)
+The restaurant's sign at the top of Home, and the only gold field in the portal (see The Gold Is Earned Rule). A flat gold field with everything on it in ink on gold: the charcoal wordmark top left (150px wide, 190px at ≥981px), the date (capitalised weekday, day and month) over the Kyiv time top right, and the greeting below. The time updates every 30 seconds. On phones the masthead bleeds edge to edge, replaces the shell top bar, and rounds only its bottom corners (22px). At ≥981px it is a banner across both columns with all four corners rounded and the time at 40px. On the viewer's own birthday the greeting becomes «З днем народження, …!».
+
+**Wordmark provenance.** The masthead wordmark is `src/assets/brand/tiflis-wordmark-charcoal.png` (420×267). It is derived from the supplied `brand/tiflis-logo-black-transparent.png` with its fill recoloured to #2B2A29, and it matches the supplied variant `brand/tiflis-logo-gold-bg-charcoal.png` (charcoal on gold). It is the only wordmark used on gold.
+
+### Shift Card (signature)
+Home's answer-in-a-glance block, overlapping the masthead's lower edge. It sits on brand charcoal with a strong hairline and a 20px radius. A 19px/700 headline follows the phase («Зміна о 12:00», «Зміна до 22:00», «Зміну завершено»), with a gold 14px/600 countdown on the right («через 45 хв», «ще 3 год 50 хв», or «чекає на касу» while the cash is still owed). Below it a 6px progress track on raised charcoal (3px radius) fills the elapsed part in 45% gold. Each of today's reservations sits on the track at its time as a 12px ring (2px text-2 border on brand charcoal). During the shift a 3 × 16px gold now marker stands at the current time. A 12px text-3 line under the track shows the shift code chip (legend size: 22px tall, 9px radius, 11.5px) with the hours, and the viewer's zone on the right. On a day off the card reads «Сьогодні вихідний» with the next shift beneath it and no track. While loading it is an 84px pulsing block.
+
+**Shift hours and phase.** The phase comes from the viewer's code in today's schedule and the Kyiv clock (Europe/Kyiv). Р and every other working code run 12:00–22:00; СН and СН/Б run 11:00–22:00; Х and О are not working days. Before the start the phase is *before*, from the start to 22:00 it is *during*, from 22:00 it is *after*, and a non-working day is *off*. The phase drives the shift card, the day feed's now marker, and the close-shift card.
+
+### Team Faces
+The lower half of the shift card, below a hairline: up to five overlapping 34px circles (−9px overlap, 2px brand-charcoal ring, raised charcoal with 11.5px/600 initials in text-2 under an optional photo), then a «+N» disc, a 14px text-2 line («Сьогодні з тобою 10 людей», or «Сьогодні працюють N людей» on a day off) and a chevron. The viewer comes first, marked by a 1.5px inset gold ring and gold initials. The whole row links to the schedule and steps to raised charcoal on hover.
+
+### Birthday Notice
+A one-row notice card (charcoal surface, hairline, 20px radius, 12px 14px padding) with a 40px raised-charcoal tile (12px radius) holding a cake line icon in text-2, a 15px/600 line saying when («Завтра день народження», «У неділю день народження», or a date), the names in 13px text-2 beneath, and a chevron. It shows only the nearest staff birthday; the viewer's own birthday appears in the masthead greeting instead. When the birthday is today the card moves to the gold haze with a strong hairline, and the icon tile turns gold wash with a gold icon. It links to the staff page and steps up to brand charcoal on hover.
+
+### Pulse Counters
+Up to four equal tiles in one row (6px gap): charcoal surface, hairline, 14px radius, 10px 6px padding, with a centred 20px/700 figure over an 11.5px text-3 label. Waiters see reservations and guests; everyone sees duties done (as «1/3») and the head count on shift. Labels decline with the count. The counters are neutral; none is gold.
+
+### Day Feed (signature)
+The shift read as one timeline, from «Початок зміни» to «Кінець зміни» at 22:00. Each event is a three-column row (a 46px right-aligned 13.5px/600 time in text-2, a 16px rail, then the body), at least 50px tall. The rail is a 2px raised-charcoal line with 12px ring dots (2px text-3 border on the ground), and it stops at the last dot. A body has a 15px/600 title and a 13px text-3 note. For waiters, today's reservations slot in by time («Стіл 3 · 4 гості»), with a text-2 pill tag («гості вже за столом») once the guests are seated. Duties hang under the start as a hairline card of 44px checkbox rows (22px box, 7px radius, strong-hairline border). A done row fills its box with raised charcoal and strikes its text through in text-3. Past events fade to text-3 with filled raised-charcoal dots. During the shift a «Зараз» row sits at the current time, with its time, title and filled dot in gold. The end event tells cash roles when to enter the cash. On phones the feed follows the cards; at ≥981px it fills the right column.
+
+### Close-Shift Cash Card
+After 22:00, for cash roles only: a brand-charcoal card (strong hairline, 20px radius, 16px padding, 12px gap) titled «Закрий зміну: внеси касу» at 17px. Two fields sit side by side (1.4fr : 1fr, 10px gap), «Каса» and «Чайові». Both reuse the 64px, 30px/700 hero money input from the cash screen, set one step down on charcoal surface inside the card, with the ₴ suffix in text-3 and a gold border on focus. The gold «Зберегти касу» button below is the view's one gold action. Errors are 14px coral text. Once the cash is saved, the card collapses into a notice row («Касу за сьогодні внесено», with the sums in text-2) that links to the cash screen.
+
+### Tomorrow Card
+From 13:00, when tomorrow's duty plan is published and assigns the viewer something: a notice row (the birthday notice card without the icon tile) reading «Завтра · Зал 1 · столи 1–6» at 15px/600 over the count of duties already assigned, linking to the duties page.
+
 ### Navigation
 - **Desktop sidebar:** charcoal surface with a hairline right edge and the gold wordmark (92px) at the top. Items are 10px-radius rows in text-2. Hover and active states move to brand charcoal with text colour, and the active icon turns gold. No indicator bars or glows.
-- **Mobile:** a top bar with a translucent ground and blur, the gold wordmark (68px), a strong-hairline divider, and the page title in Golos 700. The floating bottom bar uses translucent charcoal. The active item gets a gold wash with a gold icon and label, and the central home disc turns solid gold when active.
+- **Mobile:** a top bar with a translucent ground and blur, the gold wordmark (68px), a strong-hairline divider, and the page title in Golos 700. The floating bottom bar uses translucent charcoal. The active item gets a gold wash with a gold icon and label, and the central home disc turns solid gold when active. On Home the top bar is hidden on phones; the gold masthead takes its place.
 
 ### States
 Loading uses skeleton blocks shaped like the real layout (segment, hero, row, chart) that pulse to 55% over 1.4s, plus a 60% fade on content while refreshing. Empty states are one plain 14px sentence in text-2 that tells the worker what to do next. Every animation and transition is disabled under `prefers-reduced-motion`.
@@ -418,17 +487,19 @@ Loading uses skeleton blocks shaped like the real layout (segment, hero, row, ch
 - **Do** put the primary action within thumb reach above long content, and size touch targets at 36px or more (52px for primary actions).
 - **Do** raise elements by stepping up the surface ramp (ground → surface → surface-2 → surface-3) with 1px warm hairlines.
 - **Do** pair gain green and loss coral with an arrow, sign or word.
-- **Do** use the supplied gold wordmark file as-is in the shell.
+- **Do** use the supplied gold wordmark file as-is in the shell, and the charcoal wordmark (see Home Masthead) on the Home masthead.
 - **Do** keep every dialog on the shared ModalRuntime so dialogs centre consistently on phones.
 - **Do** mark today and the viewer in tables with the gold haze (gold-wash) in place, keeping the department's order.
 - **Do** show every shift code with its letters and a visible legend (The Closed Legend Rule).
+- **Do** write all interface copy in Ukrainian, and greet the viewer by first name in the vocative («Добрий вечір, Вікторе»). A name that can't be declined (Latin script, a nickname) stays as written, and with no name the greeting says «колего».
+- **Do** keep the gold masthead flat and on Home only, with every element on it in ink on gold.
 
 ### Don't:
 - **Don't** add a light theme; the ground is dark only.
 - **Don't** add themed ornament (wine, menu, Georgian folklore or other motifs), gradients, glows or patterns.
 - **Don't** reintroduce the old green palette, wine accent or Prata, or reference the legacy token names (`--bg`, `--gold`, `--green`, …) in new code.
-- **Don't** use more than one gold-filled button in a view, or use gold as a section background.
+- **Don't** use more than one gold-filled button in a view, or use gold as a section background. The one exception is the Home masthead: on the home page only, a flat #D1B46B field with its text in ink on gold (`--t-on-gold`).
 - **Don't** add drop shadows to cards; the segment-thumb shadow is the only one.
 - **Don't** show other people's sums in rankings or shared views; show place and movement.
-- **Don't** redraw, re-letter or recolour the Tiflis wordmark beyond the supplied variants.
+- **Don't** redraw, re-letter or recolour the Tiflis wordmark beyond the supplied variants. The Home charcoal wordmark matches the supplied charcoal-on-gold variant (see Home Masthead for its provenance).
 - **Don't** use the cool bar blue or the shift-code tints outside shift codes.
