@@ -440,7 +440,6 @@ export function ReservePage() {
           hallId={floorHallId}
           tables={tables}
           reservations={live}
-          today={today}
           onTable={setTableSheet}
         />
       ) : null}
@@ -536,8 +535,8 @@ function Booking({ reservation, labels, hall, canManage, busy, error, onOpen, on
 
 /* ---------- floor view ---------- */
 
-function Floor({ halls, hallId, tables, reservations, today, onTable }: {
-  halls: Hall[]; hallId: number | null; tables: Table[]; reservations: Reservation[]; today: string; onTable: (table: Table) => void;
+function Floor({ halls, hallId, tables, reservations, onTable }: {
+  halls: Hall[]; hallId: number | null; tables: Table[]; reservations: Reservation[]; onTable: (table: Table) => void;
 }) {
   if (!hallId) return <p className="rv3-empty">Залів ще не налаштовано.</p>;
   const hallTables = tables.filter((table) => table.hall_id === hallId).sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label, 'uk', { numeric: true }));
@@ -555,7 +554,6 @@ function Floor({ halls, hallId, tables, reservations, today, onTable }: {
           const bookings = bookingsFor(table);
           const tone = bookings.some((reservation) => reservation.status === 'occupied') ? 'occupied' : bookings.length ? 'booked' : 'free';
           const next = bookings.find((reservation) => reservation.status === 'occupied') || bookings[0];
-          const seatedNow = tone === 'occupied' && next?.reserved_date === today;
           const stateWord = tone === 'free' ? 'вільний' : tone === 'occupied' ? 'за столом' : 'резерв';
           return (
             <button
@@ -567,7 +565,7 @@ function Floor({ halls, hallId, tables, reservations, today, onTable }: {
               aria-label={`Стіл ${table.label}, ${table.capacity} ${plural(table.capacity, 'місце', 'місця', 'місць')}, ${stateWord}${next ? `, ${hhmm(next.reserved_time)}, ${next.guest_name}` : ''}`}
             >
               <b>{table.label}</b>
-              <small>{tone === 'occupied' ? (seatedNow ? 'за столом' : hhmm(next!.reserved_time)) : next ? hhmm(next.reserved_time) : `${table.capacity} м.`}</small>
+              <small>{tone === 'occupied' ? 'за столом' : next ? hhmm(next.reserved_time) : `${table.capacity} м.`}</small>
             </button>
           );
         })}
