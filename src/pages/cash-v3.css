@@ -711,7 +711,7 @@
   padding: 12px 14px;
   border-radius: var(--t-radius-m);
   background: rgba(229, 139, 128, 0.12);
-  color: #F2C1BA;
+  color: var(--t-down-text);
   font-size: 14px;
 }
 
@@ -920,7 +920,7 @@
 .cv3-form-error {
   margin: 0;
   font-size: 14px;
-  color: #F2C1BA;
+  color: var(--t-down-text);
 }
 
 .cv3-sheet-actions {

@@ -170,6 +170,7 @@ export function SchedulePage() {
   const [brush, setBrush] = useState<ShiftCode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const requestId = useRef(0);
   const savedTimer = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -201,7 +202,7 @@ export function SchedulePage() {
         setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити графік.');
       })
       .finally(() => { if (requestId.current === id) setLoading(false); });
-  }, [month, user]);
+  }, [month, user, reloadToken]);
 
   useEffect(() => () => {
     if (savedTimer.current) window.clearTimeout(savedTimer.current);
@@ -288,14 +289,18 @@ export function SchedulePage() {
   // Bring today's column into view when the table opens on the current half.
   useLayoutEffect(() => {
     const container = scrollRef.current;
-    const today = container?.querySelector<HTMLElement>('th.is-today');
-    if (!container || !today) return;
+    if (!container) return;
+    const today = container.querySelector<HTMLElement>('th.is-today');
+    if (!today) {
+      container.scrollLeft = 0;
+      return;
+    }
     const nameColumn = container.querySelector<HTMLElement>('th.sv3-name')?.offsetWidth || 0;
     const visibleFrom = container.scrollLeft + nameColumn;
     const visibleTo = container.scrollLeft + container.clientWidth;
     if (today.offsetLeft >= visibleFrom && today.offsetLeft + today.offsetWidth <= visibleTo) return;
     container.scrollLeft = Math.max(0, today.offsetLeft - nameColumn - today.offsetWidth * 2);
-  }, [days, loading, activeRole, scope]);
+  }, [days, loading, activeRole, scope, half, month]);
 
   async function applyShift(staff: ScheduleStaff, date: string, code: ShiftCode) {
     const key = cellKey(staff.id, date);
@@ -331,7 +336,7 @@ export function SchedulePage() {
   const tableStaff = scope === 'team' ? departmentStaff : [];
 
   return (
-    <div className="sv3">
+    <div className={`sv3${brush !== null && scope === 'team' ? ' has-brush' : ''}`}>
       <div className="sv3-bar">
         <div className="sv3-tabs" role="tablist" aria-label="Режим графіка">
           <button type="button" role="tab" aria-selected={scope === 'team'} className={scope === 'team' ? 'is-on' : ''} onClick={() => setScope('team')}>Команда</button>
@@ -369,7 +374,11 @@ export function SchedulePage() {
       {error ? (
         <div className="sv3-alert" role="alert">
           <span>{error}</span>
-          <button type="button" onClick={() => setError(null)} aria-label="Закрити помилку"><X size={16} /></button>
+          {data ? (
+            <button type="button" onClick={() => setError(null)} aria-label="Закрити помилку"><X size={16} /></button>
+          ) : (
+            <button type="button" className="sv3-retry" onClick={() => setReloadToken((value) => value + 1)}>Спробувати ще раз</button>
+          )}
         </div>
       ) : null}
 

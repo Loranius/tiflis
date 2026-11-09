@@ -23,6 +23,6 @@ STORY: The worker sees the half-month at a glance, finds today's column and thei
 
 FIRST VIEWPORT: Tabs Команда / Мій графік sharing a row with the compact month switcher; the 1–15 · 16–кінець segmented control; a one-line summary (on shift today, my next shift); department chips; the table with the viewer's row highlighted in gold in its usual place (department order is never changed), today's column tinted gold and scrolled into view when off-screen, an on-shift count row under it. On screens 1024px and wider the whole month shows in one table and the half switch is hidden.
 
-FORM: surface structure 2 of 3 (compact month table), dealt; owner added the half-month split. seed: none (unavailable)
+FORM: surface structure 2 of 3 (compact month table), dealt; owner added the half-month split. seed:0fe68091694819f1
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
