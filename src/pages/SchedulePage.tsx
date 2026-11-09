@@ -2,22 +2,27 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Clock3,
+  Paintbrush,
   RefreshCw,
-  ShieldCheck,
-  Sparkles,
-  UsersRound,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { canPerform } from '../lib/acl';
 import { secureApi } from '../lib/secureApi';
-import './schedule.css';
+import { getKyivDateKey } from '../lib/time';
+import './schedule-v3.css';
 
 type ShiftCode = '' | 'Р' | 'Х' | 'О' | 'СН' | 'Б' | 'С' | 'Р/Б' | 'СН/Б' | 'Д';
 type Scope = 'team' | 'mine';
+type Half = 'first' | 'second';
 type ShiftTone = 'work' | 'off' | 'leave' | 'breakfast' | 'bar' | 'mixed' | 'neutral';
 
 interface ShiftDefinition {
@@ -59,29 +64,22 @@ interface PickerState {
   staff: ScheduleStaff;
   date: string;
   value: ShiftCode;
-  anchor: { left: number; top: number };
 }
 
 const MONTHS = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень', 'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'];
+const MONTHS_GENITIVE = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
 const DOW = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Адміністрація', waiter: 'Офіціанти', bar: 'Бар', chef: 'Шеф-кухарі', cook: 'Кухня',
   hostess: 'Хостес', runner: 'Ранери', sommelier: 'Сомельє', staff: 'Команда',
 };
-const PERSON_ROLE_LABELS: Record<string, string> = {
-  admin: 'Адміністратор', sysadmin: 'Системний адміністратор', waiter: 'Офіціант',
-  bar: 'Бармен', chef: 'Шеф-кухар', cook: 'Кухар', hostess: 'Хостес',
-  runner: 'Ранер', sommelier: 'Сомельє', trainee: 'Стажер', staff: 'Працівник',
-};
+const ROLE_ORDER = ['waiter', 'bar', 'hostess', 'runner', 'cook', 'chef', 'sommelier', 'admin'];
+const FIRST_HALF_END = 15;
+const WIDE_QUERY = '(min-width: 1024px)';
 
 function normalizeRole(value: string | null | undefined): string {
   if (value === 'barman' || value === 'bartender') return 'bar';
   return value || 'staff';
-}
-
-function todayIso(): string {
-  const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 }
 
 function monthKey(date: Date): string {
@@ -90,9 +88,7 @@ function monthKey(date: Date): string {
 
 function parseMonth(value: string): Date {
   const [yearText = '', monthText = ''] = value.split('-');
-  const year = Number(yearText);
-  const month = Number(monthText);
-  return new Date(year, month - 1, 1);
+  return new Date(Number(yearText), Number(monthText) - 1, 1);
 }
 
 function moveMonth(value: string, offset: number): string {
@@ -119,30 +115,51 @@ function roleLabel(role: string): string {
   return ROLE_LABELS[role] || role;
 }
 
-function staffRoleTitle(staff: ScheduleStaff): string {
-  const roles = staffRoles(staff);
-  if (roles.includes('waiter') && roles.includes('bar')) return 'Бармен-офіціант';
-  if (roles.includes('waiter') && roles.includes('sommelier')) return 'Сомельє-офіціант';
-  if (roles.includes('waiter') && roles.includes('hostess')) return 'Хостес-офіціант';
-  if (roles.includes('waiter') && roles.includes('runner')) return 'Ранер-офіціант';
-  return roles.map((role) => PERSON_ROLE_LABELS[role] || role).join(' · ') || 'Працівник';
-}
-
 function isWorkingShift(code: ShiftCode | null | undefined): boolean {
   return Boolean(code && !['Х', 'О'].includes(code));
 }
 
-function shiftTone(code: ShiftCode, definitions: ShiftDefinition[]): ShiftTone {
-  return definitions.find((item) => item.code === code)?.tone || 'neutral';
+/** The half of the month that contains `todayKey` when it falls in `month`, otherwise the first half. */
+function halfFor(month: string, todayKey: string): Half {
+  if (!todayKey.startsWith(`${month}-`)) return 'first';
+  return Number(todayKey.slice(8, 10)) <= FIRST_HALF_END ? 'first' : 'second';
 }
 
-function initials(name: string): string {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('');
+function shortName(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return name;
+  return `${parts[0]} ${parts[1]?.[0] || ''}.`;
+}
+
+function formatDay(date: string): string {
+  return new Intl.DateTimeFormat('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })
+    .format(new Date(`${date}T12:00:00`));
+}
+
+function formatShortDay(date: string): string {
+  return new Intl.DateTimeFormat('uk-UA', { weekday: 'short', day: 'numeric', month: 'long' })
+    .format(new Date(`${date}T12:00:00`));
+}
+
+function useWideScreen(): boolean {
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.matchMedia(WIDE_QUERY).matches);
+  useEffect(() => {
+    const query = window.matchMedia(WIDE_QUERY);
+    const update = () => setWide(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return wide;
 }
 
 export function SchedulePage() {
   const { user } = useAuth();
-  const [month, setMonth] = useState(() => monthKey(new Date()));
+  const todayKey = getKyivDateKey();
+  const currentMonth = todayKey.slice(0, 7);
+  const wide = useWideScreen();
+  const [month, setMonth] = useState(currentMonth);
+  const [half, setHalf] = useState<Half>(() => halfFor(currentMonth, todayKey));
   const [data, setData] = useState<ScheduleBootstrapResponse | null>(null);
   const [activeRole, setActiveRole] = useState('waiter');
   const [scope, setScope] = useState<Scope>('team');
@@ -150,10 +167,17 @@ export function SchedulePage() {
   const [saving, setSaving] = useState<Set<string>>(() => new Set());
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [picker, setPicker] = useState<PickerState | null>(null);
+  const [brush, setBrush] = useState<ShiftCode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
   const savedTimer = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const changeMonth = (next: string) => {
+    setMonth(next);
+    setHalf(halfFor(next, todayKey));
+  };
 
   useEffect(() => {
     const id = ++requestId.current;
@@ -184,19 +208,29 @@ export function SchedulePage() {
   }, []);
 
   const monthDate = useMemo(() => parseMonth(month), [month]);
+  const monthIndex = monthDate.getMonth();
+  const daysInMonth = new Date(monthDate.getFullYear(), monthIndex + 1, 0).getDate();
+  const range = wide
+    ? { from: 1, to: daysInMonth }
+    : half === 'first'
+      ? { from: 1, to: FIRST_HALF_END }
+      : { from: FIRST_HALF_END + 1, to: daysInMonth };
   const days = useMemo(
-    () => Array.from({ length: new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate() }, (_, i) => i + 1),
-    [monthDate],
+    () => Array.from({ length: range.to - range.from + 1 }, (_, index) => {
+      const day = range.from + index;
+      const date = dateForDay(month, day);
+      const weekday = new Date(`${date}T12:00:00`).getDay();
+      return { day, date, weekday, weekend: weekday === 0 || weekday === 6 };
+    }),
+    [month, range.from, range.to],
   );
-  const currentDate = todayIso();
 
   const roles = useMemo(() => {
     if (!data) return [] as [string, number][];
     const counts = new Map<string, number>();
     data.users.forEach((staff) => staffRoles(staff).forEach((role) => counts.set(role, (counts.get(role) || 0) + 1)));
-    const order = ['waiter', 'bar', 'hostess', 'runner', 'cook', 'chef', 'sommelier', 'admin'];
     return [...counts.entries()].sort(([a], [b]) => {
-      const ai = order.indexOf(a), bi = order.indexOf(b);
+      const ai = ROLE_ORDER.indexOf(a), bi = ROLE_ORDER.indexOf(b);
       if (ai === -1 && bi === -1) return roleLabel(a).localeCompare(roleLabel(b), 'uk');
       if (ai === -1) return 1;
       if (bi === -1) return -1;
@@ -204,195 +238,334 @@ export function SchedulePage() {
     });
   }, [data]);
 
-  const visibleStaff = useMemo(() => {
+  const departmentStaff = useMemo(() => {
     if (!data) return [];
-    let staff = data.users.filter((person) => staffRoles(person).includes(activeRole));
+    const staff = data.users.filter((person) => staffRoles(person).includes(activeRole));
     const order = data.orders[activeRole] || [];
-    if (order.length) {
-      const index = new Map(order.map((id, position) => [id, position]));
-      staff = [...staff].sort((a, b) => {
-        const ai = index.get(a.id) ?? Number.MAX_SAFE_INTEGER;
-        const bi = index.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-        return ai === bi ? a.name.localeCompare(b.name, 'uk') : ai - bi;
-      });
-    }
-    return scope === 'mine' ? staff.filter((person) => person.id === data.me.legacyUserId) : staff;
-  }, [activeRole, data, scope]);
-
-  const shiftDefinitions = useMemo(() => {
-    if (!data) return [];
-    return activeRole === 'waiter' ? data.shiftTypes.waiter : data.shiftTypes.default;
+    if (!order.length) return staff;
+    const index = new Map(order.map((id, position) => [id, position]));
+    return [...staff].sort((a, b) => {
+      const ai = index.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+      const bi = index.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+      return ai === bi ? a.name.localeCompare(b.name, 'uk') : ai - bi;
+    });
   }, [activeRole, data]);
 
-  const metrics = useMemo(() => {
-    if (!data) return { today: 0, planned: 0, mine: 0 };
-    let today = 0, planned = 0, mine = 0;
-    visibleStaff.forEach((staff) => days.forEach((day) => {
-      const date = dateForDay(month, day);
-      const code = entries[cellKey(staff.id, date)] || '';
-      if (isWorkingShift(code)) planned += 1;
-      if (date === currentDate && isWorkingShift(code)) today += 1;
-      if (staff.id === data.me.legacyUserId && isWorkingShift(code)) mine += 1;
-    }));
-    return { today, planned, mine };
-  }, [currentDate, data, days, entries, month, visibleStaff]);
+  const me = data?.users.find((person) => person.id === data.me.legacyUserId) || null;
 
-  const canEditAll = data?.me.canEditAll || (user ? canPerform(user, 'editSchedule') : false);
+  const shiftDefinitions = useMemo(() => {
+    if (!data) return [] as ShiftDefinition[];
+    const role = scope === 'mine' && me ? (staffRoles(me).includes('waiter') ? 'waiter' : 'other') : activeRole;
+    return role === 'waiter' ? data.shiftTypes.waiter : data.shiftTypes.default;
+  }, [activeRole, data, me, scope]);
+
+  const toneOf = useCallback((code: ShiftCode): ShiftTone => {
+    if (!data) return 'neutral';
+    const all = [...data.shiftTypes.waiter, ...data.shiftTypes.default];
+    return all.find((item) => item.code === code)?.tone || 'neutral';
+  }, [data]);
+
+  const onShiftToday = useMemo(
+    () => departmentStaff.filter((staff) => isWorkingShift(entries[cellKey(staff.id, todayKey)])).length,
+    [departmentStaff, entries, todayKey],
+  );
+
+  const myNextShift = useMemo(() => {
+    if (!data || !me) return null;
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = dateForDay(month, day);
+      if (date < todayKey) continue;
+      const code = entries[cellKey(me.id, date)];
+      if (isWorkingShift(code)) return { date, code: code as ShiftCode };
+    }
+    return null;
+  }, [data, daysInMonth, entries, me, month, todayKey]);
+
+  const canEditAll = Boolean(data?.me.canEditAll || (user ? canPerform(user, 'editSchedule') : false));
   const canEditOwn = user ? canPerform(user, 'editOwnShift') : false;
   const canEditStaff = (staff: ScheduleStaff) => Boolean(data && (canEditAll || (canEditOwn && staff.id === data.me.legacyUserId)));
 
-  function openPicker(staff: ScheduleStaff, date: string, target: HTMLButtonElement) {
-    if (!canEditStaff(staff)) return;
+  // Bring today's column into view when the table opens on the current half.
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    const today = container?.querySelector<HTMLElement>('th.is-today');
+    if (!container || !today) return;
+    const nameColumn = container.querySelector<HTMLElement>('th.sv3-name')?.offsetWidth || 0;
+    const visibleFrom = container.scrollLeft + nameColumn;
+    const visibleTo = container.scrollLeft + container.clientWidth;
+    if (today.offsetLeft >= visibleFrom && today.offsetLeft + today.offsetWidth <= visibleTo) return;
+    container.scrollLeft = Math.max(0, today.offsetLeft - nameColumn - today.offsetWidth * 2);
+  }, [days, loading, activeRole, scope]);
 
-    const rect = target.getBoundingClientRect();
-    const viewportWidth = window.visualViewport?.width || window.innerWidth;
-    const viewportHeight = window.visualViewport?.height || window.innerHeight;
-    const viewportLeft = window.visualViewport?.offsetLeft || 0;
-    const viewportTop = window.visualViewport?.offsetTop || 0;
-    const edge = 12;
-    const gap = 8;
-    const width = Math.min(360, viewportWidth - edge * 2);
-    const estimatedHeight = Math.min(420, viewportHeight - edge * 2);
-    const left = Math.max(
-      viewportLeft + edge,
-      Math.min(
-        viewportLeft + viewportWidth - width - edge,
-        rect.left + rect.width / 2 - width / 2,
-      ),
-    );
-    const belowTop = rect.bottom + gap;
-    const aboveTop = rect.top - estimatedHeight - gap;
-    const spaceBelow = viewportTop + viewportHeight - rect.bottom - edge;
-    const spaceAbove = rect.top - viewportTop - edge;
-    const preferredTop = spaceBelow >= estimatedHeight || spaceBelow >= spaceAbove
-      ? belowTop
-      : aboveTop;
-    const top = Math.max(
-      viewportTop + edge,
-      Math.min(viewportTop + viewportHeight - estimatedHeight - edge, preferredTop),
-    );
-
-    setPicker({
-      staff,
-      date,
-      value: entries[cellKey(staff.id, date)] || '',
-      anchor: { left, top },
-    });
-  }
-
-  async function applyShift(code: ShiftCode) {
-    if (!picker) return;
-    const key = cellKey(picker.staff.id, picker.date);
+  async function applyShift(staff: ScheduleStaff, date: string, code: ShiftCode) {
+    const key = cellKey(staff.id, date);
     const previous = entries[key] || '';
-    if (previous === code) { setPicker(null); return; }
+    if (previous === code) return;
     setEntries((current) => ({ ...current, [key]: code }));
     setSaving((current) => new Set(current).add(key));
-    setPicker(null);
     setError(null);
     try {
-      await secureApi<ScheduleSaveResponse>({ action: 'schedule_upsert', user_id: picker.staff.id, date: picker.date, shift: code });
+      await secureApi<ScheduleSaveResponse>({ action: 'schedule_upsert', user_id: staff.id, date, shift: code });
       setSavedKey(key);
       if (savedTimer.current) window.clearTimeout(savedTimer.current);
-      savedTimer.current = window.setTimeout(() => setSavedKey(null), 1500);
+      savedTimer.current = window.setTimeout(() => setSavedKey(null), 1400);
     } catch (reason) {
       setEntries((current) => ({ ...current, [key]: previous }));
-      setError(reason instanceof Error ? reason.message : 'Зміну не збережено.');
+      setError(reason instanceof Error ? reason.message : 'Зміну не збережено. Перевір зʼєднання і спробуй ще раз.');
     } finally {
       setSaving((current) => { const next = new Set(current); next.delete(key); return next; });
     }
   }
 
+  function onCell(staff: ScheduleStaff, date: string) {
+    if (!canEditStaff(staff)) return;
+    if (brush !== null && canEditAll) {
+      void applyShift(staff, date, brush);
+      return;
+    }
+    setPicker({ staff, date, value: entries[cellKey(staff.id, date)] || '' });
+  }
+
+  const rangeLabel = `${range.from}–${range.to} ${MONTHS_GENITIVE[monthIndex] || ''}`;
+  const isCurrentMonth = month === currentMonth;
+  const tableStaff = scope === 'team' ? departmentStaff : [];
+
   return (
-    <div className="schedule-page-v2">
-      <section className="schedule-toolbar-v2" aria-label="Навігація графіком">
-        <div className="schedule-month-nav">
-          <button className="schedule-icon-button" type="button" onClick={() => setMonth((value) => moveMonth(value, -1))} aria-label="Попередній місяць"><ChevronLeft size={20} /></button>
-          <div className="schedule-month-title"><span>{MONTHS[monthDate.getMonth()]}</span><strong>{monthDate.getFullYear()}</strong></div>
-          <button className="schedule-icon-button" type="button" onClick={() => setMonth((value) => moveMonth(value, 1))} aria-label="Наступний місяць"><ChevronRight size={20} /></button>
-          <button className="schedule-today-button" type="button" onClick={() => setMonth(monthKey(new Date()))}>Сьогодні</button>
+    <div className="sv3">
+      <div className="sv3-bar">
+        <div className="sv3-tabs" role="tablist" aria-label="Режим графіка">
+          <button type="button" role="tab" aria-selected={scope === 'team'} className={scope === 'team' ? 'is-on' : ''} onClick={() => setScope('team')}>Команда</button>
+          <button type="button" role="tab" aria-selected={scope === 'mine'} className={scope === 'mine' ? 'is-on' : ''} onClick={() => { setScope('mine'); setBrush(null); }} disabled={!me}>Мій графік</button>
         </div>
-        <div className="schedule-scope-switch" role="group" aria-label="Режим перегляду">
-          <button type="button" className={scope === 'team' ? 'is-active' : ''} onClick={() => setScope('team')}><UsersRound size={16} /> Команда</button>
-          <button type="button" className={scope === 'mine' ? 'is-active' : ''} onClick={() => setScope('mine')}><Sparkles size={16} /> Мій рядок</button>
+        <div className="sv3-month" role="group" aria-label="Місяць">
+          <button type="button" className="sv3-icon-btn" onClick={() => changeMonth(moveMonth(month, -1))} aria-label="Попередній місяць"><ChevronLeft size={20} /></button>
+          <strong>{MONTHS[monthIndex]}{monthDate.getFullYear() !== Number(currentMonth.slice(0, 4)) ? ` ${monthDate.getFullYear()}` : ''}</strong>
+          <button type="button" className="sv3-icon-btn" onClick={() => changeMonth(moveMonth(month, 1))} aria-label="Наступний місяць"><ChevronRight size={20} /></button>
         </div>
-      </section>
+      </div>
 
-      <section className="schedule-metrics-v2" aria-label="Показники графіка">
-        <article><UsersRound size={19} /><span>На зміні сьогодні</span><strong>{loading ? '…' : metrics.today}</strong></article>
-        <article><Clock3 size={19} /><span>Робочих призначень</span><strong>{loading ? '…' : metrics.planned}</strong></article>
-        <article><ShieldCheck size={19} /><span>Мої зміни за місяць</span><strong>{loading ? '…' : metrics.mine}</strong></article>
-      </section>
+      <div className="sv3-controls">
+        {!wide ? (
+          <div className="sv3-seg" role="radiogroup" aria-label="Половина місяця">
+            <button type="button" role="radio" aria-checked={half === 'first'} className={half === 'first' ? 'is-on' : ''} onClick={() => setHalf('first')}>1–{FIRST_HALF_END}</button>
+            <button type="button" role="radio" aria-checked={half === 'second'} className={half === 'second' ? 'is-on' : ''} onClick={() => setHalf('second')}>{FIRST_HALF_END + 1}–{daysInMonth}</button>
+          </div>
+        ) : null}
+        {!isCurrentMonth ? (
+          <button type="button" className="sv3-link" onClick={() => changeMonth(currentMonth)}>До поточного місяця</button>
+        ) : null}
+        {scope === 'team' && canEditAll ? (
+          <button
+            type="button"
+            className={`sv3-brush-toggle${brush !== null ? ' is-on' : ''}`}
+            aria-pressed={brush !== null}
+            onClick={() => setBrush((current) => (current === null ? 'Р' : null))}
+          >
+            <Paintbrush size={16} /> {brush !== null ? 'Пензель увімкнено' : 'Пензель'}
+          </button>
+        ) : null}
+      </div>
 
-      <section className="schedule-board-v2">
-        <div className="schedule-role-tabs" role="tablist" aria-label="Підрозділи">
-          {roles.map(([role, count]) => (
-            <button type="button" role="tab" aria-selected={activeRole === role} className={activeRole === role ? 'is-active' : ''} key={role}
-              onClick={() => {
-                setActiveRole(role);
-                if (scope === 'mine' && data && !data.users.some((staff) => staff.id === data.me.legacyUserId && staffRoles(staff).includes(role))) setScope('team');
-              }}>
-              {roleLabel(role)} <span>{count}</span>
+      {error ? (
+        <div className="sv3-alert" role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)} aria-label="Закрити помилку"><X size={16} /></button>
+        </div>
+      ) : null}
+
+      {!data && loading ? (
+        <div className="sv3-skeleton" aria-label="Завантажуємо графік"><span /><span /><span /></div>
+      ) : null}
+
+      {data && scope === 'team' ? (
+        <>
+          <p className="sv3-summary">
+            {isCurrentMonth ? <>Сьогодні на зміні: <b>{onShiftToday}</b> · {roleLabel(activeRole).toLowerCase()}</> : <>{roleLabel(activeRole)} · {departmentStaff.length}</>}
+            {myNextShift && isCurrentMonth ? (
+              myNextShift.date === todayKey
+                ? <> · ти сьогодні: <b>{myNextShift.code}</b></>
+                : <> · твоя наступна зміна: <b>{formatShortDay(myNextShift.date)}, {myNextShift.code}</b></>
+            ) : null}
+          </p>
+
+          <div className="sv3-chips" role="tablist" aria-label="Відділи">
+            {roles.map(([role, count]) => (
+              <button type="button" role="tab" aria-selected={activeRole === role} className={activeRole === role ? 'is-on' : ''} key={role} onClick={() => setActiveRole(role)}>
+                {roleLabel(role)} <span>{count}</span>
+              </button>
+            ))}
+          </div>
+
+          {tableStaff.length === 0 && !loading ? (
+            <p className="sv3-empty">У відділі немає активних працівників.</p>
+          ) : (
+            <div className={`sv3-table-wrap${loading ? ' is-refreshing' : ''}`} ref={scrollRef} tabIndex={0} aria-label={`Графік, ${rangeLabel}`}>
+              <table className="sv3-table">
+                <thead>
+                  <tr>
+                    <th className="sv3-name" scope="col"><span className="sv3-visually-hidden">Працівник</span></th>
+                    {days.map((day) => (
+                      <th key={day.date} scope="col" className={`${day.date === todayKey ? 'is-today' : ''}${day.weekend ? ' is-weekend' : ''}`}>
+                        <small>{DOW[day.weekday]}</small>
+                        <b>{day.day}</b>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableStaff.map((staff) => {
+                    const own = staff.id === data.me.legacyUserId;
+                    const editable = canEditStaff(staff);
+                    return (
+                      <tr key={staff.id} className={own ? 'is-own' : ''}>
+                        <th scope="row" className="sv3-name" title={staff.name}>
+                          {own ? <><span className="sv3-visually-hidden">Ти: </span>{shortName(staff.name)}</> : shortName(staff.name)}
+                        </th>
+                        {days.map((day) => {
+                          const key = cellKey(staff.id, day.date);
+                          const value = entries[key] || '';
+                          return (
+                            <td key={day.date} className={`${day.date === todayKey ? 'is-today' : ''}${day.weekend ? ' is-weekend' : ''}`}>
+                              <button
+                                type="button"
+                                className={`sv3-cell tone-${toneOf(value)}${savedKey === key ? ' is-saved' : ''}${value.length > 2 ? ' is-long' : ''}`}
+                                disabled={!editable || saving.has(key)}
+                                onClick={() => onCell(staff, day.date)}
+                                aria-label={`${staff.name}, ${day.day} ${MONTHS_GENITIVE[monthIndex]}: ${value || 'не призначено'}`}
+                              >
+                                {saving.has(key) ? <RefreshCw size={12} className="sv3-spin" /> : savedKey === key ? <Check size={13} /> : value || ''}
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th scope="row" className="sv3-name">На зміні</th>
+                    {days.map((day) => (
+                      <td key={day.date} className={day.date === todayKey ? 'is-today' : ''}>
+                        {tableStaff.filter((staff) => isWorkingShift(entries[cellKey(staff.id, day.date)])).length}
+                      </td>
+                    ))}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </>
+      ) : null}
+
+      {data && scope === 'mine' && me ? (
+        <section className="sv3-mine" aria-label={`Мій графік, ${rangeLabel}`}>
+          <p className="sv3-summary">
+            {(() => {
+              const working = days.filter((day) => isWorkingShift(entries[cellKey(me.id, day.date)])).length;
+              return <>Робочих змін за {rangeLabel}: <b>{working}</b></>;
+            })()}
+          </p>
+          <ul>
+            {days.map((day) => {
+              const key = cellKey(me.id, day.date);
+              const value = entries[key] || '';
+              const definition = shiftDefinitions.find((item) => item.code === value);
+              return (
+                <li key={day.date} className={day.date === todayKey ? 'is-today' : ''}>
+                  <button type="button" onClick={() => onCell(me, day.date)} disabled={!canEditStaff(me) || saving.has(key)}>
+                    <span className="sv3-mine-day"><b>{day.day}</b><small>{DOW[day.weekday]}</small></span>
+                    <span className="sv3-mine-label">{day.date === todayKey ? 'Сьогодні · ' : ''}{value ? definition?.label || value : 'Не призначено'}</span>
+                    <span className={`sv3-code tone-${toneOf(value)}`}>{saving.has(key) ? <RefreshCw size={12} className="sv3-spin" /> : value || '—'}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {data ? (
+        <div className="sv3-legend" aria-label="Коди змін">
+          {shiftDefinitions.filter((item) => item.code).map((item) => (
+            <span key={item.code}><b className={`sv3-code tone-${item.tone}`}>{item.code}</b>{item.label}</span>
+          ))}
+        </div>
+      ) : null}
+
+      {brush !== null && scope === 'team' ? (
+        <div className="sv3-brush" role="toolbar" aria-label="Пензель: вибери код і тапай клітинки">
+          <div className="sv3-brush-codes">
+            {shiftDefinitions.map((item) => (
+              <button
+                type="button"
+                key={item.code || 'empty'}
+                className={`sv3-code tone-${item.tone}${brush === item.code ? ' is-sel' : ''}`}
+                aria-pressed={brush === item.code}
+                aria-label={item.label}
+                onClick={() => setBrush(item.code)}
+              >
+                {item.code || '—'}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="sv3-brush-done" onClick={() => setBrush(null)}>Готово</button>
+        </div>
+      ) : null}
+
+      {picker ? (
+        <ShiftPicker
+          picker={picker}
+          definitions={shiftDefinitions}
+          onPick={(code) => {
+            const current = picker;
+            setPicker(null);
+            void applyShift(current.staff, current.date, code);
+          }}
+          onClose={() => setPicker(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ShiftPicker({
+  picker,
+  definitions,
+  onPick,
+  onClose,
+}: {
+  picker: PickerState;
+  definitions: ShiftDefinition[];
+  onPick: (code: ShiftCode) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="sv3-picker-backdrop" onMouseDown={onClose}>
+      <div className="sv3-picker" role="dialog" aria-modal="true" aria-labelledby="sv3-picker-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="sv3-picker-head">
+          <div>
+            <h2 id="sv3-picker-title">{picker.staff.name}</h2>
+            <p>{formatDay(picker.date)}</p>
+          </div>
+          <button type="button" className="sv3-icon-btn" onClick={onClose} aria-label="Закрити"><X size={20} /></button>
+        </div>
+        <div className="sv3-picker-grid">
+          {definitions.map((item) => (
+            <button
+              type="button"
+              key={item.code || 'empty'}
+              className={picker.value === item.code ? 'is-on' : ''}
+              aria-pressed={picker.value === item.code}
+              onClick={() => onPick(item.code)}
+            >
+              <span className={`sv3-code tone-${item.tone}`}>{item.code || '—'}</span>
+              <span>{item.label}</span>
+              {picker.value === item.code ? <Check size={16} /> : null}
             </button>
           ))}
         </div>
-
-        {error ? <div className="schedule-alert" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Закрити помилку"><X size={16} /></button></div> : null}
-        {loading ? <div className="schedule-loading-v2"><RefreshCw size={24} className="is-spinning" /><span>Збираємо графік…</span></div> : null}
-        {!loading && visibleStaff.length === 0 ? (
-          <div className="schedule-empty-v2"><UsersRound size={28} /><strong>{scope === 'mine' ? 'У вас немає рядка в цьому підрозділі' : 'У підрозділі немає активних працівників'}</strong><span>Оберіть іншу вкладку або поверніться до режиму команди.</span></div>
-        ) : null}
-
-        {!loading && visibleStaff.length > 0 ? (
-          <div className="schedule-table-scroll" tabIndex={0} aria-label="Місячна таблиця графіка">
-            <table className="schedule-table-v2">
-              <thead><tr><th className="schedule-name-column">Працівник</th>{days.map((day) => {
-                const date = dateForDay(month, day), dayDate = new Date(`${date}T12:00:00`), weekend = [0, 6].includes(dayDate.getDay());
-                return <th key={date} className={`${date === currentDate ? 'is-today' : ''} ${weekend ? 'is-weekend' : ''}`}><span>{day}</span><small>{DOW[dayDate.getDay()]}</small></th>;
-              })}</tr></thead>
-              <tbody>{visibleStaff.map((staff) => {
-                const ownRow = data?.me.legacyUserId === staff.id;
-                return <tr key={staff.id} className={ownRow ? 'is-own-row' : ''}>
-                  <td className="schedule-name-column"><div className="schedule-person"><span className="schedule-person-avatar">{initials(staff.name)}</span><span className="schedule-person-copy"><strong>{staff.name}</strong><small>{staffRoleTitle(staff)}</small></span>{ownRow ? <span className="schedule-own-badge">Ви</span> : null}</div></td>
-                  {days.map((day) => {
-                    const date = dateForDay(month, day), key = cellKey(staff.id, date), value = entries[key] || '';
-                    const weekend = [0, 6].includes(new Date(`${date}T12:00:00`).getDay()), editable = canEditStaff(staff);
-                    return <td key={date} className={`${date === currentDate ? 'is-today' : ''} ${weekend ? 'is-weekend' : ''}`}>
-                      <button type="button" className={`schedule-shift-cell tone-${shiftTone(value, shiftDefinitions)} ${editable ? 'is-editable' : ''} ${saving.has(key) ? 'is-saving' : ''} ${savedKey === key ? 'is-saved' : ''}`}
-                        onClick={(event) => openPicker(staff, date, event.currentTarget)} disabled={!editable || saving.has(key)}
-                        aria-label={`${staff.name}, ${day} ${MONTHS[monthDate.getMonth()]}, ${value || 'не призначено'}${editable ? ', редагувати' : ''}`}>
-                        {saving.has(key) ? <RefreshCw size={13} className="is-spinning" /> : savedKey === key ? <Check size={14} /> : value || '·'}
-                      </button>
-                    </td>;
-                  })}
-                </tr>;
-              })}</tbody>
-            </table>
-          </div>
-        ) : null}
-
-        <div className="schedule-legend-v2">{shiftDefinitions.filter((item) => item.code).map((item) => <span key={item.code} className={`tone-${item.tone}`}><b>{item.code}</b> {item.label}</span>)}</div>
-      </section>
-
-      {picker ? createPortal(
-        <div className="schedule-picker-backdrop" role="presentation" onPointerDown={() => setPicker(null)}>
-          <section
-            className="schedule-picker-sheet"
-            style={{ left: picker.anchor.left, top: picker.anchor.top }}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="schedule-picker-title"
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <div className="schedule-picker-heading"><div><span className="eyebrow">Зміна</span><h3 id="schedule-picker-title">{picker.staff.name}</h3><p>{new Intl.DateTimeFormat('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${picker.date}T12:00:00`))}</p></div><button type="button" onClick={() => setPicker(null)} aria-label="Закрити"><X size={19} /></button></div>
-            <div className="schedule-picker-grid">{shiftDefinitions.map((item) => (
-              <button type="button" key={item.code || 'empty'} className={`tone-${item.tone} ${picker.value === item.code ? 'is-active' : ''}`} onClick={() => void applyShift(item.code)}>
-                <strong>{item.code || '—'}</strong><span>{item.label}</span>{picker.value === item.code ? <Check size={17} /> : null}
-              </button>
-            ))}</div>
-          </section>
-        </div>,
-        document.body,
-      ) : null}
+      </div>
     </div>
   );
 }

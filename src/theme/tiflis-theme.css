@@ -20,6 +20,9 @@
   --t-on-gold: #1A1918;
   --t-up: #7DC593;
   --t-down: #E58B80;
+  --t-down-tint: rgba(229, 139, 128, 0.14);
+  --t-bar: #9FB4E8;            /* bar shifts in the schedule */
+  --t-bar-tint: rgba(159, 180, 232, 0.14);
   --t-font: 'Golos Text', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --t-radius-s: 10px;
   --t-radius-m: 14px;
