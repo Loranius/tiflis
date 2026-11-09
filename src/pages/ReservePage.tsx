@@ -790,9 +790,8 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
           <label className="rv3-field"><span>Передзамовлення меню</span><textarea value={draft.menuNote} onChange={(event) => set('menuNote', event.target.value)} maxLength={1200} rows={2} placeholder="Що гості замовили наперед" /></label>
         </fieldset>
 
-        {problem ? <p className="rv3-form-error" role="alert">{problem}</p> : null}
-
         <div className="rv3-form-actions">
+          {problem ? <p className="rv3-form-error" role="alert">{problem}</p> : null}
           {draft.id ? (
             confirmDelete
               ? <button type="button" className="rv3-danger is-confirm" onClick={() => void remove()} disabled={Boolean(busy)}>Так, видалити</button>

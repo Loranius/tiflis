@@ -667,9 +667,10 @@
 .rv3-merge .rv3-pills button { background: var(--t-surface); }
 .rv3-merge .rv3-pills button.is-on { background: var(--t-gold-tint); }
 
-.rv3-form-error { font-size: 14px; color: var(--t-down-text); }
+.rv3-form-error { flex: 1 0 100%; font-size: 14px; color: var(--t-down-text); }
 
 .rv3-form-actions {
+  flex-wrap: wrap;
   position: sticky;
   bottom: calc(-18px - env(safe-area-inset-bottom));
   display: flex;
