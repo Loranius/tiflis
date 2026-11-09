@@ -26,6 +26,7 @@ import { NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { accessiblePages, pages, type PageKey } from '../lib/acl';
 import { preloadPage } from '../lib/pageLoaders';
+import tiflisLogo from '../assets/brand/tiflis-wordmark-gold.png';
 
 const icons: Record<PageKey, LucideIcon> = {
   today: Home,
@@ -221,11 +222,7 @@ export const AppShell = memo(function AppShell() {
     <div className="app-shell" data-page={activeKey}>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">თ</div>
-          <div>
-            <div className="brand-name">Тифліс</div>
-            <div className="brand-caption">портал персоналу</div>
-          </div>
+          <img className="brand-logo" src={tiflisLogo} alt="Tiflis restaurant" width={92} height={59} />
         </div>
 
         <nav className="sidebar-nav" aria-label="Основна навігація">
@@ -262,7 +259,7 @@ export const AppShell = memo(function AppShell() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <span className="eyebrow">Тифліс · робочий портал</span>
+            <img className="topbar-logo" src={tiflisLogo} alt="Tiflis restaurant" width={41} height={26} />
             <h1 key={activeKey} className="topbar-title-transition">{pages[activeKey].title}</h1>
           </div>
           <div className="topbar-profile">

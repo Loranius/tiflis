@@ -54,6 +54,7 @@ Built for this one restaurant and its real working rules, not a generic HR or PO
 - **Brand colours (sampled from the supplied logo files):** gold `#D1B46B`, charcoal `#2B2A29`, white. These three are the only confirmed brand colours.
 - The wordmark's typeface is not identified, and no brand text font has been supplied.
 - The portal's current dark green, wine accent, Prata font and the Georgian letter თ in the app icon are the old portal's choices, not confirmed brand.
+- **Interface style (chosen by the owner, November 2026):** a classic, category-standard dashboard look, played straight, with no themed ornament (no wine, menu, Georgian folklore or other motifs). Craft reference: **monobank**. Dark ground only; a light theme was explicitly rejected for evening use in the hall.
 - Voice toward staff: Ukrainian, direct and informal-polite (the current copy addresses staff with "ти": «Введи свій робочий логін і пароль»).
 
 ## Evidence on Hand

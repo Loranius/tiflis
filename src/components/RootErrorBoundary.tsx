@@ -76,9 +76,9 @@ export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErr
         display: 'grid',
         placeItems: 'center',
         padding: 24,
-        background: '#101813',
+        background: '#161514',
         color: '#f2eee5',
-        fontFamily: 'Manrope, system-ui, sans-serif',
+        fontFamily: '"Golos Text", system-ui, sans-serif',
       }}>
         <section style={{
           width: 'min(100%, 460px)',
