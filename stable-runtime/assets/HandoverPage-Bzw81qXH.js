@@ -1,1 +1,0 @@
-import{s as e,t}from"./react-vendor-Bsm2LSBO.js";var n=t();function r(){return(0,n.jsx)(e,{to:`/duties?tab=handover`,replace:!0})}export{r as HandoverPage};
