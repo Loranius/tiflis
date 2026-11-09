@@ -1,21 +1,23 @@
 import {
   AlertTriangle,
+  BookOpen,
   Check,
+  ChevronRight,
   Clock3,
   Edit3,
   Image as ImageIcon,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
-  Sparkles,
   Trash2,
-  UtensilsCrossed,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { secureApi } from '../lib/secureApi';
-import './menu.css';
-import './menu-gallery.css';
+import './menu-v3.css';
+
+/* ---------- data ---------- */
 
 interface MenuItem {
   id: number;
@@ -33,20 +35,582 @@ interface MenuItem {
   stopped: boolean;
   sort_order: number;
   updated_at: string | null;
+  explain: string | null;
+  sell_line: string | null;
+  pairing: string | null;
+  learning_reviewed: boolean;
 }
+
+type Status = 'learning' | 'known';
 
 interface MenuBootstrapResponse {
   ok: true;
   permissions: { canToggleStop: boolean; canEdit: boolean };
   items: MenuItem[];
+  progress?: { item_id: number; status: Status }[];
 }
 
-interface MenuMutationResponse {
-  ok: true;
-  item?: MenuItem;
+type Mode = 'guide' | 'train' | 'plan';
+
+interface Lesson {
+  key: string;
+  title: string;
+  items: MenuItem[];
 }
 
-interface MenuEditorState {
+interface Deck {
+  title: string;
+  items: MenuItem[];
+  index: number;
+  revealed: boolean;
+  known: number;
+  learning: number;
+}
+
+const SECTION_META: Record<string, { label: string; order: number }> = {
+  main: { label: 'Кухня', order: 1 },
+  season: { label: 'Сезонне', order: 2 },
+  bar: { label: 'Бар', order: 3 },
+  wine: { label: 'Вино', order: 4 },
+  lunch: { label: 'Обіди', order: 5 },
+  banquet: { label: 'Банкет', order: 6 },
+  lean: { label: 'Пісне', order: 7 },
+};
+
+const MAIN_CATEGORY_ORDER = [
+  'Холодні закуски', 'Салати', 'Перші страви', 'Мангал', 'Основні страви',
+  'Хінкалі', 'Хлібобулочні', 'Гарніри', 'Десерти', 'До пива',
+];
+const LUNCH_CATEGORY_ORDER = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пятниця'];
+
+const ALLERGENS = [
+  'Глютен', 'Молоко', 'Яйця', 'Горіхи', 'Риба', 'Морепродукти', 'Соя',
+  'Селера', 'Гірчиця', 'Кунжут', 'Лупин', 'Молюски', 'Діоксид сірки',
+];
+
+/** Sections with a teaching plan: dishes a waiter describes to a guest. Bar and wine stay a reference. */
+const LEARNABLE = new Set(['main', 'season']);
+
+const sectionLabel = (section: string) => SECTION_META[section]?.label || section;
+const sectionOrder = (section: string) => SECTION_META[section]?.order ?? 99;
+const categoryLabel = (category: string) => (category === 'Хлібобулочні' ? 'Хачапурі і випічка' : category);
+
+function categoryOrder(section: string, category: string): number {
+  const list = section === 'main' ? MAIN_CATEGORY_ORDER : section === 'lunch' ? LUNCH_CATEGORY_ORDER : [];
+  const index = list.indexOf(category);
+  return index >= 0 ? index : 99;
+}
+
+function byMenuOrder(left: MenuItem, right: MenuItem): number {
+  return sectionOrder(left.section) - sectionOrder(right.section)
+    || categoryOrder(left.section, left.category) - categoryOrder(right.section, right.category)
+    || categoryLabel(left.category).localeCompare(categoryLabel(right.category), 'uk')
+    || left.sort_order - right.sort_order
+    || left.name.localeCompare(right.name, 'uk');
+}
+
+function money(value: number | string | null): string | null {
+  if (value === null || value === '') return null;
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return null;
+  return `${new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 }).format(amount)} ₴`;
+}
+
+function weightLabel(weight: string | null): string | null {
+  if (!weight) return null;
+  return /^\d+(?:[.,]\d+)?$/.test(weight.trim()) ? `${weight.trim()} г` : weight;
+}
+
+function initials(name: string): string {
+  return name.replace(/[«»"'’ʼ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]?.toUpperCase()).join('');
+}
+
+function shuffled<T>(list: T[]): T[] {
+  const copy = [...list];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    const held = copy[index] as T;
+    copy[index] = copy[swap] as T;
+    copy[swap] = held;
+  }
+  return copy;
+}
+
+const hasTeaching = (item: MenuItem) => Boolean(item.explain || item.sell_line || item.pairing || (item.allergens || []).length);
+
+function plural(count: number, one: string, few: string, many: string): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+const dishWord = (count: number) => plural(count, 'страва', 'страви', 'страв');
+
+/* ---------- photo upload (resize on device, then menu_upload_photo) ---------- */
+
+const PHOTO_MAX_SOURCE_BYTES = 15 * 1024 * 1024;
+const PHOTO_MAX_DIMENSION = 1600;
+const PHOTO_JPEG_QUALITY = 0.82;
+
+async function resizePhotoFile(file: File): Promise<{ dataUrl: string; contentType: string }> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Браузер не може обробити фото.');
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return { dataUrl: canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY), contentType: 'image/jpeg' };
+  } finally {
+    bitmap.close();
+  }
+}
+
+/* ---------- page ---------- */
+
+export function MenuPage() {
+  const [data, setData] = useState<MenuBootstrapResponse | null>(null);
+  const [items, setItems] = useState<MenuItem[]>([]);
+  const [progress, setProgress] = useState<Map<number, Status>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>('guide');
+  const [selected, setSelected] = useState<MenuItem | null>(null);
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [deck, setDeck] = useState<Deck | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await secureApi<MenuBootstrapResponse>({ action: 'menu_bootstrap' }, 'tiflis-menu-api');
+      setData(response);
+      setItems([...response.items].sort(byMenuOrder));
+      setProgress(new Map((response.progress || []).map((row) => [row.item_id, row.status])));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити меню.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const canEdit = Boolean(data?.permissions.canEdit);
+
+  const lessons = useMemo<Lesson[]>(() => {
+    const groups = new Map<string, Lesson>();
+    items.filter((item) => LEARNABLE.has(item.section)).forEach((item) => {
+      const key = item.section === 'season' ? 'season' : `main:${item.category}`;
+      const title = item.section === 'season' ? 'Сезонне меню' : categoryLabel(item.category);
+      const lesson = groups.get(key) || { key, title, items: [] };
+      lesson.items.push(item);
+      groups.set(key, lesson);
+    });
+    return [...groups.values()];
+  }, [items]);
+
+  async function saveStatus(item: MenuItem, status: Status | null) {
+    const previous = progress.get(item.id) ?? null;
+    setProgress((current) => {
+      const next = new Map(current);
+      if (status) next.set(item.id, status); else next.delete(item.id);
+      return next;
+    });
+    try {
+      await secureApi({ action: 'menu_progress_set', id: item.id, status }, 'tiflis-menu-api');
+    } catch {
+      setProgress((current) => {
+        const next = new Map(current);
+        if (previous) next.set(item.id, previous); else next.delete(item.id);
+        return next;
+      });
+      setError('Прогрес не збережено. Перевірте звʼязок і спробуйте ще раз.');
+    }
+  }
+
+  function startDeck(title: string, pool: MenuItem[]) {
+    // Not-yet-known dishes first (still learning, then never seen), known ones at the end for revision.
+    const rank = (item: MenuItem) => (progress.get(item.id) === 'learning' ? 0 : progress.get(item.id) === 'known' ? 2 : 1);
+    const ordered = [0, 1, 2].flatMap((value) => shuffled(pool.filter((item) => rank(item) === value)));
+    setDeck({ title, items: ordered, index: 0, revealed: false, known: 0, learning: 0 });
+    setMode('train');
+  }
+
+  function answer(status: Status) {
+    if (!deck) return;
+    const item = deck.items[deck.index];
+    if (item) void saveStatus(item, status);
+    setDeck({
+      ...deck,
+      index: deck.index + 1,
+      revealed: false,
+      known: deck.known + (status === 'known' ? 1 : 0),
+      learning: deck.learning + (status === 'learning' ? 1 : 0),
+    });
+  }
+
+  function onSaved(saved: MenuItem | null, removedId?: number) {
+    setEditor(null);
+    setSelected(null);
+    if (removedId) setItems((current) => current.filter((item) => item.id !== removedId));
+    if (saved) {
+      setItems((current) => {
+        const exists = current.some((item) => item.id === saved.id);
+        return (exists ? current.map((item) => (item.id === saved.id ? saved : item)) : [...current, saved]).sort(byMenuOrder);
+      });
+    }
+  }
+
+  return (
+    <div className="mv3">
+      <div className="mv3-top">
+        <div className="mv3-seg" role="tablist" aria-label="Режим меню">
+          {([['guide', 'Довідник'], ['train', 'Тренажер'], ['plan', 'План']] as const).map(([key, label]) => (
+            <button key={key} type="button" role="tab" aria-selected={mode === key} className={mode === key ? 'is-on' : ''} onClick={() => setMode(key)}>{label}</button>
+          ))}
+        </div>
+        {canEdit ? <button type="button" className="mv3-add" onClick={() => setEditor(createEditor())}><Plus size={17} aria-hidden="true" /> Позиція</button> : null}
+      </div>
+
+      {error ? (
+        <div className="mv3-alert" role="alert">
+          <span>{error}</span>
+          {!data ? <button type="button" onClick={() => void load()}>Спробувати ще раз</button> : <button type="button" aria-label="Закрити" onClick={() => setError(null)}><X size={16} /></button>}
+        </div>
+      ) : null}
+
+      {loading ? <div className="mv3-loading" aria-label="Завантажуємо меню"><span /><span /><span /></div> : null}
+
+      {!loading && data ? (
+        mode === 'guide' ? (
+          <Guide items={items} progress={progress} canEdit={canEdit} onOpen={setSelected} />
+        ) : mode === 'train' ? (
+          <Trainer deck={deck} lessons={lessons} progress={progress} onStart={startDeck} onReveal={() => deck && setDeck({ ...deck, revealed: true })} onAnswer={answer} onExit={() => setDeck(null)} />
+        ) : (
+          <Plan lessons={lessons} progress={progress} onStart={startDeck} />
+        )
+      ) : null}
+
+      {selected ? (
+        <DishSheet
+          item={selected}
+          status={progress.get(selected.id) ?? null}
+          canEdit={canEdit}
+          onClose={() => setSelected(null)}
+          onStatus={(status) => void saveStatus(selected, status)}
+          onEdit={() => { setEditor(createEditor(selected)); setSelected(null); }}
+        />
+      ) : null}
+
+      {editor ? <Editor initial={editor} items={items} onClose={() => setEditor(null)} onSaved={onSaved} /> : null}
+    </div>
+  );
+}
+
+/* ---------- Довідник ---------- */
+
+function Guide({ items, progress, canEdit, onOpen }: { items: MenuItem[]; progress: Map<number, Status>; canEdit: boolean; onOpen: (item: MenuItem) => void }) {
+  const [query, setQuery] = useState('');
+  const [section, setSection] = useState('main');
+  const [category, setCategory] = useState('all');
+  const [draftsOnly, setDraftsOnly] = useState(false);
+
+  const sections = useMemo(() => [...new Set(items.map((item) => item.section))].sort((a, b) => sectionOrder(a) - sectionOrder(b)), [items]);
+  const categories = useMemo(() => [...new Set(items.filter((item) => item.section === section).map((item) => item.category))]
+    .sort((a, b) => categoryOrder(section, a) - categoryOrder(section, b) || categoryLabel(a).localeCompare(categoryLabel(b), 'uk')), [items, section]);
+  const draftCount = useMemo(() => items.filter((item) => !item.learning_reviewed && hasTeaching(item)).length, [items]);
+
+  const needle = query.trim().toLocaleLowerCase('uk-UA');
+  const visible = items.filter((item) => {
+    if (draftsOnly) return !item.learning_reviewed && hasTeaching(item);
+    if (needle) {
+      return [item.name, item.description, item.explain, item.category, ...(item.allergens || [])]
+        .join(' ').toLocaleLowerCase('uk-UA').includes(needle);
+    }
+    return item.section === section && (category === 'all' || item.category === category);
+  });
+
+  const groups: { key: string; title: string; items: MenuItem[] }[] = [];
+  visible.forEach((item) => {
+    const key = `${item.section}:${item.category}`;
+    const last = groups[groups.length - 1];
+    if (last?.key === key) last.items.push(item);
+    else groups.push({ key, title: needle || draftsOnly ? `${sectionLabel(item.section)} · ${categoryLabel(item.category)}` : categoryLabel(item.category), items: [item] });
+  });
+
+  return (
+    <section className="mv3-guide" aria-label="Довідник меню">
+      <label className="mv3-search">
+        <Search size={18} aria-hidden="true" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Страва, складник або алерген" aria-label="Пошук по меню" />
+        {query ? <button type="button" onClick={() => setQuery('')} aria-label="Очистити пошук"><X size={16} /></button> : null}
+      </label>
+
+      {!needle && !draftsOnly ? (
+        <>
+          <div className="mv3-chips" role="tablist" aria-label="Розділ">
+            {sections.map((key) => (
+              <button key={key} type="button" role="tab" aria-selected={section === key} className={section === key ? 'is-on' : ''} onClick={() => { setSection(key); setCategory('all'); }}>{sectionLabel(key)}</button>
+            ))}
+          </div>
+          {categories.length > 1 ? (
+            <div className="mv3-chips is-quiet" aria-label="Категорія">
+              <button type="button" className={category === 'all' ? 'is-on' : ''} onClick={() => setCategory('all')}>Усі</button>
+              {categories.map((key) => (
+                <button key={key} type="button" className={category === key ? 'is-on' : ''} onClick={() => setCategory(key)}>{categoryLabel(key)}</button>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {canEdit && draftCount ? (
+        <button type="button" className={`mv3-drafts${draftsOnly ? ' is-on' : ''}`} onClick={() => setDraftsOnly((value) => !value)}>
+          <AlertTriangle size={16} aria-hidden="true" />
+          <span>{draftsOnly ? 'Показати все меню' : `Чернетки на перевірку: ${draftCount}`}</span>
+          {draftsOnly ? <X size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+        </button>
+      ) : null}
+
+      {groups.length === 0 ? (
+        <p className="mv3-empty">{needle ? `Нічого не знайдено за «${query.trim()}».` : 'У цьому розділі поки немає позицій.'}</p>
+      ) : groups.map((group) => (
+        <div key={group.key} className="mv3-group">
+          <h2>{group.title}<span>{group.items.length}</span></h2>
+          <ul>
+            {group.items.map((item) => <li key={item.id}><DishRow item={item} status={progress.get(item.id) ?? null} onOpen={onOpen} /></li>)}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function Thumb({ item, size }: { item: MenuItem; size: 'row' | 'card' | 'sheet' }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <span className={`mv3-thumb is-${size}${item.photo && !broken ? '' : ' is-empty'}`} aria-hidden="true">
+      {item.photo && !broken ? <img src={item.photo} alt="" loading="lazy" onError={() => setBroken(true)} /> : <b>{initials(item.name)}</b>}
+    </span>
+  );
+}
+
+function DishRow({ item, status, onOpen }: { item: MenuItem; status: Status | null; onOpen: (item: MenuItem) => void }) {
+  const price = money(item.price);
+  const weight = weightLabel(item.weight);
+  return (
+    <button type="button" className="mv3-row" onClick={() => onOpen(item)}>
+      <Thumb item={item} size="row" />
+      <span className="mv3-row-copy">
+        <strong>{item.name}{status === 'known' ? <Check size={14} className="mv3-known" aria-label="Знаю" /> : null}</strong>
+        {item.description ? <small>{item.description}</small> : null}
+      </span>
+      {price || weight ? (
+        <span className="mv3-row-meta">
+          {price ? <b>{price}</b> : null}
+          {weight ? <small>{weight}</small> : null}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+/* ---------- Картка страви ---------- */
+
+function DishSheet({ item, status, canEdit, onClose, onStatus, onEdit }: {
+  item: MenuItem; status: Status | null; canEdit: boolean; onClose: () => void; onStatus: (status: Status | null) => void; onEdit: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => { closeRef.current?.setAttribute('autofocus', ''); }, []);
+  const price = money(item.price);
+  const weight = weightLabel(item.weight);
+
+  return (
+    <div className="mv3-backdrop" onMouseDown={onClose}>
+      <section className="mv3-sheet" role="dialog" aria-modal="true" aria-labelledby={`mv3-dish-${item.id}`} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="mv3-sheet-media">
+          <Thumb item={item} size="sheet" />
+          <button ref={closeRef} type="button" className="mv3-close" onClick={onClose} aria-label="Закрити"><X size={20} /></button>
+        </div>
+        <div className="mv3-sheet-body">
+          <p className="mv3-kicker">{sectionLabel(item.section)} · {categoryLabel(item.category)}</p>
+          <h2 id={`mv3-dish-${item.id}`}>{item.name}</h2>
+          {price || weight || item.cook_time_normal !== null ? (
+            <p className="mv3-facts">
+              {price ? <b>{price}</b> : null}
+              {weight ? <span>{weight}</span> : null}
+              {item.cook_time_normal !== null ? <span><Clock3 size={14} aria-hidden="true" /> {item.cook_time_normal} хв{item.cook_time_busy !== null ? ` · у завал ${item.cook_time_busy} хв` : ''}</span> : null}
+            </p>
+          ) : null}
+
+          {!item.learning_reviewed && hasTeaching(item) ? (
+            <p className="mv3-draft-note"><AlertTriangle size={15} aria-hidden="true" /> Чернетка: поради й алергени ще не перевірила кухня.</p>
+          ) : null}
+
+          {item.explain ? <Block title="Що це">{item.explain}</Block> : null}
+          {item.description ? <Block title="Склад і подача">{item.description}</Block> : null}
+          {item.sell_line ? <Block title="Як запропонувати гостю" tone="say">«{item.sell_line}»</Block> : null}
+          {item.pairing ? <Block title="До чого порадити">{item.pairing}</Block> : null}
+          {(item.allergens || []).length ? (
+            <Block title="Алергени">
+              <span className="mv3-allergens">{(item.allergens || []).map((allergen) => <span key={allergen}>{allergen}</span>)}</span>
+            </Block>
+          ) : null}
+
+          <div className="mv3-sheet-actions">
+            <button type="button" className={status === 'known' ? 'is-known' : ''} aria-pressed={status === 'known'} onClick={() => onStatus(status === 'known' ? 'learning' : 'known')}>
+              {status === 'known' ? <><Check size={17} aria-hidden="true" /> Знаю</> : <><BookOpen size={17} aria-hidden="true" /> Позначити: знаю</>}
+            </button>
+            {canEdit ? <button type="button" className="is-quiet" onClick={onEdit}><Edit3 size={17} aria-hidden="true" /> Редагувати</button> : null}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Block({ title, tone, children }: { title: string; tone?: 'say'; children: ReactNode }) {
+  return (
+    <div className={`mv3-block${tone ? ` is-${tone}` : ''}`}>
+      <h3>{title}</h3>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+/* ---------- Тренажер ---------- */
+
+function Trainer({ deck, lessons, progress, onStart, onReveal, onAnswer, onExit }: {
+  deck: Deck | null; lessons: Lesson[]; progress: Map<number, Status>;
+  onStart: (title: string, pool: MenuItem[]) => void; onReveal: () => void; onAnswer: (status: Status) => void; onExit: () => void;
+}) {
+  if (!deck) {
+    const all = lessons.flatMap((lesson) => lesson.items);
+    const unknown = all.filter((item) => progress.get(item.id) !== 'known');
+    return (
+      <section className="mv3-train-pick" aria-label="Тренажер">
+        <p className="mv3-lead">Картка показує страву. Згадай склад, як її запропонувати і до чого порадити, потім переверни й перевір себе.</p>
+        <button type="button" className="mv3-primary" disabled={!unknown.length} onClick={() => onStart('Усе, що ще не знаю', unknown)}>
+          {unknown.length ? `Тренувати невивчені · ${unknown.length}` : 'Усі страви кухні вивчено'}
+        </button>
+        <h2 className="mv3-subhead">Або обери тему</h2>
+        <ul className="mv3-topics">
+          {lessons.map((lesson) => {
+            const known = lesson.items.filter((item) => progress.get(item.id) === 'known').length;
+            return (
+              <li key={lesson.key}>
+                <button type="button" onClick={() => onStart(lesson.title, lesson.items)}>
+                  <span>{lesson.title}</span>
+                  <small>{known} / {lesson.items.length}</small>
+                  <ChevronRight size={16} aria-hidden="true" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    );
+  }
+
+  const item = deck.items[deck.index];
+  if (!item) {
+    return (
+      <section className="mv3-done" aria-live="polite">
+        <h2>{deck.title}: готово</h2>
+        <p><b>{deck.known}</b> знаю · <b>{deck.learning}</b> ще вчу</p>
+        <div className="mv3-done-actions">
+          {deck.learning ? <button type="button" className="mv3-primary" onClick={() => onStart(`${deck.title}: повтор`, deck.items.filter((entry) => progress.get(entry.id) === 'learning'))}><RotateCcw size={16} aria-hidden="true" /> Повторити ті, що вчу</button> : null}
+          <button type="button" className="mv3-secondary" onClick={onExit}>Інша тема</button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mv3-trainer" aria-label={`Тренажер: ${deck.title}`}>
+      <div className="mv3-trainer-head">
+        <button type="button" className="mv3-link" onClick={onExit}><X size={16} aria-hidden="true" /> {deck.title}</button>
+        <span>{deck.index + 1} з {deck.items.length}</span>
+      </div>
+      <div className="mv3-progress" aria-hidden="true"><span style={{ width: `${(deck.index / deck.items.length) * 100}%` }} /></div>
+
+      <article className="mv3-card">
+        <Thumb item={item} size="card" />
+        <div className="mv3-card-body">
+          <p className="mv3-kicker">{categoryLabel(item.category)}</p>
+          <h2>{item.name}</h2>
+          {!deck.revealed ? (
+            <>
+              <p className="mv3-prompt">Що входить? Як запропонуєш гостю? Які алергени?</p>
+              <button type="button" className="mv3-primary" onClick={onReveal}>Перевірити себе</button>
+            </>
+          ) : (
+            <div className="mv3-answer" aria-live="polite">
+              {item.explain ? <Block title="Що це">{item.explain}</Block> : null}
+              {item.description ? <Block title="Склад і подача">{item.description}</Block> : null}
+              {item.sell_line ? <Block title="Як запропонувати" tone="say">«{item.sell_line}»</Block> : null}
+              {item.pairing ? <Block title="До чого порадити">{item.pairing}</Block> : null}
+              {(item.allergens || []).length ? <Block title="Алергени"><span className="mv3-allergens">{(item.allergens || []).map((allergen) => <span key={allergen}>{allergen}</span>)}</span></Block> : null}
+              <div className="mv3-answer-actions">
+                <button type="button" className="mv3-secondary" onClick={() => onAnswer('learning')}>Ще вчу</button>
+                <button type="button" className="mv3-primary" onClick={() => onAnswer('known')}><Check size={17} aria-hidden="true" /> Знаю</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </article>
+    </section>
+  );
+}
+
+/* ---------- План ---------- */
+
+function Plan({ lessons, progress, onStart }: { lessons: Lesson[]; progress: Map<number, Status>; onStart: (title: string, pool: MenuItem[]) => void }) {
+  const total = lessons.reduce((sum, lesson) => sum + lesson.items.length, 0);
+  const known = lessons.reduce((sum, lesson) => sum + lesson.items.filter((item) => progress.get(item.id) === 'known').length, 0);
+  const nextLesson = lessons.find((lesson) => lesson.items.some((item) => progress.get(item.id) !== 'known'));
+
+  return (
+    <section className="mv3-plan" aria-label="План вивчення">
+      <div className="mv3-plan-hero">
+        <p className="mv3-kicker">Кухня і сезонне меню</p>
+        <p className="mv3-plan-figure"><b>{known}</b> з {total} {dishWord(total)}</p>
+        <div className="mv3-progress is-big" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={known} aria-label="Вивчено страв"><span style={{ width: `${total ? (known / total) * 100 : 0}%` }} /></div>
+        {nextLesson ? (
+          <button type="button" className="mv3-primary" onClick={() => onStart(nextLesson.title, nextLesson.items)}>Продовжити: {nextLesson.title}</button>
+        ) : <p className="mv3-lead">Усе меню кухні вивчено. Повторюй у тренажері, коли зʼявляться нові страви.</p>}
+      </div>
+
+      <ol className="mv3-lessons">
+        {lessons.map((lesson, index) => {
+          const done = lesson.items.filter((item) => progress.get(item.id) === 'known').length;
+          const complete = done === lesson.items.length;
+          return (
+            <li key={lesson.key} className={complete ? 'is-complete' : ''}>
+              <button type="button" onClick={() => onStart(lesson.title, lesson.items)}>
+                <span className="mv3-lesson-no" aria-hidden="true">{complete ? <Check size={15} /> : index + 1}</span>
+                <span className="mv3-lesson-copy">
+                  <strong>{lesson.title}</strong>
+                  <small>{done} з {lesson.items.length} знаю</small>
+                  <span className="mv3-progress" aria-hidden="true"><span style={{ width: `${(done / lesson.items.length) * 100}%` }} /></span>
+                </span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+/* ---------- Редактор (кухня / адмін) ---------- */
+
+interface EditorState {
   id: number | null;
   section: string;
   category: string;
@@ -61,415 +625,180 @@ interface MenuEditorState {
   emoji: string;
   stopped: boolean;
   sortOrder: number;
+  explain: string;
+  sellLine: string;
+  pairing: string;
+  reviewed: boolean;
 }
 
-interface VisibleCategory {
-  key: string;
-  section: string;
-  category: string;
-  items: MenuItem[];
-}
-
-const SECTION_META: Record<string, { label: string; icon: string; order: number }> = {
-  main: { label: 'Основне меню', icon: '🍽️', order: 1 },
-  bar: { label: 'Бар', icon: '🍸', order: 2 },
-  wine: { label: 'Винна карта', icon: '🍷', order: 3 },
-  lunch: { label: 'Комплексні обіди', icon: '🥗', order: 4 },
-  season: { label: 'Сезонне', icon: '🌿', order: 5 },
-  banquet: { label: 'Банкетне', icon: '🎉', order: 6 },
-  lean: { label: 'Пісне', icon: '🕊️', order: 7 },
-};
-
-const MAIN_CATEGORY_ORDER = [
-  'Холодні закуски',
-  'Салати',
-  'Перші страви',
-  'Мангал',
-  'Основні страви',
-  'Хінкалі',
-  'Гарніри',
-  'Хлібобулочні',
-  'Десерти',
-  'До пива',
-] as const;
-
-const LUNCH_CATEGORY_ORDER = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пятниця'] as const;
-
-const ALLERGENS = [
-  'Глютен', 'Молоко', 'Яйця', 'Горіхи', 'Риба', 'Морепродукти', 'Соя',
-  'Селера', 'Гірчиця', 'Кунжут', 'Лупин', 'Молюски', 'Діоксид сірки',
-];
-
-function sectionLabel(section: string): string {
-  return SECTION_META[section]?.label || section;
-}
-
-function categoryLabel(category: string): string {
-  return category === 'Хлібобулочні' ? 'Хачапурі' : category;
-}
-
-function sectionIcon(section: string): string {
-  return SECTION_META[section]?.icon || '𐃯';
-}
-
-function sectionOrder(section: string): number {
-  return SECTION_META[section]?.order ?? 999;
-}
-
-function categoryOrder(section: string, category: string): number {
-  if (section === 'main') {
-    const index = MAIN_CATEGORY_ORDER.indexOf(category as (typeof MAIN_CATEGORY_ORDER)[number]);
-    return index >= 0 ? index : 999;
-  }
-  if (section === 'lunch') {
-    const index = LUNCH_CATEGORY_ORDER.indexOf(category as (typeof LUNCH_CATEGORY_ORDER)[number]);
-    return index >= 0 ? index : 999;
-  }
-  return 999;
-}
-
-function compareCategories(section: string, left: string, right: string): number {
-  return categoryOrder(section, left) - categoryOrder(section, right)
-    || categoryLabel(left).localeCompare(categoryLabel(right), 'uk');
-}
-
-function money(value: number | string | null): string {
-  if (value === null || value === '') return 'Ціну не вказано';
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return 'Ціну не вказано';
-  return new Intl.NumberFormat('uk-UA', {
-    style: 'currency', currency: 'UAH', maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function normalizeSearch(value: string): string {
-  return value.trim().toLocaleLowerCase('uk-UA');
-}
-
-function itemSearchText(item: MenuItem): string {
-  return [
-    item.name,
-    item.category,
-    categoryLabel(item.category),
-    sectionLabel(item.section),
-    item.description || '',
-    item.weight || '',
-    ...(item.allergens || []),
-  ].join(' ').toLocaleLowerCase('uk-UA');
-}
-
-function createEditor(item?: MenuItem): MenuEditorState {
+function createEditor(item?: MenuItem): EditorState {
+  const text = (value: string | number | null | undefined) => (value === null || value === undefined ? '' : String(value));
   return {
     id: item?.id ?? null,
     section: item?.section || 'main',
     category: item?.category || '',
     name: item?.name || '',
-    price: item?.price === null || item?.price === undefined ? '' : String(item.price),
+    price: text(item?.price),
     weight: item?.weight || '',
     description: item?.description || '',
     photo: item?.photo || '',
     allergens: item?.allergens || [],
-    cookTimeNormal: item?.cook_time_normal === null || item?.cook_time_normal === undefined ? '' : String(item.cook_time_normal),
-    cookTimeBusy: item?.cook_time_busy === null || item?.cook_time_busy === undefined ? '' : String(item.cook_time_busy),
+    cookTimeNormal: text(item?.cook_time_normal),
+    cookTimeBusy: text(item?.cook_time_busy),
     emoji: item?.emoji || '',
     stopped: item?.stopped || false,
     sortOrder: item?.sort_order || 0,
+    explain: item?.explain || '',
+    sellLine: item?.sell_line || '',
+    pairing: item?.pairing || '',
+    reviewed: item?.learning_reviewed || false,
   };
 }
 
-export function MenuPage() {
-  const [data, setData] = useState<MenuBootstrapResponse | null>(null);
-  const [items, setItems] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [activeSection, setActiveSection] = useState('main');
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [busyMode, setBusyMode] = useState(false);
-  const [selected, setSelected] = useState<MenuItem | null>(null);
-  const [editor, setEditor] = useState<MenuEditorState | null>(null);
+function Editor({ initial, items, onClose, onSaved }: { initial: EditorState; items: MenuItem[]; onClose: () => void; onSaved: (item: MenuItem | null, removedId?: number) => void }) {
+  const [form, setForm] = useState(initial);
+  const [busy, setBusy] = useState<'save' | 'delete' | 'photo' | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+  useLayoutEffect(() => { nameRef.current?.setAttribute('autofocus', ''); }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setForm((current) => ({ ...current, [key]: value }));
+  const categories = [...new Set(items.filter((item) => item.section === form.section).map((item) => item.category))];
+  const sections = [...new Set([...Object.keys(SECTION_META), ...items.map((item) => item.section)])];
+
+  async function uploadPhoto(file: File) {
+    if (!file.type.startsWith('image/')) { setProblem('Оберіть файл зображення.'); return; }
+    if (file.size > PHOTO_MAX_SOURCE_BYTES) { setProblem('Файл завеликий (максимум 15 МБ).'); return; }
+    setBusy('photo');
+    setProblem(null);
     try {
-      const response = await secureApi<MenuBootstrapResponse>({ action: 'menu_bootstrap' }, 'tiflis-menu-api');
-      setData(response);
-      setItems(response.items);
+      const { dataUrl, contentType } = await resizePhotoFile(file);
+      const response = await secureApi<{ ok: true; photo: string }>({ action: 'menu_upload_photo', data: dataUrl, content_type: contentType }, 'tiflis-menu-api');
+      set('photo', response.photo);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити меню.');
+      setProblem(reason instanceof Error ? reason.message : 'Не вдалося завантажити фото.');
     } finally {
-      setLoading(false);
+      setBusy(null);
     }
-  }, []);
+  }
 
-  useEffect(() => { void load(); }, [load]);
-
-  useEffect(() => {
-    if (!selected && !editor) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (editor) {
-        if (!saving) setEditor(null);
-      } else {
-        setSelected(null);
-      }
-    };
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [editor, saving, selected]);
-
-  const sections = useMemo(() => {
-    const counts = new Map<string, number>();
-    items.forEach((item) => counts.set(item.section, (counts.get(item.section) || 0) + 1));
-    return [...counts.entries()].sort(([left], [right]) => (
-      sectionOrder(left) - sectionOrder(right)
-      || sectionLabel(left).localeCompare(sectionLabel(right), 'uk')
-    ));
-  }, [items]);
-
-  const categories = useMemo(() => {
-    const scoped = activeSection === 'all' ? items : items.filter((item) => item.section === activeSection);
-    const counts = new Map<string, number>();
-    scoped.forEach((item) => counts.set(item.category, (counts.get(item.category) || 0) + 1));
-    return [...counts.entries()].sort(([left], [right]) => {
-      if (activeSection !== 'all') return compareCategories(activeSection, left, right);
-      return categoryLabel(left).localeCompare(categoryLabel(right), 'uk');
-    });
-  }, [activeSection, items]);
-
-  useEffect(() => {
-    if (activeCategory !== 'all' && !categories.some(([category]) => category === activeCategory)) {
-      setActiveCategory('all');
-    }
-  }, [activeCategory, categories]);
-
-  const filtered = useMemo(() => {
-    const query = normalizeSearch(search);
-    return items.filter((item) => {
-      if (activeSection !== 'all' && item.section !== activeSection) return false;
-      if (activeCategory !== 'all' && item.category !== activeCategory) return false;
-      return !query || itemSearchText(item).includes(query);
-    });
-  }, [activeCategory, activeSection, items, search]);
-
-  const metrics = useMemo(() => ({
-    photographed: items.filter((item) => item.photo).length,
-    timed: items.filter((item) => item.cook_time_normal !== null).length,
-  }), [items]);
-
-  const visibleCategories = useMemo<VisibleCategory[]>(() => {
-    const groups = new Map<string, VisibleCategory>();
-    filtered.forEach((item) => {
-      const key = `${item.section}::${item.category}`;
-      const current = groups.get(key) || { key, section: item.section, category: item.category, items: [] };
-      current.items.push(item);
-      groups.set(key, current);
-    });
-    return [...groups.values()]
-      .map((group) => ({
-        ...group,
-        items: [...group.items].sort((left, right) => (
-          left.sort_order - right.sort_order || left.name.localeCompare(right.name, 'uk')
-        )),
-      }))
-      .sort((left, right) => (
-        sectionOrder(left.section) - sectionOrder(right.section)
-        || compareCategories(left.section, left.category, right.category)
-      ));
-  }, [filtered]);
-
-  async function saveItem() {
-    if (!editor) return;
-    if (!editor.name.trim() || !editor.category.trim()) {
-      setError('Вкажіть назву та категорію позиції.');
-      return;
-    }
-    setSaving(true);
-    setError(null);
+  async function save() {
+    if (!form.name.trim() || !form.category.trim()) { setProblem('Вкажіть назву і категорію.'); return; }
+    setBusy('save');
+    setProblem(null);
     try {
-      await secureApi<MenuMutationResponse>({
+      const response = await secureApi<{ ok: true; item: MenuItem }>({
         action: 'menu_save_item',
-        id: editor.id,
-        section: editor.section,
-        category: editor.category,
-        name: editor.name,
-        price: editor.price,
-        weight: editor.weight,
-        description: editor.description,
-        photo: editor.photo,
-        allergens: editor.allergens,
-        cook_time_normal: editor.cookTimeNormal,
-        cook_time_busy: editor.cookTimeBusy,
-        emoji: editor.emoji,
-        stopped: editor.stopped,
-        sort_order: editor.sortOrder,
+        id: form.id,
+        section: form.section,
+        category: form.category,
+        name: form.name,
+        price: form.price,
+        weight: form.weight,
+        description: form.description,
+        photo: form.photo,
+        allergens: form.allergens,
+        cook_time_normal: form.cookTimeNormal,
+        cook_time_busy: form.cookTimeBusy,
+        emoji: form.emoji,
+        stopped: form.stopped,
+        sort_order: form.sortOrder,
+        explain: form.explain,
+        sell_line: form.sellLine,
+        pairing: form.pairing,
+        learning_reviewed: form.reviewed,
       }, 'tiflis-menu-api');
-      setEditor(null);
-      setSelected(null);
-      await load();
+      onSaved(response.item);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Позицію не збережено.');
-    } finally {
-      setSaving(false);
+      setProblem(reason instanceof Error ? reason.message : 'Позицію не збережено.');
+      setBusy(null);
     }
   }
 
-  async function toggleStop(item: MenuItem) {
-    const nextStopped = !item.stopped;
-    setError(null);
+  async function remove() {
+    if (!form.id) return;
+    setBusy('delete');
+    setProblem(null);
     try {
-      await secureApi<{ ok: true; item: { id: number; stopped: boolean } }>({
-        action: 'menu_toggle_stop',
-        id: item.id,
-        stopped: nextStopped,
-      }, 'tiflis-menu-api');
-      setItems((current) => current.map((existing) => (existing.id === item.id ? { ...existing, stopped: nextStopped } : existing)));
-      setSelected((current) => (current && current.id === item.id ? { ...current, stopped: nextStopped } : current));
+      await secureApi({ action: 'menu_delete_item', id: form.id }, 'tiflis-menu-api');
+      onSaved(null, form.id);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Не вдалося змінити статус позиції.');
-    }
-  }
-
-  async function deleteItem() {
-    if (!editor?.id) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await secureApi<{ ok: true }>({ action: 'menu_delete_item', id: editor.id }, 'tiflis-menu-api');
-      setItems((current) => current.filter((item) => item.id !== editor.id));
-      setEditor(null);
-      setSelected(null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Позицію не видалено.');
-    } finally {
-      setSaving(false);
+      setProblem(reason instanceof Error ? reason.message : 'Позицію не видалено.');
+      setBusy(null);
     }
   }
 
   return (
-    <div className="menu-page-v2">
-      <section className="menu-command-v2">
-        <label className="menu-search-v2">
-          <Search size={19} />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Страва, напій, склад або алерген…" />
-          {search ? <button type="button" onClick={() => setSearch('')} aria-label="Очистити пошук"><X size={16} /></button> : null}
-        </label>
-        <div className="menu-command-actions-v2">
-          <button type="button" className={busyMode ? 'is-active' : ''} onClick={() => setBusyMode((value) => !value)}><Clock3 size={17} /> Завантажена кухня</button>
-          {data?.permissions.canEdit ? <button type="button" className="menu-add-v2" onClick={() => setEditor(createEditor())}><Plus size={18} /> Нова позиція</button> : null}
-        </div>
-      </section>
-
-      <section className="menu-metrics-v2">
-        <article><UtensilsCrossed size={19} /><span>Позицій</span><strong>{items.length}</strong></article>
-        <article><ImageIcon size={19} /><span>З фото</span><strong>{metrics.photographed}</strong></article>
-        <article><Clock3 size={19} /><span>З часом кухні</span><strong>{metrics.timed}</strong></article>
-      </section>
-
-      <section className="menu-browser-v2">
-        <div className="menu-section-tabs-v2" role="tablist" aria-label="Розділи меню">
-          <button type="button" role="tab" aria-selected={activeSection === 'all'} className={activeSection === 'all' ? 'is-active' : ''} onClick={() => { setActiveSection('all'); setActiveCategory('all'); }}><Sparkles size={16} /> Усе <span>{items.length}</span></button>
-          {sections.map(([section, count]) => (
-            <button type="button" role="tab" aria-selected={activeSection === section} className={activeSection === section ? 'is-active' : ''} onClick={() => { setActiveSection(section); setActiveCategory('all'); }} key={section}>
-              <span className="menu-tab-symbol">{sectionIcon(section)}</span>{sectionLabel(section)} <span>{count}</span>
-            </button>
-          ))}
+    <div className="mv3-backdrop" onMouseDown={() => !busy && onClose()}>
+      <section className="mv3-sheet mv3-editor" role="dialog" aria-modal="true" aria-labelledby="mv3-editor-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="mv3-editor-head">
+          <h2 id="mv3-editor-title">{form.id ? 'Редагувати позицію' : 'Нова позиція'}</h2>
+          <button type="button" className="mv3-close is-flat" onClick={onClose} disabled={Boolean(busy)} aria-label="Закрити"><X size={20} /></button>
         </div>
 
-        <div className="menu-category-tabs-v2">
-          <button type="button" className={activeCategory === 'all' ? 'is-active' : ''} onClick={() => setActiveCategory('all')}>Усі категорії</button>
-          {categories.map(([category, count]) => <button type="button" className={activeCategory === category ? 'is-active' : ''} onClick={() => setActiveCategory(category)} key={category}>{categoryLabel(category)}<span>{count}</span></button>)}
-        </div>
+        <div className="mv3-form">
+          <label className="is-wide"><span>Назва</span><input ref={nameRef} value={form.name} onChange={(event) => set('name', event.target.value)} maxLength={180} /></label>
+          <label><span>Розділ</span><select value={form.section} onChange={(event) => set('section', event.target.value)}>{sections.map((key) => <option key={key} value={key}>{sectionLabel(key)}</option>)}</select></label>
+          <label><span>Категорія</span><input value={form.category} onChange={(event) => set('category', event.target.value)} list="mv3-categories" maxLength={120} /><datalist id="mv3-categories">{categories.map((key) => <option key={key} value={key} />)}</datalist></label>
+          <label><span>Ціна, ₴</span><input inputMode="decimal" value={form.price} onChange={(event) => set('price', event.target.value)} /></label>
+          <label><span>Вага / обʼєм</span><input value={form.weight} onChange={(event) => set('weight', event.target.value)} maxLength={100} placeholder="250 г" /></label>
+          <label><span>Час кухні, хв</span><input inputMode="numeric" value={form.cookTimeNormal} onChange={(event) => set('cookTimeNormal', event.target.value)} /></label>
+          <label><span>У завал, хв</span><input inputMode="numeric" value={form.cookTimeBusy} onChange={(event) => set('cookTimeBusy', event.target.value)} /></label>
 
-        {error ? <div className="menu-alert-v2" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
-        {loading ? <div className="menu-loading-v2"><RefreshCw size={24} className="is-spinning" /><span>Готуємо каталог…</span></div> : null}
-        {!loading && filtered.length === 0 ? <div className="menu-empty-v2"><Search size={30} /><strong>Нічого не знайдено</strong><span>Змініть секцію, категорію або пошуковий запит.</span></div> : null}
+          <div className="is-wide mv3-photo-field">
+            <span>Фото</span>
+            <div>
+              {form.photo ? <img src={form.photo} alt="" /> : <span className="mv3-photo-empty"><ImageIcon size={20} aria-hidden="true" /></span>}
+              <label className="mv3-secondary">
+                {busy === 'photo' ? <RefreshCw size={15} className="mv3-spin" aria-hidden="true" /> : null}
+                {busy === 'photo' ? 'Завантаження…' : form.photo ? 'Змінити фото' : 'Завантажити фото'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" hidden disabled={Boolean(busy)} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadPhoto(file); }} />
+              </label>
+              {form.photo ? <button type="button" className="mv3-link" onClick={() => set('photo', '')} disabled={Boolean(busy)}>Прибрати</button> : null}
+            </div>
+          </div>
 
-        {!loading ? <div className="menu-category-groups-v2">
-          {visibleCategories.map((group) => <section key={group.key} className="menu-category-group-v2">
-            <div className="menu-category-heading-v2"><div><span className="eyebrow">{sectionLabel(group.section)}</span><h3>{categoryLabel(group.category)}</h3></div><span>{group.items.length} позицій</span></div>
-            <div className="menu-dish-grid-v4" aria-label={`Категорія: ${categoryLabel(group.category)}`}>
-              {group.items.map((item) => {
-                const shownTime = busyMode ? item.cook_time_busy : item.cook_time_normal;
+          <label className="is-wide"><span>Склад і подача</span><textarea value={form.description} onChange={(event) => set('description', event.target.value)} maxLength={3000} rows={3} /></label>
+          <label className="is-wide"><span>Що це / як вимовляти</span><textarea value={form.explain} onChange={(event) => set('explain', event.target.value)} maxLength={600} rows={2} /></label>
+          <label className="is-wide"><span>Як запропонувати гостю</span><textarea value={form.sellLine} onChange={(event) => set('sellLine', event.target.value)} maxLength={600} rows={2} /></label>
+          <label className="is-wide"><span>До чого порадити</span><input value={form.pairing} onChange={(event) => set('pairing', event.target.value)} maxLength={600} /></label>
+
+          <fieldset className="is-wide mv3-allergen-pick">
+            <legend>Алергени</legend>
+            <div>
+              {ALLERGENS.map((allergen) => {
+                const on = form.allergens.includes(allergen);
                 return (
-                  <button
-                    type="button"
-                    className={`menu-dish-card-v4 ${item.stopped ? 'is-stopped' : ''}`}
-                    key={item.id}
-                    onClick={() => setSelected(item)}
-                    aria-label={`${item.name}, ${money(item.price)}${item.weight ? `, ${item.weight}` : ''}`}
-                  >
-                    <span className="menu-dish-photo-v4">
-                      <span className="menu-dish-photo-fallback-v4">{item.emoji || sectionIcon(item.section)}</span>
-                      {item.photo ? <img src={item.photo} alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} /> : null}
-                      {item.stopped ? <b><AlertTriangle size={13} /> Стоп</b> : null}
-                      {shownTime !== null ? <em><Clock3 size={13} /> {shownTime} хв</em> : null}
-                    </span>
-                    <span className="menu-dish-copy-v4">
-                      <small>{categoryLabel(item.category)}</small>
-                      <strong>{item.name}</strong>
-                      <span className="menu-dish-value-v4"><b>{money(item.price)}</b><em>{item.weight || 'Вага не вказана'}</em></span>
-                    </span>
+                  <button key={allergen} type="button" role="checkbox" aria-checked={on} className={on ? 'is-on' : ''} onClick={() => set('allergens', on ? form.allergens.filter((value) => value !== allergen) : [...form.allergens, allergen])}>
+                    {on ? <Check size={13} aria-hidden="true" /> : null}{allergen}
                   </button>
                 );
               })}
             </div>
-          </section>)}
-        </div> : null}
+          </fieldset>
+
+          <label className="is-wide mv3-check">
+            <input type="checkbox" checked={form.reviewed} onChange={(event) => set('reviewed', event.target.checked)} />
+            <span><b>Перевірено кухнею</b><small>Поради й алергени правильні — прибрати позначку «чернетка».</small></span>
+          </label>
+        </div>
+
+        {problem ? <p className="mv3-form-error" role="alert">{problem}</p> : null}
+
+        <div className="mv3-editor-actions">
+          {form.id ? (
+            confirmDelete ? (
+              <button type="button" className="mv3-danger" onClick={() => void remove()} disabled={Boolean(busy)}>{busy === 'delete' ? <RefreshCw size={16} className="mv3-spin" aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />} Так, видалити</button>
+            ) : (
+              <button type="button" className="mv3-link is-danger" onClick={() => setConfirmDelete(true)} disabled={Boolean(busy)}>Видалити</button>
+            )
+          ) : <span />}
+          <button type="button" className="mv3-primary" onClick={() => void save()} disabled={Boolean(busy)}>
+            {busy === 'save' ? <RefreshCw size={16} className="mv3-spin" aria-hidden="true" /> : <Check size={16} aria-hidden="true" />} Зберегти
+          </button>
+        </div>
       </section>
-
-      {selected ? <div className="menu-sheet-backdrop-v2 menu-detail-backdrop-v4" onMouseDown={() => setSelected(null)}><section className="menu-detail-sheet-v2 menu-detail-sheet-v4" role="dialog" aria-modal="true" aria-labelledby={`menu-detail-title-${selected.id}`} onMouseDown={(event) => event.stopPropagation()}>
-        <div className="menu-detail-drag-v4" aria-hidden="true"><span /></div>
-        <div className="menu-detail-media-v2 menu-detail-media-v4"><span>{selected.emoji || sectionIcon(selected.section)}</span>{selected.photo ? <img src={selected.photo} alt={selected.name} onError={(event) => { event.currentTarget.hidden = true; }} /> : null}<button type="button" onClick={() => setSelected(null)} aria-label="Закрити"><X size={20} /></button>{selected.stopped ? <b><AlertTriangle size={16} /> Позиція у стопі</b> : null}</div>
-        <div className="menu-detail-body-v2 menu-detail-body-v4">
-          <span className="eyebrow">{sectionLabel(selected.section)} · {categoryLabel(selected.category)}</span>
-          <h3 id={`menu-detail-title-${selected.id}`}>{selected.name}</h3>
-          <div className="menu-detail-price-v2"><strong>{money(selected.price)}</strong>{selected.weight ? <span>{selected.weight}</span> : null}</div>
-          <p>{selected.description || 'Опис позиції не додано.'}</p>
-          <div className="menu-detail-facts-v3 menu-detail-facts-v4"><span><b>Категорія</b>{categoryLabel(selected.category)}</span><span><b>Статус</b>{selected.stopped ? 'У стопі' : 'Доступна'}</span></div>
-          {(selected.cook_time_normal !== null || selected.cook_time_busy !== null) ? <div className="menu-detail-times-v2"><span><Clock3 size={17} /><b>Звичайно</b>{selected.cook_time_normal !== null ? `${selected.cook_time_normal} хв` : 'не вказано'}</span><span><AlertTriangle size={17} /><b>При завантаженні</b>{selected.cook_time_busy !== null ? `${selected.cook_time_busy} хв` : 'не вказано'}</span></div> : null}
-          {(selected.allergens || []).length > 0 ? <div className="menu-detail-allergens-v2"><strong>Алергени</strong><div>{(selected.allergens || []).map((allergen) => <span key={allergen}>{allergen}</span>)}</div></div> : null}
-          <div className="menu-detail-actions-v2">
-            {data?.permissions.canToggleStop ? (
-              <button
-                type="button"
-                className={selected.stopped ? 'is-return' : 'is-stop'}
-                onClick={() => void toggleStop(selected)}
-              >
-                {selected.stopped ? <Check size={17} /> : <AlertTriangle size={17} />}
-                {selected.stopped ? 'Зняти зі стопу' : 'У стоп-лист'}
-              </button>
-            ) : <span />}
-            {data?.permissions.canEdit ? <button type="button" className="is-edit" onClick={() => { setEditor(createEditor(selected)); setSelected(null); }}><Edit3 size={17} /> Редагувати</button> : null}
-          </div>
-        </div>
-      </section></div> : null}
-
-      {editor ? <div className="menu-sheet-backdrop-v2" onMouseDown={() => !saving && setEditor(null)}><section className="menu-editor-sheet-v2" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="menu-editor-heading-v2"><div><span className="eyebrow">{editor.id ? 'Редагування' : 'Нова позиція'}</span><h3>{editor.id ? editor.name : 'Додати до меню'}</h3></div><button type="button" onClick={() => setEditor(null)} disabled={saving}><X size={19} /></button></div>
-        <div className="menu-editor-grid-v2">
-          <label><span>Розділ</span><select value={editor.section} onChange={(event) => setEditor({ ...editor, section: event.target.value })}>{[...new Set([...Object.keys(SECTION_META), ...sections.map(([section]) => section)])].map((section) => <option value={section} key={section}>{sectionLabel(section)}</option>)}</select></label>
-          <label><span>Категорія</span><input value={editor.category} onChange={(event) => setEditor({ ...editor, category: event.target.value })} list="menu-categories" maxLength={120} /><datalist id="menu-categories">{categories.map(([category]) => <option value={category} key={category}>{categoryLabel(category)}</option>)}</datalist></label>
-          <label className="is-wide"><span>Назва</span><input value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} maxLength={180} /></label>
-          <label><span>Ціна, ₴</span><input type="number" min="0" value={editor.price} onChange={(event) => setEditor({ ...editor, price: event.target.value })} /></label>
-          <label><span>Вага / обʼєм</span><input value={editor.weight} onChange={(event) => setEditor({ ...editor, weight: event.target.value })} maxLength={100} placeholder="250 г / 50 мл" /></label>
-          <label><span>Емодзі</span><input value={editor.emoji} onChange={(event) => setEditor({ ...editor, emoji: event.target.value })} maxLength={16} placeholder="🍽️" /></label>
-          <label><span>Час, хв</span><input type="number" min="0" max="1440" value={editor.cookTimeNormal} onChange={(event) => setEditor({ ...editor, cookTimeNormal: event.target.value })} /></label>
-          <label><span>При завантаженні, хв</span><input type="number" min="0" max="1440" value={editor.cookTimeBusy} onChange={(event) => setEditor({ ...editor, cookTimeBusy: event.target.value })} /></label>
-          <label className="is-wide"><span>Фото, HTTPS URL</span><input type="url" value={editor.photo} onChange={(event) => setEditor({ ...editor, photo: event.target.value })} maxLength={1000} placeholder="https://…" /></label>
-          <label className="is-wide"><span>Опис і склад</span><textarea value={editor.description} onChange={(event) => setEditor({ ...editor, description: event.target.value })} maxLength={3000} /></label>
-        </div>
-        <div className="menu-allergen-editor-v2"><strong>Алергени</strong><div>{ALLERGENS.map((allergen) => { const checked = editor.allergens.includes(allergen); return <button type="button" key={allergen} className={checked ? 'is-active' : ''} onClick={() => setEditor({ ...editor, allergens: checked ? editor.allergens.filter((item) => item !== allergen) : [...editor.allergens, allergen] })}>{checked ? <Check size={13} /> : null}{allergen}</button>; })}</div></div>
-        <label className="menu-editor-stop-v2"><input type="checkbox" checked={editor.stopped} onChange={(event) => setEditor({ ...editor, stopped: event.target.checked })} /><span><AlertTriangle size={17} /><b>Позиція зараз у стопі</b></span></label>
-        <div className="menu-editor-actions-v2">{editor.id ? <button type="button" className="is-delete" onClick={() => void deleteItem()} disabled={saving}><Trash2 size={17} /> Видалити</button> : <span />}<button type="button" className="is-save" onClick={() => void saveItem()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти</button></div>
-      </section></div> : null}
     </div>
   );
 }
