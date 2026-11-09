@@ -385,7 +385,8 @@ Deno.serve(async (req: Request) => {
         roles: roleKeys.map((key) => ({ key, label: ROLE_LABELS[key] || key })).sort((left, right) => left.label.localeCompare(right.label, "uk")),
         users: users.map((staff) => {
           const safe = safeStaff(staff, linked, nextShift, monthShifts);
-          return manages ? safe : { ...safe, login: "", authLinked: false, credentialSource: "" };
+          // Non-admins never see a login, including through the display-name fallback.
+          return manages ? safe : { ...safe, displayName: staff.display_name || staff.nick || "Без імені", login: "", authLinked: false, credentialSource: "" };
         }),
       });
     }
