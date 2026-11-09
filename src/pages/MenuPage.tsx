@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { secureApi } from '../lib/secureApi';
 import './menu-v3.css';
 
@@ -63,8 +64,6 @@ interface Deck {
   items: MenuItem[];
   index: number;
   revealed: boolean;
-  known: number;
-  learning: number;
 }
 
 const SECTION_META: Record<string, { label: string; order: number }> = {
@@ -93,7 +92,7 @@ const LEARNABLE = new Set(['main', 'season']);
 
 const sectionLabel = (section: string) => SECTION_META[section]?.label || section;
 const sectionOrder = (section: string) => SECTION_META[section]?.order ?? 99;
-const categoryLabel = (category: string) => (category === 'Хлібобулочні' ? 'Хачапурі і випічка' : category);
+const categoryLabel = (category: string) => (category === 'Хлібобулочні' ? 'Хачапурі й випічка' : category === 'Пятниця' ? 'Пʼятниця' : category);
 
 function categoryOrder(section: string, category: string): number {
   const list = section === 'main' ? MAIN_CATEGORY_ORDER : section === 'lunch' ? LUNCH_CATEGORY_ORDER : [];
@@ -116,9 +115,10 @@ function money(value: number | string | null): string | null {
   return `${new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 }).format(amount)} ₴`;
 }
 
-function weightLabel(weight: string | null): string | null {
+function weightLabel(weight: string | null, section: string): string | null {
   if (!weight) return null;
-  return /^\d+(?:[.,]\d+)?$/.test(weight.trim()) ? `${weight.trim()} г` : weight;
+  if (!/^\d+(?:[.,]\d+)?$/.test(weight.trim())) return weight;
+  return section === 'bar' || section === 'wine' ? `${weight.trim()} мл` : `${weight.trim()} г`;
 }
 
 function initials(name: string): string {
@@ -145,7 +145,9 @@ function plural(count: number, one: string, few: string, many: string): string {
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
   return many;
 }
-const dishWord = (count: number) => plural(count, 'страва', 'страви', 'страв');
+/** After «з N»: genitive — «з 1 страви», «з 21 страви», «з 5 страв». */
+const ofDishes = (count: number) => plural(count, 'страви', 'страв', 'страв');
+const normalizeApostrophes = (value: string) => value.replace(/[’ʼ'`]/g, 'ʼ');
 
 /* ---------- photo upload (resize on device, then menu_upload_photo) ---------- */
 
@@ -169,6 +171,18 @@ async function resizePhotoFile(file: File): Promise<{ dataUrl: string; contentTy
   }
 }
 
+/* ---------- dialogs: portal + inert page behind, so Tab cannot leave the open sheet ---------- */
+
+function Overlay({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    const shell = document.querySelector<HTMLElement>('.app-shell');
+    if (!shell) return;
+    shell.inert = true;
+    return () => { shell.inert = false; };
+  }, []);
+  return createPortal(children, document.body);
+}
+
 /* ---------- page ---------- */
 
 export function MenuPage() {
@@ -181,6 +195,7 @@ export function MenuPage() {
   const [selected, setSelected] = useState<MenuItem | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [deck, setDeck] = useState<Deck | null>(null);
+  const requestTicket = useRef(new Map<number, number>());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -214,8 +229,12 @@ export function MenuPage() {
   }, [items]);
 
   async function saveStatus(item: MenuItem, status: Status | null) {
-    const previous = progress.get(item.id) ?? null;
+    // Each item counts its own requests; only the latest one may roll back, so a slow failure never undoes a newer save.
+    const ticket = (requestTicket.current.get(item.id) || 0) + 1;
+    requestTicket.current.set(item.id, ticket);
+    let previous: Status | null = null;
     setProgress((current) => {
+      previous = current.get(item.id) ?? null;
       const next = new Map(current);
       if (status) next.set(item.id, status); else next.delete(item.id);
       return next;
@@ -223,12 +242,13 @@ export function MenuPage() {
     try {
       await secureApi({ action: 'menu_progress_set', id: item.id, status }, 'tiflis-menu-api');
     } catch {
+      if (requestTicket.current.get(item.id) !== ticket) return;
       setProgress((current) => {
         const next = new Map(current);
         if (previous) next.set(item.id, previous); else next.delete(item.id);
         return next;
       });
-      setError('Прогрес не збережено. Перевірте звʼязок і спробуйте ще раз.');
+      setError('Прогрес не збережено. Перевір звʼязок і спробуй ще раз.');
     }
   }
 
@@ -236,7 +256,7 @@ export function MenuPage() {
     // Not-yet-known dishes first (still learning, then never seen), known ones at the end for revision.
     const rank = (item: MenuItem) => (progress.get(item.id) === 'learning' ? 0 : progress.get(item.id) === 'known' ? 2 : 1);
     const ordered = [0, 1, 2].flatMap((value) => shuffled(pool.filter((item) => rank(item) === value)));
-    setDeck({ title, items: ordered, index: 0, revealed: false, known: 0, learning: 0 });
+    setDeck({ title, items: ordered, index: 0, revealed: false });
     setMode('train');
   }
 
@@ -244,13 +264,7 @@ export function MenuPage() {
     if (!deck) return;
     const item = deck.items[deck.index];
     if (item) void saveStatus(item, status);
-    setDeck({
-      ...deck,
-      index: deck.index + 1,
-      revealed: false,
-      known: deck.known + (status === 'known' ? 1 : 0),
-      learning: deck.learning + (status === 'learning' ? 1 : 0),
-    });
+    setDeck({ ...deck, index: deck.index + 1, revealed: false });
   }
 
   function onSaved(saved: MenuItem | null, removedId?: number) {
@@ -268,9 +282,9 @@ export function MenuPage() {
   return (
     <div className="mv3">
       <div className="mv3-top">
-        <div className="mv3-seg" role="tablist" aria-label="Режим меню">
+        <div className="mv3-seg" role="radiogroup" aria-label="Режим меню">
           {([['guide', 'Довідник'], ['train', 'Тренажер'], ['plan', 'План']] as const).map(([key, label]) => (
-            <button key={key} type="button" role="tab" aria-selected={mode === key} className={mode === key ? 'is-on' : ''} onClick={() => setMode(key)}>{label}</button>
+            <button key={key} type="button" role="radio" aria-checked={mode === key} className={mode === key ? 'is-on' : ''} onClick={() => setMode(key)}>{label}</button>
           ))}
         </div>
         {canEdit ? <button type="button" className="mv3-add" onClick={() => setEditor(createEditor())}><Plus size={17} aria-hidden="true" /> Позиція</button> : null}
@@ -283,7 +297,7 @@ export function MenuPage() {
         </div>
       ) : null}
 
-      {loading ? <div className="mv3-loading" aria-label="Завантажуємо меню"><span /><span /><span /></div> : null}
+      {loading ? <div className="mv3-loading" role="status" aria-label="Завантажуємо меню"><span /><span /><span /></div> : null}
 
       {!loading && data ? (
         mode === 'guide' ? (
@@ -296,17 +310,17 @@ export function MenuPage() {
       ) : null}
 
       {selected ? (
-        <DishSheet
+        <Overlay><DishSheet
           item={selected}
           status={progress.get(selected.id) ?? null}
           canEdit={canEdit}
           onClose={() => setSelected(null)}
           onStatus={(status) => void saveStatus(selected, status)}
           onEdit={() => { setEditor(createEditor(selected)); setSelected(null); }}
-        />
+        /></Overlay>
       ) : null}
 
-      {editor ? <Editor initial={editor} items={items} onClose={() => setEditor(null)} onSaved={onSaved} /> : null}
+      {editor ? <Overlay><Editor initial={editor} items={items} onClose={() => setEditor(null)} onSaved={onSaved} /></Overlay> : null}
     </div>
   );
 }
@@ -324,14 +338,16 @@ function Guide({ items, progress, canEdit, onOpen }: { items: MenuItem[]; progre
     .sort((a, b) => categoryOrder(section, a) - categoryOrder(section, b) || categoryLabel(a).localeCompare(categoryLabel(b), 'uk')), [items, section]);
   const draftCount = useMemo(() => items.filter((item) => !item.learning_reviewed && hasTeaching(item)).length, [items]);
 
-  const needle = query.trim().toLocaleLowerCase('uk-UA');
+  useEffect(() => { if (draftsOnly && draftCount === 0) setDraftsOnly(false); }, [draftCount, draftsOnly]);
+
+  const needle = normalizeApostrophes(query.trim().toLocaleLowerCase('uk-UA'));
   const visible = items.filter((item) => {
-    if (draftsOnly) return !item.learning_reviewed && hasTeaching(item);
+    if (draftsOnly && (item.learning_reviewed || !hasTeaching(item))) return false;
     if (needle) {
-      return [item.name, item.description, item.explain, item.category, ...(item.allergens || [])]
-        .join(' ').toLocaleLowerCase('uk-UA').includes(needle);
+      return normalizeApostrophes([item.name, item.description, item.explain, item.category, ...(item.allergens || [])]
+        .join(' ').toLocaleLowerCase('uk-UA')).includes(needle);
     }
-    return item.section === section && (category === 'all' || item.category === category);
+    return draftsOnly || (item.section === section && (category === 'all' || item.category === category));
   });
 
   const groups: { key: string; title: string; items: MenuItem[] }[] = [];
@@ -352,23 +368,23 @@ function Guide({ items, progress, canEdit, onOpen }: { items: MenuItem[]; progre
 
       {!needle && !draftsOnly ? (
         <>
-          <div className="mv3-chips" role="tablist" aria-label="Розділ">
+          <div className="mv3-chips" role="radiogroup" aria-label="Розділ">
             {sections.map((key) => (
-              <button key={key} type="button" role="tab" aria-selected={section === key} className={section === key ? 'is-on' : ''} onClick={() => { setSection(key); setCategory('all'); }}>{sectionLabel(key)}</button>
+              <button key={key} type="button" role="radio" aria-checked={section === key} className={section === key ? 'is-on' : ''} onClick={() => { setSection(key); setCategory('all'); }}>{sectionLabel(key)}</button>
             ))}
           </div>
           {categories.length > 1 ? (
             <div className="mv3-chips is-quiet" aria-label="Категорія">
-              <button type="button" className={category === 'all' ? 'is-on' : ''} onClick={() => setCategory('all')}>Усі</button>
+              <button type="button" aria-pressed={category === 'all'} className={category === 'all' ? 'is-on' : ''} onClick={() => setCategory('all')}>Усі</button>
               {categories.map((key) => (
-                <button key={key} type="button" className={category === key ? 'is-on' : ''} onClick={() => setCategory(key)}>{categoryLabel(key)}</button>
+                <button key={key} type="button" aria-pressed={category === key} className={category === key ? 'is-on' : ''} onClick={() => setCategory(key)}>{categoryLabel(key)}</button>
               ))}
             </div>
           ) : null}
         </>
       ) : null}
 
-      {canEdit && draftCount ? (
+      {canEdit && (draftCount || draftsOnly) ? (
         <button type="button" className={`mv3-drafts${draftsOnly ? ' is-on' : ''}`} onClick={() => setDraftsOnly((value) => !value)}>
           <AlertTriangle size={16} aria-hidden="true" />
           <span>{draftsOnly ? 'Показати все меню' : `Чернетки на перевірку: ${draftCount}`}</span>
@@ -401,12 +417,12 @@ function Thumb({ item, size }: { item: MenuItem; size: 'row' | 'card' | 'sheet' 
 
 function DishRow({ item, status, onOpen }: { item: MenuItem; status: Status | null; onOpen: (item: MenuItem) => void }) {
   const price = money(item.price);
-  const weight = weightLabel(item.weight);
+  const weight = weightLabel(item.weight, item.section);
   return (
     <button type="button" className="mv3-row" onClick={() => onOpen(item)}>
       <Thumb item={item} size="row" />
       <span className="mv3-row-copy">
-        <strong>{item.name}{status === 'known' ? <Check size={14} className="mv3-known" aria-label="Знаю" /> : null}</strong>
+        <strong>{item.name}{status === 'known' ? <Check size={14} className="mv3-known" role="img" aria-label="Знаю" /> : null}</strong>
         {item.description ? <small>{item.description}</small> : null}
       </span>
       {price || weight ? (
@@ -427,7 +443,7 @@ function DishSheet({ item, status, canEdit, onClose, onStatus, onEdit }: {
   const closeRef = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => { closeRef.current?.setAttribute('autofocus', ''); }, []);
   const price = money(item.price);
-  const weight = weightLabel(item.weight);
+  const weight = weightLabel(item.weight, item.section);
 
   return (
     <div className="mv3-backdrop" onMouseDown={onClose}>
@@ -437,18 +453,16 @@ function DishSheet({ item, status, canEdit, onClose, onStatus, onEdit }: {
           <button ref={closeRef} type="button" className="mv3-close" onClick={onClose} aria-label="Закрити"><X size={20} /></button>
         </div>
         <div className="mv3-sheet-body">
-          <p className="mv3-kicker">{sectionLabel(item.section)} · {categoryLabel(item.category)}</p>
           <h2 id={`mv3-dish-${item.id}`}>{item.name}</h2>
-          {price || weight || item.cook_time_normal !== null ? (
-            <p className="mv3-facts">
-              {price ? <b>{price}</b> : null}
-              {weight ? <span>{weight}</span> : null}
-              {item.cook_time_normal !== null ? <span><Clock3 size={14} aria-hidden="true" /> {item.cook_time_normal} хв{item.cook_time_busy !== null ? ` · у завал ${item.cook_time_busy} хв` : ''}</span> : null}
-            </p>
-          ) : null}
+          <p className="mv3-facts">
+            {price ? <b>{price}</b> : null}
+            {weight ? <span>{weight}</span> : null}
+            <span>{categoryLabel(item.category)}</span>
+            {item.cook_time_normal !== null ? <span><Clock3 size={14} aria-hidden="true" /> {item.cook_time_normal} хв{item.cook_time_busy !== null ? ` · у завал ${item.cook_time_busy} хв` : ''}</span> : null}
+          </p>
 
           {!item.learning_reviewed && hasTeaching(item) ? (
-            <p className="mv3-draft-note"><AlertTriangle size={15} aria-hidden="true" /> Чернетка: поради й алергени ще не перевірила кухня.</p>
+            <p className="mv3-draft-note"><AlertTriangle size={15} aria-hidden="true" /> Чернетка: кухня ще не перевірила поради й алергени.</p>
           ) : null}
 
           {item.explain ? <Block title="Що це">{item.explain}</Block> : null}
@@ -462,9 +476,9 @@ function DishSheet({ item, status, canEdit, onClose, onStatus, onEdit }: {
           ) : null}
 
           <div className="mv3-sheet-actions">
-            <button type="button" className={status === 'known' ? 'is-known' : ''} aria-pressed={status === 'known'} onClick={() => onStatus(status === 'known' ? 'learning' : 'known')}>
-              {status === 'known' ? <><Check size={17} aria-hidden="true" /> Знаю</> : <><BookOpen size={17} aria-hidden="true" /> Позначити: знаю</>}
-            </button>
+            {LEARNABLE.has(item.section) ? <button type="button" className={status === 'known' ? 'is-known' : ''} aria-pressed={status === 'known'} onClick={() => onStatus(status === 'known' ? 'learning' : 'known')}>
+              {status === 'known' ? <><Check size={17} aria-hidden="true" /> Знаю</> : <><BookOpen size={17} aria-hidden="true" /> Знаю цю страву</>}
+            </button> : null}
             {canEdit ? <button type="button" className="is-quiet" onClick={onEdit}><Edit3 size={17} aria-hidden="true" /> Редагувати</button> : null}
           </div>
         </div>
@@ -488,12 +502,21 @@ function Trainer({ deck, lessons, progress, onStart, onReveal, onAnswer, onExit 
   deck: Deck | null; lessons: Lesson[]; progress: Map<number, Status>;
   onStart: (title: string, pool: MenuItem[]) => void; onReveal: () => void; onAnswer: (status: Status) => void; onExit: () => void;
 }) {
+  // Keep keyboard and screen-reader users on the card when it changes or the answer opens.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const heading = headingRef.current;
+    if (!heading) return;
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({ block: 'nearest' });
+  }, [deck?.index, deck?.revealed]);
+
   if (!deck) {
     const all = lessons.flatMap((lesson) => lesson.items);
     const unknown = all.filter((item) => progress.get(item.id) !== 'known');
     return (
       <section className="mv3-train-pick" aria-label="Тренажер">
-        <p className="mv3-lead">Картка показує страву. Згадай склад, як її запропонувати і до чого порадити, потім переверни й перевір себе.</p>
+        <p className="mv3-lead">Картка показує страву. Згадай склад, як її запропонувати і до чого порадити, потім відкрий відповідь і перевір себе.</p>
         <button type="button" className="mv3-primary" disabled={!unknown.length} onClick={() => onStart('Усе, що ще не знаю', unknown)}>
           {unknown.length ? `Тренувати невивчені · ${unknown.length}` : 'Усі страви кухні вивчено'}
         </button>
@@ -505,7 +528,7 @@ function Trainer({ deck, lessons, progress, onStart, onReveal, onAnswer, onExit 
               <li key={lesson.key}>
                 <button type="button" onClick={() => onStart(lesson.title, lesson.items)}>
                   <span>{lesson.title}</span>
-                  <small>{known} / {lesson.items.length}</small>
+                  <small>{known} з {lesson.items.length}</small>
                   <ChevronRight size={16} aria-hidden="true" />
                 </button>
               </li>
@@ -521,9 +544,9 @@ function Trainer({ deck, lessons, progress, onStart, onReveal, onAnswer, onExit 
     return (
       <section className="mv3-done" aria-live="polite">
         <h2>{deck.title}: готово</h2>
-        <p><b>{deck.known}</b> знаю · <b>{deck.learning}</b> ще вчу</p>
+        <p><b>{deck.items.filter((entry) => progress.get(entry.id) === 'known').length}</b> знаю · <b>{deck.items.filter((entry) => progress.get(entry.id) === 'learning').length}</b> ще вчу</p>
         <div className="mv3-done-actions">
-          {deck.learning ? <button type="button" className="mv3-primary" onClick={() => onStart(`${deck.title}: повтор`, deck.items.filter((entry) => progress.get(entry.id) === 'learning'))}><RotateCcw size={16} aria-hidden="true" /> Повторити ті, що вчу</button> : null}
+          {deck.items.some((entry) => progress.get(entry.id) === 'learning') ? <button type="button" className="mv3-primary" onClick={() => onStart(`${deck.title}: повтор`, deck.items.filter((entry) => progress.get(entry.id) === 'learning'))}><RotateCcw size={16} aria-hidden="true" /> Повторити ті, що вчу</button> : null}
           <button type="button" className="mv3-secondary" onClick={onExit}>Інша тема</button>
         </div>
       </section>
@@ -541,8 +564,7 @@ function Trainer({ deck, lessons, progress, onStart, onReveal, onAnswer, onExit 
       <article className="mv3-card">
         <Thumb item={item} size="card" />
         <div className="mv3-card-body">
-          <p className="mv3-kicker">{categoryLabel(item.category)}</p>
-          <h2>{item.name}</h2>
+          <h2 ref={headingRef} tabIndex={-1}>{item.name}</h2>
           {!deck.revealed ? (
             <>
               <p className="mv3-prompt">Що входить? Як запропонуєш гостю? Які алергени?</p>
@@ -550,9 +572,10 @@ function Trainer({ deck, lessons, progress, onStart, onReveal, onAnswer, onExit 
             </>
           ) : (
             <div className="mv3-answer" aria-live="polite">
+              {!item.learning_reviewed && hasTeaching(item) ? <p className="mv3-draft-note"><AlertTriangle size={15} aria-hidden="true" /> Чернетка: кухня ще не перевірила поради й алергени.</p> : null}
               {item.explain ? <Block title="Що це">{item.explain}</Block> : null}
               {item.description ? <Block title="Склад і подача">{item.description}</Block> : null}
-              {item.sell_line ? <Block title="Як запропонувати" tone="say">«{item.sell_line}»</Block> : null}
+              {item.sell_line ? <Block title="Як запропонувати гостю" tone="say">«{item.sell_line}»</Block> : null}
               {item.pairing ? <Block title="До чого порадити">{item.pairing}</Block> : null}
               {(item.allergens || []).length ? <Block title="Алергени"><span className="mv3-allergens">{(item.allergens || []).map((allergen) => <span key={allergen}>{allergen}</span>)}</span></Block> : null}
               <div className="mv3-answer-actions">
@@ -577,11 +600,10 @@ function Plan({ lessons, progress, onStart }: { lessons: Lesson[]; progress: Map
   return (
     <section className="mv3-plan" aria-label="План вивчення">
       <div className="mv3-plan-hero">
-        <p className="mv3-kicker">Кухня і сезонне меню</p>
-        <p className="mv3-plan-figure"><b>{known}</b> з {total} {dishWord(total)}</p>
+        <p className="mv3-plan-figure"><b>{known}</b> з {total} {ofDishes(total)} кухні й сезонного меню</p>
         <div className="mv3-progress is-big" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={known} aria-label="Вивчено страв"><span style={{ width: `${total ? (known / total) * 100 : 0}%` }} /></div>
         {nextLesson ? (
-          <button type="button" className="mv3-primary" onClick={() => onStart(nextLesson.title, nextLesson.items)}>Продовжити: {nextLesson.title}</button>
+          <button type="button" className="mv3-primary" onClick={() => onStart(nextLesson.title, nextLesson.items.filter((item) => progress.get(item.id) !== 'known'))}>Продовжити: {nextLesson.title}</button>
         ) : <p className="mv3-lead">Усе меню кухні вивчено. Повторюй у тренажері, коли зʼявляться нові страви.</p>}
       </div>
 
@@ -663,12 +685,25 @@ function Editor({ initial, items, onClose, onSaved }: { initial: EditorState; it
   const nameRef = useRef<HTMLInputElement>(null);
   useLayoutEffect(() => { nameRef.current?.setAttribute('autofocus', ''); }, []);
 
-  const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setForm((current) => ({ ...current, [key]: value }));
+  const fileRef = useRef<HTMLInputElement>(null);
+  const TEACHING_KEYS: (keyof EditorState)[] = ['explain', 'sellLine', 'pairing', 'allergens'];
+  // Changing a reviewed dish's teaching text or allergens sends it back to draft until the kitchen re-checks it.
+  const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setForm((current) => ({
+    ...current,
+    [key]: value,
+    ...(TEACHING_KEYS.includes(key) && initial.reviewed ? { reviewed: false } : {}),
+  }));
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial);
+  const requestClose = () => {
+    if (busy) return;
+    if (dirty && !window.confirm('Закрити без збереження? Зміни пропадуть.')) return;
+    onClose();
+  };
   const categories = [...new Set(items.filter((item) => item.section === form.section).map((item) => item.category))];
   const sections = [...new Set([...Object.keys(SECTION_META), ...items.map((item) => item.section)])];
 
   async function uploadPhoto(file: File) {
-    if (!file.type.startsWith('image/')) { setProblem('Оберіть файл зображення.'); return; }
+    if (!file.type.startsWith('image/')) { setProblem('Обери файл зображення.'); return; }
     if (file.size > PHOTO_MAX_SOURCE_BYTES) { setProblem('Файл завеликий (максимум 15 МБ).'); return; }
     setBusy('photo');
     setProblem(null);
@@ -684,7 +719,7 @@ function Editor({ initial, items, onClose, onSaved }: { initial: EditorState; it
   }
 
   async function save() {
-    if (!form.name.trim() || !form.category.trim()) { setProblem('Вкажіть назву і категорію.'); return; }
+    if (!form.name.trim() || !form.category.trim()) { setProblem('Вкажи назву й категорію.'); return; }
     setBusy('save');
     setProblem(null);
     try {
@@ -694,13 +729,13 @@ function Editor({ initial, items, onClose, onSaved }: { initial: EditorState; it
         section: form.section,
         category: form.category,
         name: form.name,
-        price: form.price,
+        price: form.price.replace(/[\s₴]/g, '').replace(',', '.'),
         weight: form.weight,
         description: form.description,
         photo: form.photo,
         allergens: form.allergens,
-        cook_time_normal: form.cookTimeNormal,
-        cook_time_busy: form.cookTimeBusy,
+        cook_time_normal: form.cookTimeNormal.trim().replace(',', '.'),
+        cook_time_busy: form.cookTimeBusy.trim().replace(',', '.'),
         emoji: form.emoji,
         stopped: form.stopped,
         sort_order: form.sortOrder,
@@ -730,16 +765,16 @@ function Editor({ initial, items, onClose, onSaved }: { initial: EditorState; it
   }
 
   return (
-    <div className="mv3-backdrop" onMouseDown={() => !busy && onClose()}>
+    <div className="mv3-backdrop" onMouseDown={requestClose}>
       <section className="mv3-sheet mv3-editor" role="dialog" aria-modal="true" aria-labelledby="mv3-editor-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="mv3-editor-head">
           <h2 id="mv3-editor-title">{form.id ? 'Редагувати позицію' : 'Нова позиція'}</h2>
-          <button type="button" className="mv3-close is-flat" onClick={onClose} disabled={Boolean(busy)} aria-label="Закрити"><X size={20} /></button>
+          <button type="button" className="mv3-close is-flat" onClick={requestClose} disabled={Boolean(busy)} aria-label="Закрити"><X size={20} /></button>
         </div>
 
         <div className="mv3-form">
           <label className="is-wide"><span>Назва</span><input ref={nameRef} value={form.name} onChange={(event) => set('name', event.target.value)} maxLength={180} /></label>
-          <label><span>Розділ</span><select value={form.section} onChange={(event) => set('section', event.target.value)}>{sections.map((key) => <option key={key} value={key}>{sectionLabel(key)}</option>)}</select></label>
+          <label><span>Розділ</span><select value={form.section} onChange={(event) => setForm((current) => ({ ...current, section: event.target.value, category: '' }))}>{sections.map((key) => <option key={key} value={key}>{sectionLabel(key)}</option>)}</select></label>
           <label><span>Категорія</span><input value={form.category} onChange={(event) => set('category', event.target.value)} list="mv3-categories" maxLength={120} /><datalist id="mv3-categories">{categories.map((key) => <option key={key} value={key} />)}</datalist></label>
           <label><span>Ціна, ₴</span><input inputMode="decimal" value={form.price} onChange={(event) => set('price', event.target.value)} /></label>
           <label><span>Вага / обʼєм</span><input value={form.weight} onChange={(event) => set('weight', event.target.value)} maxLength={100} placeholder="250 г" /></label>
@@ -750,11 +785,11 @@ function Editor({ initial, items, onClose, onSaved }: { initial: EditorState; it
             <span>Фото</span>
             <div>
               {form.photo ? <img src={form.photo} alt="" /> : <span className="mv3-photo-empty"><ImageIcon size={20} aria-hidden="true" /></span>}
-              <label className="mv3-secondary">
+              <button type="button" className="mv3-secondary" onClick={() => fileRef.current?.click()} disabled={Boolean(busy)}>
                 {busy === 'photo' ? <RefreshCw size={15} className="mv3-spin" aria-hidden="true" /> : null}
                 {busy === 'photo' ? 'Завантаження…' : form.photo ? 'Змінити фото' : 'Завантажити фото'}
-                <input type="file" accept="image/jpeg,image/png,image/webp" hidden disabled={Boolean(busy)} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadPhoto(file); }} />
-              </label>
+              </button>
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden tabIndex={-1} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadPhoto(file); }} />
               {form.photo ? <button type="button" className="mv3-link" onClick={() => set('photo', '')} disabled={Boolean(busy)}>Прибрати</button> : null}
             </div>
           </div>

@@ -23,6 +23,6 @@ STORY: Open the menu → Довідник with Кухня selected; search or ta
 
 FIRST VIEWPORT: Segmented Довідник / Тренажер / План (+ «Позиція» for editors); search; section chips; category chips; the first category list of rows (photo or initials, name, two-line composition, price and weight). Admin also sees «Чернетки на перевірку: N».
 
-FORM: code-led; single-column reference list with grouped rows, bottom/centred sheet for the dish, flash card in the trainer, numbered lesson list in the plan.
+FORM: surface roll dealt candidates 5, 2, 7 of the grounded list (lead: grouped reference list + briefing sheet; then flash-card deck; then numbered lesson path); the owner had already fixed the three modes, so all three dealt structures ship, one per mode. seed:a7e8ec49375b87e5
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

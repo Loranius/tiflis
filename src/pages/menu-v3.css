@@ -5,8 +5,10 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  width: 100%;
+  min-width: 0;
   max-width: 880px;
-  margin: 0 auto;
+  margin: 0;
   font-family: var(--t-font);
   color: var(--t-text);
   font-variant-numeric: tabular-nums;
@@ -127,8 +129,8 @@
 
 .mv3-danger {
   border: 0;
-  background: var(--t-down-tint);
-  color: var(--t-down-text);
+  background: var(--t-down);
+  color: var(--t-on-gold);
 }
 
 .mv3-link {
@@ -144,7 +146,14 @@
   font-weight: 600;
 }
 
-.mv3-link.is-danger { color: var(--t-down); }
+.mv3-link.is-danger {
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--t-down) 35%, transparent);
+  border-radius: var(--t-radius-m);
+  color: var(--t-down);
+  font-size: 15px;
+}
 
 .mv3-alert {
   display: flex;
@@ -164,7 +173,7 @@
   color: var(--t-text);
   font-weight: 600;
   font-size: 14px;
-  min-height: 36px;
+  min-height: 44px;
 }
 
 .mv3-loading {
@@ -178,11 +187,6 @@
   border-radius: var(--t-radius-m);
   background: var(--t-surface);
   animation: mv3-pulse 1.4s ease-in-out infinite;
-}
-
-.mv3-kicker {
-  font-size: 12.5px;
-  color: var(--t-text-3);
 }
 
 .mv3-lead {
@@ -255,10 +259,10 @@
 .mv3-search button {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: none;
   color: var(--t-text-2);
 }
@@ -276,10 +280,10 @@
 
 .mv3-chips button {
   flex: none;
-  height: 38px;
+  height: 44px;
   padding: 0 14px;
   border: 1px solid var(--t-line-strong);
-  border-radius: 19px;
+  border-radius: 22px;
   background: transparent;
   color: var(--t-text-2);
   font-size: 14px;
@@ -293,7 +297,7 @@
 }
 
 .mv3-chips.is-quiet button {
-  height: 34px;
+  height: 44px;
   padding: 0 12px;
   border-color: transparent;
   background: var(--t-surface);
@@ -405,7 +409,7 @@
 
 .mv3-known {
   flex: none;
-  color: var(--t-up);
+  color: var(--t-gold);
 }
 
 .mv3-row-meta {
@@ -499,7 +503,7 @@
   height: 44px;
   border: 0;
   border-radius: 22px;
-  background: rgba(22, 21, 20, 0.72);
+  background: color-mix(in srgb, var(--t-ground) 72%, transparent);
   color: var(--t-text);
 }
 
@@ -702,7 +706,6 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  animation: mv3-fade 0.2s ease-out;
 }
 
 .mv3-answer-actions {
@@ -908,13 +911,13 @@
 }
 
 .mv3-allergen-pick button {
-  min-height: 36px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 0 12px;
   border: 1px solid var(--t-line-strong);
-  border-radius: 18px;
+  border-radius: 22px;
   background: transparent;
   color: var(--t-text-2);
   font-size: 13.5px;
@@ -976,11 +979,48 @@
   .mv3-sheet-actions button.is-quiet { flex: 1; }
 }
 
-/* Wide screens: two-column guide is not needed; the reference stays a single readable column. */
+/* Phones: chip rows scroll sideways; fade the right edge so they read as scrollable. */
+@media (max-width: 980px) {
+  .mv3-chips {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+    padding-right: 24px;
+  }
+}
+
+/* Wide screens: one readable column; chips wrap instead of hiding categories. */
 @media (min-width: 981px) {
+  .mv3-chips { flex-wrap: wrap; overflow: visible; }
   .mv3-row { padding: 12px 18px 12px 12px; }
   .mv3-thumb.is-row { width: 64px; height: 64px; }
 }
+
+/* Pointer devices: hover and press feedback from DESIGN.md. */
+@media (hover: hover) {
+  .mv3-primary:hover:not(:disabled) { background: #DCC07A; }
+  .mv3-row:hover,
+  .mv3-topics button:hover,
+  .mv3-lessons button:hover { background: var(--t-surface-2); }
+  .mv3-chips button:not(.is-on):hover,
+  .mv3-secondary:hover:not(:disabled),
+  .mv3-add:hover { background: var(--t-surface-3); color: var(--t-text); }
+}
+
+.mv3-primary,
+.mv3-secondary,
+.mv3-row,
+.mv3-chips button,
+.mv3-topics button,
+.mv3-lessons button {
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.mv3-primary:active:not(:disabled),
+.mv3-secondary:active:not(:disabled) { transform: scale(0.99); }
+
+/* Answer reveal: the text rises a few pixels under the card title. */
+.mv3-answer { animation: mv3-reveal 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes mv3-reveal { from { opacity: 0; transform: translateY(8px); } }
 
 @media (prefers-reduced-motion: reduce) {
   .mv3 *,
@@ -990,3 +1030,6 @@
     transition: none !important;
   }
 }
+
+/* The trainer moves focus to the card title for screen readers; a heading is not a control, so no ring. */
+.mv3-card-body h2:focus { outline: none; }
