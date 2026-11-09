@@ -556,6 +556,9 @@ Deno.serve(async (req: Request) => {
       if (birthday === "invalid") return json(req, { ok: false, error: "Invalid birthday" }, 400);
       const avatar = parseAvatar(body.avatar);
       if (avatar === "invalid") return json(req, { ok: false, error: "Invalid avatar URL" }, 400);
+      // Only touch the account link when the client sends it, so older
+      // frontends that don't know about user_id never wipe existing links.
+      const updatesLink = Object.prototype.hasOwnProperty.call(body, "user_id");
       const linkedUserId = cleanText(body.user_id, 120) || null;
       if (linkedUserId) {
         const { data: account, error: accountError } = await admin.from("users").select("id").eq("id", linkedUserId).maybeSingle();
@@ -572,7 +575,7 @@ Deno.serve(async (req: Request) => {
         birthday_month: birthday?.month ?? null,
         birthday_day: birthday?.day ?? null,
         avatar,
-        user_id: linkedUserId,
+        ...(updatesLink ? { user_id: linkedUserId } : {}),
         updated_by: profile.legacy_user_id,
       };
 
