@@ -13,7 +13,7 @@
   --t-line-strong: rgba(244, 238, 226, 0.16);
   --t-text: #F4F0E8;
   --t-text-2: #ADA79C;
-  --t-text-3: #79746B;
+  --t-text-3: #A09A90;
   --t-gold: #D1B46B;           /* brand gold */
   --t-gold-press: #BFA25A;
   --t-gold-tint: rgba(209, 180, 107, 0.12);
@@ -92,6 +92,11 @@ body {
   box-shadow: none !important;
 }
 
+.sidebar .nav-item::after,
+.sidebar .nav-item.is-active::after {
+  display: none !important;
+}
+
 .sidebar .nav-item.is-active svg {
   color: var(--t-gold);
 }
@@ -130,8 +135,23 @@ body {
 
 /* Mobile bottom navigation */
 @media (max-width: 980px) {
+  .topbar > div:first-child {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
   .topbar .topbar-logo {
     display: block;
+    width: 68px;
+    height: auto;
+    margin: 0;
+    padding-right: 14px;
+    border-right: 1px solid var(--t-line-strong);
+  }
+
+  .mobile-nav-item.is-active::before {
+    display: none !important;
   }
 
   .mobile-nav.legacy-mobile-nav,

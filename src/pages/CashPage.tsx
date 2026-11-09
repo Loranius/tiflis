@@ -1,4 +1,6 @@
 import {
+  ArrowDown,
+  ArrowUp,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -411,32 +413,36 @@ export function CashPage() {
   return (
     <div className="cv3" aria-busy={loading}>
       <div className="cv3-bar">
+        <div className="cv3-tabs" role="tablist" aria-label="Розділи каси">
+          <button type="button" role="tab" aria-selected={tab === 'overview'} className={tab === 'overview' ? 'is-on' : ''} onClick={() => changeTab('overview')}>Огляд</button>
+          <button type="button" role="tab" aria-selected={tab === 'top'} className={tab === 'top' ? 'is-on' : ''} onClick={() => changeTab('top')}>Топ каси</button>
+        </div>
         <div className="cv3-month" role="group" aria-label="Місяць">
           <button type="button" className="cv3-icon-btn" onClick={() => setMonth((value) => moveMonth(value, -1))} aria-label="Попередній місяць">
             <ChevronLeft size={20} />
           </button>
-          <strong>{MONTHS[monthIndex]} {monthDate.getFullYear()}</strong>
+          <strong>{MONTHS[monthIndex]}{monthDate.getFullYear() !== Number(currentMonth.slice(0, 4)) ? ` ${monthDate.getFullYear()}` : ''}</strong>
           <button type="button" className="cv3-icon-btn" onClick={() => setMonth((value) => moveMonth(value, 1))} aria-label="Наступний місяць">
             <ChevronRight size={20} />
           </button>
-          {!isCurrentMonth ? (
-            <button type="button" className="cv3-link" onClick={() => setMonth(currentMonth)}>До поточного</button>
-          ) : null}
         </div>
-        {data?.me.canViewAll ? (
-          <label className="cv3-select">
-            <span className="cv3-visually-hidden">Працівник</span>
-            <select value={viewUserId} onChange={(event) => setViewUserId(event.target.value)}>
-              {data.users.map((staff) => <option value={staff.id} key={staff.id}>{staff.name}</option>)}
-            </select>
-          </label>
-        ) : null}
       </div>
 
-      <div className="cv3-tabs" role="tablist" aria-label="Розділи каси">
-        <button type="button" role="tab" aria-selected={tab === 'overview'} className={tab === 'overview' ? 'is-on' : ''} onClick={() => changeTab('overview')}>Огляд</button>
-        <button type="button" role="tab" aria-selected={tab === 'top'} className={tab === 'top' ? 'is-on' : ''} onClick={() => changeTab('top')}>Топ каси</button>
-      </div>
+      {data?.me.canViewAll || !isCurrentMonth ? (
+        <div className="cv3-subbar">
+          {data?.me.canViewAll ? (
+            <label className="cv3-select">
+              <span className="cv3-visually-hidden">Працівник</span>
+              <select value={viewUserId} onChange={(event) => setViewUserId(event.target.value)}>
+                {data.users.map((staff) => <option value={staff.id} key={staff.id}>{staff.name}</option>)}
+              </select>
+            </label>
+          ) : <span />}
+          {!isCurrentMonth ? (
+            <button type="button" className="cv3-link" onClick={() => setMonth(currentMonth)}>До поточного місяця</button>
+          ) : null}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="cv3-alert" role="alert">
@@ -503,7 +509,9 @@ export function CashPage() {
                 <span>Місце в топі</span>
                 <strong>{focusRow ? `${focusRow.rank} з ${rows.length}` : '—'}</strong>
                 <small className={focusMovement > 0 ? 'is-up' : focusMovement < 0 ? 'is-down' : ''}>
-                  {!focusRow ? 'Ще немає каси' : focusMovement > 0 ? `↑ ${focusMovement} за день` : focusMovement < 0 ? `↓ ${Math.abs(focusMovement)} за день` : 'Без змін'}
+                  {focusMovement > 0 ? <ArrowUp size={12} aria-hidden="true" /> : null}
+                  {focusMovement < 0 ? <ArrowDown size={12} aria-hidden="true" /> : null}
+                  {!focusRow ? 'Ще немає каси' : focusMovement !== 0 ? `${Math.abs(focusMovement)} за день` : 'Без змін'}
                 </small>
               </div>
             </div>

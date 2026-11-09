@@ -259,7 +259,7 @@ export const AppShell = memo(function AppShell() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <img className="topbar-logo" src={tiflisLogo} alt="Tiflis restaurant" width={41} height={26} />
+            <img className="topbar-logo" src={tiflisLogo} alt="Tiflis restaurant" width={68} height={43} />
             <h1 key={activeKey} className="topbar-title-transition">{pages[activeKey].title}</h1>
           </div>
           <div className="topbar-profile">
@@ -325,10 +325,7 @@ export const AppShell = memo(function AppShell() {
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="mobile-more-heading">
-              <div>
-                <span className="eyebrow">Навігація</span>
-                <h2 id="mobile-more-title">Ще</h2>
-              </div>
+              <h2 id="mobile-more-title">Ще</h2>
               <button className="mobile-more-close" type="button" onClick={() => setMoreOpen(false)} aria-label="Закрити">
                 <X size={20} />
               </button>

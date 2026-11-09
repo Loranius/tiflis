@@ -2,7 +2,7 @@
 version: 1
 slug: "src-pages-cashpage-tsx"
 primary_target: "src/pages/CashPage.tsx"
-related_targets: ["src/components/CashLeaderboard.tsx"]
+related_targets: ["src/components/CashTopList.tsx"]
 ---
 
 # Каса (src/pages/CashPage.tsx)
@@ -21,7 +21,7 @@ OWN-WORLD: Brand charcoal #2B2A29 family as the ground and raised surfaces, bran
 
 STORY: The worker sees their payout, understands it as 4% + shifts + adjustments, records today's cash, and checks their place.
 
-FIRST VIEWPORT: Header with wordmark and the period segmented control (1–14 · 15–кінець · місяць). A 2×2 tile grid: До виплати (gold), Каса, Чайові, Місце в топі. Then the cash-by-day bar chart with today and the best day marked. The gold primary button «Внести касу за сьогодні» sits directly under the chart, reachable by thumb.
+FIRST VIEWPORT: The Огляд / Топ каси tabs share one row with a compact month switcher. Below, the period segmented control (1–14 · 15–кінець · місяць). A full-width payout card: «До виплати», the gold figure, and its 4% / shifts × 200 / adjustments breakdown (a quarter-tile could not hold the formula). Then three stat tiles: Каса, Чайові, Місце в топі. The gold primary button «Внести касу за сьогодні» sits above the cash-by-day chart so the thumb reaches it before the fixed bottom nav; the chart, with today marked by a gold label and baseline and the best day in gold, follows.
 
 FORM: canon (category standard, user's choice), reference monobank. seed:c82bdca305ee554b
 

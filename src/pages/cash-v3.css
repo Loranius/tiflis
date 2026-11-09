@@ -7,7 +7,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   color: var(--t-text);
   font-family: var(--t-font);
   font-variant-numeric: tabular-nums;
@@ -56,10 +56,14 @@
 /* Month + worker bar */
 .cv3-bar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 8px 12px;
+  gap: 12px;
+  border-bottom: 1px solid var(--t-line);
+}
+
+.cv3-bar .cv3-month {
+  padding-bottom: 6px;
 }
 
 .cv3-month {
@@ -69,15 +73,23 @@
 }
 
 .cv3-month strong {
-  min-width: 132px;
+  min-width: 76px;
   text-align: center;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
 }
 
+.cv3-subbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -6px;
+}
+
 .cv3-icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   border: 0;
@@ -118,8 +130,7 @@
 /* Tabs */
 .cv3-tabs {
   display: flex;
-  gap: 24px;
-  border-bottom: 1px solid var(--t-line);
+  gap: 20px;
 }
 
 .cv3-tabs button {
@@ -162,7 +173,7 @@
 }
 
 .cv3-seg button {
-  height: 36px;
+  height: 34px;
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -184,7 +195,7 @@
 .cv3-top {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   transition: opacity 0.2s ease;
 }
 
@@ -205,8 +216,8 @@
 .cv3-place {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 18px 18px 16px;
+  gap: 8px;
+  padding: 16px 16px 14px;
   border-radius: var(--t-radius-l);
   background: var(--t-surface-2);
 }
@@ -326,6 +337,9 @@
 }
 
 .cv3-stat small {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   font-size: 11.5px;
   line-height: 1.35;
   color: var(--t-text-2);
@@ -409,7 +423,7 @@
 
 /* Day chart */
 .cv3-chart {
-  --chart-h: 148px;
+  --chart-h: 132px;
   --label-h: 20px;
   position: relative;
   height: var(--chart-h);
@@ -509,7 +523,7 @@
 }
 
 .cv3-day.is-today .cv3-bar-track {
-  box-shadow: inset 0 0 0 1px rgba(209, 180, 107, 0.45);
+  background: linear-gradient(to top, var(--t-gold) 3px, transparent 3px);
 }
 
 .cv3-day:disabled .cv3-day-num {
@@ -878,7 +892,7 @@
   padding-left: 0;
 }
 
-.cv3-estimate {
+.cv3-sheet .cv3-estimate {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -892,12 +906,12 @@
   color: var(--t-text-2);
 }
 
-.cv3-estimate strong {
+.cv3-sheet .cv3-estimate strong {
   font-size: 17px;
   color: var(--t-gold);
 }
 
-.cv3-estimate small {
+.cv3-sheet .cv3-estimate small {
   flex-basis: 100%;
   font-size: 12px;
   color: var(--t-text-3);
