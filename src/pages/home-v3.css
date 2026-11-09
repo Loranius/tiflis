@@ -1,0 +1,666 @@
+/* Home: gold brand masthead over a day feed, on the Tiflis theme (see DESIGN.md). */
+
+.hv3 {
+  width: 100%;
+  min-width: 0;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--t-text);
+  font-family: var(--t-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.hv3 h1,
+.hv3 p {
+  margin: 0;
+}
+
+.hv3 button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.hv3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.hv3 :focus-visible {
+  outline: 2px solid var(--t-gold);
+  outline-offset: 2px;
+}
+
+/* Gold masthead: the brand field from the Tiflis sign. Slightly deeper in the evening so it does not glare in the hall. */
+.hv3-mast {
+  position: relative;
+  padding: 22px 20px 72px;
+  border-radius: 0 0 28px 28px;
+  background: var(--t-gold);
+  color: var(--t-surface-2);
+}
+
+.hv3-mast.is-evening {
+  background: #B89C58;
+}
+
+.hv3-mast-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.hv3-mast img {
+  display: block;
+  width: 150px;
+  height: auto;
+}
+
+.hv3-mast-date {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: rgba(43, 42, 41, 0.78);
+}
+
+.hv3-mast h1 {
+  margin-top: 16px;
+  font-size: clamp(23px, 6.4vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+/* Shift card overlapping the masthead */
+.hv3-shift {
+  position: relative;
+  z-index: 1;
+  margin: -60px 6px 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--t-radius-l);
+  border: 1px solid var(--t-line-strong);
+  background: var(--t-surface-2);
+  overflow: hidden;
+}
+
+.hv3-shift-card {
+  padding: 14px 16px 12px;
+}
+
+.hv3-shift-card.is-loading {
+  height: 84px;
+  animation: hv3-pulse 1.4s ease-in-out infinite;
+}
+
+.hv3-shift-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.hv3-shift-row strong {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.hv3-shift-row span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t-gold);
+  white-space: nowrap;
+}
+
+.hv3-shift-sub {
+  margin-top: 4px !important;
+  font-size: 14px;
+  color: var(--t-text-2);
+}
+
+.hv3-track {
+  position: relative;
+  height: 6px;
+  margin: 14px 0 6px;
+  border-radius: 3px;
+  background: var(--t-surface-3);
+}
+
+.hv3-track-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: rgba(209, 180, 107, 0.45);
+}
+
+.hv3-track-mark {
+  position: absolute;
+  top: -3px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--t-text-2);
+  background: var(--t-surface-2);
+}
+
+.hv3-track-now {
+  position: absolute;
+  top: -5px;
+  width: 3px;
+  height: 16px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--t-gold);
+}
+
+.hv3-track-ticks {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--t-text-3);
+}
+
+/* Faces of today's team */
+.hv3-team {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--t-line);
+  color: var(--t-text-2);
+}
+
+.hv3-team:hover {
+  background: var(--t-surface-3);
+}
+
+.hv3-faces {
+  display: flex;
+  flex: none;
+}
+
+.hv3-face {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  margin-left: -9px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 2px solid var(--t-surface-2);
+  background: var(--t-surface-3);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--t-text-2);
+}
+
+.hv3-face:first-child {
+  margin-left: 0;
+}
+
+.hv3-face img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hv3-face.is-me {
+  color: var(--t-gold);
+  box-shadow: inset 0 0 0 1.5px var(--t-gold);
+}
+
+.hv3-team-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+}
+
+/* Birthday notice */
+.hv3-bday,
+.hv3-tomorrow,
+.hv3-close.is-done {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--t-radius-l);
+  border: 1px solid var(--t-line);
+  background: var(--t-surface);
+}
+
+.hv3-bday:hover,
+.hv3-tomorrow:hover,
+.hv3-close.is-done:hover {
+  background: var(--t-surface-2);
+}
+
+.hv3-bday > span:nth-child(2),
+.hv3-tomorrow > span:first-child,
+.hv3-close.is-done > span:first-child {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hv3-bday strong,
+.hv3-tomorrow strong,
+.hv3-close.is-done strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.hv3-bday small,
+.hv3-tomorrow small,
+.hv3-close.is-done small {
+  font-size: 13px;
+  color: var(--t-text-2);
+}
+
+.hv3-bday-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--t-surface-3);
+  color: var(--t-text-2);
+}
+
+.hv3-bday.is-today {
+  border-color: rgba(209, 180, 107, 0.4);
+  background: var(--t-gold-wash);
+}
+
+.hv3-bday.is-today .hv3-bday-icon {
+  background: var(--t-gold-tint);
+  color: var(--t-gold);
+}
+
+.hv3 svg:last-child {
+  flex: none;
+  color: var(--t-text-3);
+}
+
+/* Day pulse */
+.hv3-pulse {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-auto-flow: column;
+  gap: 6px;
+}
+
+.hv3-pulse-item {
+  min-width: 0;
+  padding: 10px 6px;
+  border-radius: var(--t-radius-m);
+  border: 1px solid var(--t-line);
+  background: var(--t-surface);
+  text-align: center;
+}
+
+.hv3-pulse-item strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.hv3-pulse-item small {
+  font-size: 11.5px;
+  color: var(--t-text-3);
+}
+
+.hv3-pulse-item.is-gold strong {
+  color: var(--t-gold);
+}
+
+/* Close shift (after 22:00) */
+.hv3-close:not(.is-done) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--t-radius-l);
+  border: 1px solid rgba(209, 180, 107, 0.4);
+  background: var(--t-surface-2);
+}
+
+.hv3-close > strong {
+  font-size: 17px;
+}
+
+.hv3-close-fields {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 10px;
+}
+
+.hv3-close-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--t-text-2);
+}
+
+.hv3-money {
+  position: relative;
+  display: block;
+}
+
+.hv3-money input {
+  width: 100%;
+  height: 52px;
+  padding: 0 36px 0 14px;
+  border: 1px solid var(--t-line-strong);
+  border-radius: var(--t-radius-m);
+  background: var(--t-surface);
+  color: var(--t-text);
+  font: 700 20px var(--t-font);
+  caret-color: var(--t-gold);
+  color-scheme: dark;
+  appearance: textfield;
+}
+
+.hv3-money input::-webkit-outer-spin-button,
+.hv3-money input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.hv3-money input:focus {
+  outline: none;
+  border-color: var(--t-gold);
+}
+
+.hv3-money b {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--t-text-3);
+}
+
+.hv3-close button {
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--t-radius-m);
+  background: var(--t-gold);
+  color: var(--t-on-gold) !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+}
+
+.hv3-close button:disabled {
+  opacity: 0.6;
+}
+
+.hv3-close-error {
+  font-size: 14px;
+  color: var(--t-down-text);
+}
+
+/* Day feed */
+.hv3-feed {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 2px 0;
+}
+
+.hv3-ev {
+  display: grid;
+  grid-template-columns: 46px 16px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 50px;
+}
+
+.hv3-ev-time {
+  padding-top: 1px;
+  text-align: right;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--t-text-2);
+}
+
+.hv3-ev-rail {
+  position: relative;
+}
+
+.hv3-ev-rail::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--t-surface-3);
+}
+
+.hv3-ev.is-last .hv3-ev-rail::before {
+  bottom: auto;
+  height: 10px;
+}
+
+.hv3-ev-rail i {
+  position: absolute;
+  left: 2px;
+  top: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--t-text-3);
+  background: var(--t-ground);
+}
+
+.hv3-ev-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 14px;
+}
+
+.hv3-ev-body > strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.hv3-ev-body > small {
+  font-size: 13px;
+  color: var(--t-text-3);
+}
+
+.hv3-ev.is-past .hv3-ev-time,
+.hv3-ev.is-past .hv3-ev-body > strong {
+  color: var(--t-text-3);
+}
+
+.hv3-ev.is-past .hv3-ev-rail i {
+  border-color: var(--t-surface-3);
+  background: var(--t-surface-3);
+}
+
+.hv3-ev.is-now .hv3-ev-time,
+.hv3-ev.is-now .hv3-ev-body > strong {
+  color: var(--t-gold);
+}
+
+.hv3-ev.is-now .hv3-ev-rail i {
+  border-color: var(--t-gold);
+  background: var(--t-gold);
+}
+
+.hv3-ev.is-now {
+  min-height: 36px;
+}
+
+.hv3-tag {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--t-surface-3);
+  font-size: 12px;
+  color: var(--t-text-2);
+}
+
+.hv3-tasks {
+  display: flex;
+  flex-direction: column;
+  margin-top: 2px;
+  padding: 2px 12px;
+  border-radius: var(--t-radius-m);
+  border: 1px solid var(--t-line);
+  background: var(--t-surface);
+}
+
+.hv3-task {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 14.5px !important;
+}
+
+.hv3-task + .hv3-task {
+  border-top: 1px solid var(--t-line);
+}
+
+.hv3-box {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1.5px solid var(--t-line-strong);
+  color: var(--t-text);
+}
+
+.hv3-task.is-done .hv3-box {
+  border-color: var(--t-surface-3);
+  background: var(--t-surface-3);
+}
+
+.hv3-task.is-done > span:last-child {
+  color: var(--t-text-3);
+  text-decoration: line-through;
+}
+
+/* Alert */
+.hv3-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--t-radius-m);
+  background: var(--t-down-tint);
+  color: var(--t-down-text);
+  font-size: 14px;
+}
+
+.hv3-alert button {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--t-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hv3-spin {
+  animation: hv3-rotate 0.8s linear infinite;
+}
+
+@keyframes hv3-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes hv3-pulse {
+  50% { opacity: 0.55; }
+}
+
+/* Phones: the masthead bleeds to the screen edges and replaces the shell top bar on Home. */
+@media (max-width: 980px) {
+  .app-shell[data-page='today'] .topbar {
+    display: none !important;
+  }
+
+  .hv3-mast {
+    margin: -14px calc(-1 * max(14px, env(safe-area-inset-right))) 0 calc(-1 * max(14px, env(safe-area-inset-left)));
+    padding: calc(18px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 72px max(20px, env(safe-area-inset-left));
+  }
+}
+
+/* Wide screens: masthead as a banner, feed beside the summary. */
+@media (min-width: 981px) {
+  .hv3 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'mast mast'
+      'shift feed'
+      'bday feed'
+      'pulse feed'
+      'alert feed'
+      'close feed'
+      'tomorrow feed'
+      '. feed';
+    /* The tall feed spans every left row; the last empty row absorbs its extra height
+       so the left cards stay packed at the top. */
+    grid-template-rows: repeat(7, auto) 1fr;
+    align-items: start;
+    gap: 0 24px;
+  }
+
+  /* Empty rows (no alert, no close-shift) must not add gaps, so spacing lives on the cards. */
+  .hv3 > :not(.hv3-mast, .hv3-feed) { margin-bottom: 12px; }
+
+  .hv3-mast {
+    grid-area: mast;
+    border-radius: 24px;
+    padding: 28px 32px 84px;
+  }
+
+  .hv3-mast img {
+    width: 190px;
+  }
+
+  .hv3-shift { grid-area: shift; margin: -64px 0 0 24px; }
+  .hv3-bday { grid-area: bday; }
+  .hv3-pulse { grid-area: pulse; }
+  .hv3-alert { grid-area: alert; }
+  .hv3-close { grid-area: close; }
+  .hv3-tomorrow { grid-area: tomorrow; }
+  .hv3-feed { grid-area: feed; padding-top: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hv3 * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
