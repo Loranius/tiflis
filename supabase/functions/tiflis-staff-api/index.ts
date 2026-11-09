@@ -223,13 +223,15 @@ function parseStaffSave(body: Record<string, unknown>, current: LegacyStaff, adm
   const targetId = cleanText(body.user_id, 120);
   const login = admin ? cleanLogin(body.login) : current.login;
   const displayName = cleanText(body.display_name, 120);
-  const avatar = parseAvatar(body.avatar);
+  const rawAvatar = cleanText(body.avatar, 1000);
+  const avatar = rawAvatar && rawAvatar === current.avatar ? current.avatar : parseAvatar(body.avatar);
   const birthday = parseDate(body.birthday);
   const traineeDays = admin ? parseTraineeDays(body.trainee_days) : Number(current.trainee_days || 0);
   const role = admin ? parseRole(body.role) : normalizeRole(current.role);
   const role2 = admin ? parseRole(body.role2, true) : current.role2;
 
-  if (!targetId || !displayName || !validLogin(login) || avatar === "invalid") return null;
+  // A non-admin never changes their login, so a legacy login that predates the rule must not block their own save.
+  if (!targetId || !displayName || (admin && !validLogin(login)) || avatar === "invalid") return null;
   if (body.birthday && !birthday) return null;
   if (traineeDays === null || !role) return null;
   if (role2 && role2 === role) return null;
@@ -342,15 +344,18 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (action === "staff_bootstrap") {
-      const now = new Date();
-      const today = now.toISOString().slice(0, 10);
+      // Dates are Kyiv calendar days; the window covers this month (for the count) and 35 days ahead (next shift).
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(new Date());
       const monthStart = `${today.slice(0, 7)}-01`;
-      const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+      const [year, month] = today.split("-").map(Number);
+      const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+      const horizon = new Date(Date.parse(`${today}T00:00:00Z`) + 35 * 86_400_000).toISOString().slice(0, 10);
+      const scheduleEnd = horizon > nextMonth ? horizon : nextMonth;
 
       const [usersResult, profilesResult, scheduleResult] = await Promise.all([
         admin.from("users").select("id,login,role,role2,display_name,nick,avatar,tg_id,tg_username,ig,fired,created_at,display_role,birthday,trainee_days,zodiac,can_notify,credo,credential_source,updated_at").order("fired", { ascending: true }).order("display_name", { ascending: true }),
         admin.from("staff_profiles").select("user_id,legacy_user_id,role,role2,active,can_notify"),
-        admin.from("schedule").select("user_id,date,shift").gte("date", monthStart).lt("date", nextMonth).order("date", { ascending: true }),
+        admin.from("schedule").select("user_id,date,shift").gte("date", monthStart).lt("date", scheduleEnd).order("date", { ascending: true }),
       ]);
       if (usersResult.error) throw usersResult.error;
       if (profilesResult.error) throw profilesResult.error;
@@ -366,17 +371,22 @@ Deno.serve(async (req: Request) => {
         const shift = String(row.shift || "");
         if (!shift || shift === "Х" || shift === "О") continue;
         const userId = String(row.user_id || "");
-        monthShifts.set(userId, (monthShifts.get(userId) || 0) + 1);
+        if (String(row.date) < nextMonth) monthShifts.set(userId, (monthShifts.get(userId) || 0) + 1);
         if (String(row.date) >= today && !nextShift.has(userId)) nextShift.set(userId, { date: String(row.date), shift });
       }
 
-      const users = (usersResult.data ?? []) as LegacyStaff[];
+      const manages = isAdmin(profile);
+      // Account state (login, sign-in, archive) is for admins only.
+      const users = ((usersResult.data ?? []) as LegacyStaff[]).filter((staff) => manages || staff.fired !== true);
       const roleKeys = [...new Set(users.flatMap((staff) => [staff.id === "sysadmin" ? "sysadmin" : normalizeRole(staff.role), staff.role2 ? normalizeRole(staff.role2) : null]).filter((role): role is string => Boolean(role)))];
       return json(req, {
         ok: true,
-        me: { legacyUserId: profile.legacy_user_id, canManage: isAdmin(profile) },
+        me: { legacyUserId: profile.legacy_user_id, canManage: manages },
         roles: roleKeys.map((key) => ({ key, label: ROLE_LABELS[key] || key })).sort((left, right) => left.label.localeCompare(right.label, "uk")),
-        users: users.map((staff) => safeStaff(staff, linked, nextShift, monthShifts)),
+        users: users.map((staff) => {
+          const safe = safeStaff(staff, linked, nextShift, monthShifts);
+          return manages ? safe : { ...safe, login: "", authLinked: false, credentialSource: "" };
+        }),
       });
     }
 
@@ -411,6 +421,16 @@ Deno.serve(async (req: Request) => {
         throw error;
       }
 
+      // One birthday: the roster row linked to this account (used by the tab and the Telegram reminder) follows the profile.
+      if (parsed.birthday) {
+        const { error: rosterError } = await admin.from("staff_birthdays").update({
+          birthday_month: Number(parsed.birthday.slice(5, 7)),
+          birthday_day: Number(parsed.birthday.slice(8, 10)),
+          updated_by: profile.legacy_user_id,
+        }).eq("user_id", targetId);
+        if (rosterError) throw rosterError;
+      }
+
       if (manages) {
         const { error: profileUpdateError } = await admin.from("staff_profiles").update({
           display_name: parsed.displayName,
@@ -427,8 +447,9 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "staff_upload_avatar") {
-      // Anyone may upload their own photo; admins may upload for any colleague. The URL is saved with staff_save.
-      const targetId = cleanText(body.user_id, 120) || profile.legacy_user_id;
+      // The upload is unbound: it only returns a URL, which staff_save / staff_create / birthdays_save then store.
+      // Anyone may upload for themselves; naming another colleague (or no one, for a new hire) needs an admin.
+      const targetId = cleanText(body.user_id, 120);
       if (targetId !== profile.legacy_user_id && !isAdmin(profile)) {
         return json(req, { ok: false, error: "Недостатньо прав" }, 403);
       }

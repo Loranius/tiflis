@@ -462,6 +462,16 @@
   text-decoration: none;
 }
 
+.st3-sheet-body h2:focus { outline: none; }
+
+.st3-sheet-error {
+  padding: 10px 12px;
+  border-radius: var(--t-radius-s);
+  background: var(--t-down-tint);
+  color: var(--t-down-text);
+  font-size: 14px;
+}
+
 .st3-admin-note {
   font-size: 13px;
   color: var(--t-text-3);

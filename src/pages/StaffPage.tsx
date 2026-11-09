@@ -97,7 +97,7 @@ const GROUPS: { key: string; title: string; one: string; roles: string[] }[] = [
 ];
 
 const ROLE_LABEL: Record<string, string> = {
-  sysadmin: 'Сисадмін', admin: 'Адміністратор', chef: 'Шеф-кухар', cook: 'Кухар', waiter: 'Офіціант',
+  sysadmin: 'Адміністратор', admin: 'Адміністратор', chef: 'Шеф-кухар', cook: 'Кухар', waiter: 'Офіціант',
   bar: 'Бармен', barman: 'Бармен', sommelier: 'Сомельє', hostess: 'Хостес', runner: 'Ранер', trainee: 'Стажер', staff: 'Працівник',
 };
 
@@ -118,10 +118,15 @@ function birthdayLabel(value: string | null): string | null {
   return new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long' }).format(new Date(`${value}T12:00:00`));
 }
 
+/** What a schedule code means for a colleague; codes the reader would not know stay out of the profile. */
+/** Labels as the schedule API names the codes (tiflis-secure-api WAITER_SHIFT_TYPES). */
+const SHIFT_NAMES: Record<string, string> = { 'Р': 'робоча', 'СН': 'сніданки', 'Б': 'бар', 'Р/Б': 'робоча + бар', 'СН/Б': 'сніданки + бар' };
+
 function shiftLabel(value: StaffShift | null): string | null {
   if (!value) return null;
   const date = new Intl.DateTimeFormat('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${value.date}T12:00:00`));
-  return `${date} · ${value.shift}`;
+  const name = SHIFT_NAMES[value.shift];
+  return name ? `${date} · ${name}` : date;
 }
 
 function plural(count: number, one: string, few: string, many: string): string {
@@ -151,8 +156,9 @@ function createEditor(member?: StaffMember): Editor {
     displayName: member?.displayName || '',
     nick: member?.nick || '',
     avatar: member?.avatar || '',
-    role: member?.role === 'sysadmin' ? 'admin' : member?.role || 'waiter',
-    role2: member?.role2 || '',
+    // The API reports legacy bartenders as `barman`; the form offers `bar`, so map it or the select shows the wrong role.
+    role: member?.role === 'sysadmin' ? 'admin' : member?.role === 'barman' ? 'bar' : member?.role || 'waiter',
+    role2: member?.role2 === 'barman' ? 'bar' : member?.role2 || '',
     displayRole: member?.displayRole || '',
     telegramUsername: member?.telegramUsername || '',
     instagram: member?.instagram || '',
@@ -176,6 +182,10 @@ export function StaffPage() {
   const [selected, setSelected] = useState<StaffMember | null>(null);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [credential, setCredential] = useState<Credential | null>(null);
+  const [acting, setActing] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => { setActionError(null); }, [selected]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -206,7 +216,7 @@ export function StaffPage() {
     if (member.fired !== archive) return false;
     if (group !== 'all' && groupOf(member.role).key !== group) return false;
     if (!needle) return true;
-    return [member.displayName, member.nick, member.login, personRole(member)].join(' ').toLocaleLowerCase('uk-UA').includes(needle);
+    return [member.displayName, member.nick, canManage ? member.login : '', personRole(member)].join(' ').toLocaleLowerCase('uk-UA').includes(needle);
   });
 
   const wall = GROUPS.map((entry) => ({
@@ -216,25 +226,34 @@ export function StaffPage() {
       .sort((left, right) => (left.id === meId ? -1 : right.id === meId ? 1 : left.displayName.localeCompare(right.displayName, 'uk'))),
   })).filter((entry) => entry.people.length);
 
+  // Admin actions report inside the open profile (the page behind it is inert), and one runs at a time.
   async function setActive(member: StaffMember, active: boolean) {
-    setError(null);
+    if (acting) return;
+    setActing(true);
+    setActionError(null);
     try {
       await secureApi({ action: 'staff_set_active', user_id: member.id, active }, 'tiflis-staff-api');
       setSelected(null);
       await load();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Статус не змінено.');
+      setActionError(reason instanceof Error ? reason.message : 'Статус не змінено.');
+    } finally {
+      setActing(false);
     }
   }
 
   async function resetPassword(member: StaffMember) {
-    setError(null);
+    if (acting) return;
+    setActing(true);
+    setActionError(null);
     try {
       const response = await secureApi<{ ok: true; temporaryPassword: string }>({ action: 'staff_reset_password', user_id: member.id }, 'tiflis-staff-api');
       setSelected(null);
       setCredential({ login: member.login, password: response.temporaryPassword, title: 'Новий тимчасовий пароль' });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Пароль не оновлено.');
+      setActionError(reason instanceof Error ? reason.message : 'Пароль не оновлено.');
+    } finally {
+      setActing(false);
     }
   }
 
@@ -258,7 +277,7 @@ export function StaffPage() {
             {query ? <button type="button" onClick={() => setQuery('')} aria-label="Очистити пошук"><X size={16} /></button> : null}
           </label>
 
-          <div className="st3-chips" aria-label="Група">
+          <div className="st3-chips" role="group" aria-label="Група">
             <button type="button" aria-pressed={group === 'all'} className={group === 'all' ? 'is-on' : ''} onClick={() => setGroup('all')}>Уся команда</button>
             {present.map((entry) => (
               <button key={entry.key} type="button" aria-pressed={group === entry.key} className={group === entry.key ? 'is-on' : ''} onClick={() => setGroup(entry.key)}>{entry.title}</button>
@@ -310,6 +329,8 @@ export function StaffPage() {
             onEdit={() => { setEditor(createEditor(selected)); setSelected(null); }}
             onArchive={(active) => void setActive(selected, active)}
             onReset={() => void resetPassword(selected)}
+            busy={acting}
+            error={actionError}
           />
         </Overlay>
       ) : null}
@@ -345,13 +366,15 @@ function Portrait({ member, size = 'wall' }: { member: Pick<StaffMember, 'avatar
   );
 }
 
-function Profile({ member, isMe, canManage, onClose, onEdit, onArchive, onReset }: {
-  member: StaffMember; isMe: boolean; canManage: boolean;
+function Profile({ member, isMe, canManage, busy, error, onClose, onEdit, onArchive, onReset }: {
+  member: StaffMember; isMe: boolean; canManage: boolean; busy: boolean; error: string | null;
   onClose: () => void; onEdit: () => void; onArchive: (active: boolean) => void; onReset: () => void;
 }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
+  // Focus lands on the name, not the close button, so the sheet opens without a ring on ✕.
+  const nameRef = useRef<HTMLHeadingElement>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
-  useLayoutEffect(() => { closeRef.current?.setAttribute('autofocus', ''); }, []);
+  const [confirmReset, setConfirmReset] = useState(false);
+  useLayoutEffect(() => { nameRef.current?.setAttribute('autofocus', ''); }, []);
 
   const facts = [
     birthdayLabel(member.birthday) ? ['День народження', birthdayLabel(member.birthday)] : null,
@@ -364,10 +387,10 @@ function Profile({ member, isMe, canManage, onClose, onEdit, onArchive, onReset 
       <section className="st3-sheet" role="dialog" aria-modal="true" aria-labelledby="st3-profile-name" onMouseDown={(event) => event.stopPropagation()}>
         <div className="st3-hero">
           <Portrait member={member} size="hero" />
-          <button ref={closeRef} type="button" className="st3-close" onClick={onClose} aria-label="Закрити"><X size={20} /></button>
+          <button type="button" className="st3-close" onClick={onClose} aria-label="Закрити"><X size={20} /></button>
         </div>
         <div className="st3-sheet-body">
-          <h2 id="st3-profile-name">{member.displayName}</h2>
+          <h2 id="st3-profile-name" ref={nameRef} tabIndex={-1}>{member.displayName}</h2>
           <p className="st3-role">{personRole(member)}{member.nick ? ` · «${member.nick}»` : ''}{member.traineeDays > 0 ? ` · стажування ${member.traineeDays} ${plural(member.traineeDays, 'день', 'дні', 'днів')}` : ''}</p>
 
           {member.credo ? <blockquote className="st3-credo">{member.credo}</blockquote> : null}
@@ -386,20 +409,26 @@ function Profile({ member, isMe, canManage, onClose, onEdit, onArchive, onReset 
           ) : null}
 
           {canManage ? (
-            <p className="st3-admin-note">Логін <b>{member.login}</b> · {member.authLinked ? 'входить у портал' : 'ще жодного разу не входив'}{member.fired ? ' · в архіві' : ''}</p>
+            <p className="st3-admin-note">Логін <b>{member.login}</b> · {member.authLinked ? 'входить у портал' : 'ще без входу в портал'}{member.fired ? ' · в архіві' : ''}</p>
           ) : null}
+
+          {error ? <p className="st3-sheet-error" role="alert">{error}</p> : null}
 
           {isMe || canManage ? (
             <div className="st3-actions">
               <button type="button" className="st3-secondary" onClick={onEdit}><Edit3 size={17} aria-hidden="true" /> {isMe ? 'Редагувати мій профіль' : 'Редагувати'}</button>
-              {canManage && member.authLinked ? <button type="button" className="st3-secondary" onClick={onReset}><KeyRound size={17} aria-hidden="true" /> Скинути пароль</button> : null}
+              {canManage && member.authLinked && !isMe ? (
+                confirmReset
+                  ? <button type="button" className="st3-danger is-confirm" onClick={onReset} disabled={busy}><KeyRound size={17} aria-hidden="true" /> Так, скинути пароль</button>
+                  : <button type="button" className="st3-secondary" onClick={() => setConfirmReset(true)} disabled={busy}><KeyRound size={17} aria-hidden="true" /> Скинути пароль</button>
+              ) : null}
               {canManage && member.id !== 'sysadmin' && !isMe ? (
                 member.fired ? (
-                  <button type="button" className="st3-secondary" onClick={() => onArchive(true)}><UserCheck size={17} aria-hidden="true" /> Повернути в команду</button>
+                  <button type="button" className="st3-secondary" onClick={() => onArchive(true)} disabled={busy}><UserCheck size={17} aria-hidden="true" /> Повернути в команду</button>
                 ) : confirmArchive ? (
-                  <button type="button" className="st3-danger is-confirm" onClick={() => onArchive(false)}><UserRoundX size={17} aria-hidden="true" /> Так, перенести в архів</button>
+                  <button type="button" className="st3-danger is-confirm" onClick={() => onArchive(false)} disabled={busy}><UserRoundX size={17} aria-hidden="true" /> Так, перенести в архів</button>
                 ) : (
-                  <button type="button" className="st3-danger" onClick={() => setConfirmArchive(true)}>Перенести в архів</button>
+                  <button type="button" className="st3-danger" onClick={() => setConfirmArchive(true)} disabled={busy}>Перенести в архів</button>
                 )
               ) : null}
             </div>
@@ -439,7 +468,7 @@ function ProfileEditor({ initial, canManage, onClose, onDone }: {
     setProblem(null);
     try {
       const { dataUrl, contentType } = await resizePhotoFile(file, 900);
-      const response = await secureApi<{ ok: true; avatar: string }>({ action: 'staff_upload_avatar', user_id: form.id, data: dataUrl, content_type: contentType }, 'tiflis-staff-api');
+      const response = await secureApi<{ ok: true; avatar: string }>({ action: 'staff_upload_avatar', ...(creating ? {} : { user_id: form.id }), data: dataUrl, content_type: contentType }, 'tiflis-staff-api');
       set('avatar', response.avatar);
     } catch (reason) {
       setProblem(reason instanceof Error ? reason.message : 'Не вдалося завантажити фото.');
@@ -449,7 +478,7 @@ function ProfileEditor({ initial, canManage, onClose, onDone }: {
   }
 
   async function save() {
-    if (!form.displayName.trim() || (canManage && !form.login.trim())) { setProblem('Вкажи імʼя і логін.'); return; }
+    if (!form.displayName.trim() || (canManage && !form.login.trim())) { setProblem(canManage ? 'Вкажи імʼя і логін.' : 'Вкажи імʼя.'); return; }
     setBusy('save');
     setProblem(null);
     const payload = {
@@ -503,10 +532,10 @@ function ProfileEditor({ initial, canManage, onClose, onDone }: {
 
         <div className="st3-form">
           <label className="is-wide"><span>Імʼя і прізвище</span><input ref={nameRef} value={form.displayName} onChange={(event) => set('displayName', event.target.value)} maxLength={120} /></label>
-          <label><span>Нік</span><input value={form.nick} onChange={(event) => set('nick', event.target.value)} maxLength={80} placeholder="Як тебе кличуть" /></label>
+          <label><span>Нік</span><input value={form.nick} onChange={(event) => set('nick', event.target.value)} maxLength={80} placeholder={creating || canManage ? 'Як кличуть у команді' : 'Як тебе кличуть'} /></label>
           <label><span>День народження</span><input type="date" value={form.birthday} onChange={(event) => set('birthday', event.target.value)} /></label>
-          <label><span>Telegram</span><input value={form.telegramUsername} onChange={(event) => set('telegramUsername', event.target.value)} maxLength={64} placeholder="username" autoCapitalize="none" /></label>
-          <label><span>Instagram</span><input value={form.instagram} onChange={(event) => set('instagram', event.target.value)} maxLength={64} placeholder="username" autoCapitalize="none" /></label>
+          <label><span>Telegram</span><input value={form.telegramUsername} onChange={(event) => set('telegramUsername', event.target.value)} maxLength={64} placeholder="нік без @" autoCapitalize="none" /></label>
+          <label><span>Instagram</span><input value={form.instagram} onChange={(event) => set('instagram', event.target.value)} maxLength={64} placeholder="нік без @" autoCapitalize="none" /></label>
           <label className="is-wide"><span>Кредо / коротко про себе</span><textarea value={form.credo} onChange={(event) => set('credo', event.target.value)} maxLength={1000} rows={2} /></label>
 
           {canManage ? (
@@ -525,7 +554,7 @@ function ProfileEditor({ initial, canManage, onClose, onDone }: {
           ) : null}
         </div>
 
-        {creating ? <p className="st3-hint">Після створення порталу покаже тимчасовий пароль — один раз.</p> : null}
+        {creating ? <p className="st3-hint">Після створення портал покаже тимчасовий пароль — один раз.</p> : null}
         {problem ? <p className="st3-form-error" role="alert">{problem}</p> : null}
 
         <div className="st3-editor-actions">
@@ -563,7 +592,7 @@ function CredentialSheet({ credential, onClose }: { credential: Credential; onCl
           <div><dt>Тимчасовий пароль</dt><dd>{credential.password}</dd></div>
         </dl>
         <button ref={copyRef} type="button" className="st3-primary" onClick={() => void copy()}>{copied ? <Check size={17} aria-hidden="true" /> : <Copy size={17} aria-hidden="true" />} {copied ? 'Скопійовано' : 'Скопіювати дані'}</button>
-        <button type="button" className="st3-secondary" onClick={onClose}>Я передав дані — закрити</button>
+        <button type="button" className="st3-secondary" onClick={onClose}>Дані передано — закрити</button>
       </section>
     </div>
   );

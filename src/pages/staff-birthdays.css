@@ -1,5 +1,5 @@
 /* Staff · Дні народження — the birthday roster in the charcoal + gold world (DESIGN.md). Sorted by the next birthday;
-   the coming week is lifted with the gold wash. Gold only for «скоро», the primary action and selection. */
+   the coming week is lifted one surface step with a strong hairline. Gold only for the primary action. */
 
 .birthdays-tab-v1 {
   display: flex;
@@ -174,7 +174,7 @@
 
 .birthdays-grid-v1 article.is-soon {
   border-color: var(--t-line-strong);
-  background: var(--t-gold-wash);
+  background: var(--t-surface-2);
 }
 
 .birthdays-avatar-v1 {
@@ -247,8 +247,8 @@
   color: var(--t-text-3);
 }
 
-.is-soon .birthdays-card-footer-v1 em { color: var(--t-gold); font-weight: 600; }
-.is-soon .birthdays-card-footer-v1 b svg { color: var(--t-gold); }
+.is-soon .birthdays-card-footer-v1 em { color: var(--t-text); font-weight: 600; }
+.is-soon .birthdays-card-footer-v1 b svg { color: var(--t-text-2); }
 
 .birthdays-edit-v1 {
   flex: none;
@@ -379,6 +379,12 @@
   color: var(--t-text-2);
   font-size: 14px;
   font-weight: 600;
+}
+
+.birthdays-editor-error-v1 {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--t-down-text);
 }
 
 .birthdays-editor-actions-v1 {
