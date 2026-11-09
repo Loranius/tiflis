@@ -46,8 +46,14 @@ Built for this one restaurant and its real working rules, not a generic HR or PO
 
 ## Brand Commitments
 
-- Name: «Тифліс». Georgian restaurant. The Georgian letter თ is used as the current app icon mark.
-- The restaurant has an existing brand identity. Brand files (logo, menu, signage or brand book) are **pending from the owner**; until they arrive, do not treat the portal's current colours or fonts (dark green, wine accent, Prata) as confirmed brand, and do not invent a logo.
+- Name: «Тифліс», written in the logo as **Tiflis** with the descriptor "restaurant". Georgian restaurant.
+- **Logo (confirmed, supplied by the owner):** the Tiflis wordmark: flared, high-contrast stems, both i's dotted with a square diamond, a ligature-like "fl", and a lowercase "restaurant" line beneath. Files in `brand/`:
+  - on a colour field: `tiflis-logo-gold-bg-white.png`, `tiflis-logo-gold-bg-charcoal.png`, `tiflis-logo-charcoal-bg-white.png`, `tiflis-logo-white-bg-gold.png`, `tiflis-logo-white-bg-charcoal.png` (2363×2363);
+  - transparent: `tiflis-logo-white-transparent.png`, `tiflis-logo-black-transparent.png`, `tiflis-logo-gold-transparent.png` (1847×1176).
+  Use the supplied files as-is; do not redraw, re-letter or recolour the wordmark beyond these variants. No vector (SVG/PDF) master has been supplied yet.
+- **Brand colours (sampled from the supplied logo files):** gold `#D1B46B`, charcoal `#2B2A29`, white. These three are the only confirmed brand colours.
+- The wordmark's typeface is not identified, and no brand text font has been supplied.
+- The portal's current dark green, wine accent, Prata font and the Georgian letter თ in the app icon are the old portal's choices, not confirmed brand.
 - Voice toward staff: Ukrainian, direct and informal-polite (the current copy addresses staff with "ти": «Введи свій робочий логін і пароль»).
 
 ## Evidence on Hand
