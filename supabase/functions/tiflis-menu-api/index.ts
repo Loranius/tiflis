@@ -129,13 +129,35 @@ function parsePhoto(value: unknown): string | null | "invalid" {
   return ownedPhotoPath(photo) ? photo : "invalid";
 }
 
+// Only photos we uploaded count as "ours": same Supabase origin, the public menu/ folder, and an exact
+// generated name (uuid.ext from menu_upload_photo, timestamp_random.ext from the older uploader).
+// Anything else is rejected on save and never deleted from storage.
+const OWNED_PHOTO_NAME = /^menu\/(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{10,16}_[a-z0-9]{4,20})\.(?:jpe?g|png|webp)$/;
+
 function ownedPhotoPath(url: string | null): string | null {
   if (!url) return null;
-  const marker = `/object/public/${PHOTOS_BUCKET}/`;
-  const index = url.indexOf(marker);
-  if (index === -1) return null;
-  const path = url.slice(index + marker.length);
-  return path.startsWith(PHOTOS_PATH_PREFIX) ? path : null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" || parsed.origin !== new URL(SUPABASE_URL).origin) return null;
+  if (parsed.search || parsed.hash) return null;
+  const prefix = `/storage/v1/object/public/${PHOTOS_BUCKET}/`;
+  if (!parsed.pathname.startsWith(prefix)) return null;
+  const path = parsed.pathname.slice(prefix.length);
+  return OWNED_PHOTO_NAME.test(path) ? path : null;
+}
+
+async function removePhotoIfUnused(
+  client: ReturnType<typeof createClient>,
+  url: string | null,
+): Promise<void> {
+  const path = ownedPhotoPath(url);
+  if (!path || !url) return;
+  const { count } = await client.from("menu_items").select("id", { count: "exact", head: true }).eq("photo", url);
+  if ((count ?? 0) === 0) await client.storage.from(PHOTOS_BUCKET).remove([path]);
 }
 
 function parseAllergens(value: unknown): string[] {
@@ -314,8 +336,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       const { error } = await serviceClient.from("menu_items").delete().eq("id", id);
       if (error) throw error;
-      const oldPath = ownedPhotoPath(existing?.photo ?? null);
-      if (oldPath) await serviceClient.storage.from(PHOTOS_BUCKET).remove([oldPath]);
+      await removePhotoIfUnused(serviceClient, existing?.photo ?? null);
       return json(req, { ok: true });
     }
 
@@ -394,8 +415,7 @@ Deno.serve(async (req: Request) => {
         throw error;
       }
       if (existing?.photo && existing.photo !== item.photo) {
-        const oldPath = ownedPhotoPath(existing.photo);
-        if (oldPath) await serviceClient.storage.from(PHOTOS_BUCKET).remove([oldPath]);
+        await removePhotoIfUnused(serviceClient, existing.photo);
       }
       return json(req, { ok: true, item: data });
     }
