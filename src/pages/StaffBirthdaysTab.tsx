@@ -16,12 +16,20 @@ interface BirthdayPerson {
   birthday_month: number | null;
   birthday_day: number | null;
   avatar: string | null;
+  user_id: string | null;
+}
+
+interface PortalAccount {
+  id: string;
+  display_name: string | null;
+  login: string;
 }
 
 interface BirthdaysBootstrapResponse {
   ok: true;
   permissions: { canManage: boolean };
   people: BirthdayPerson[];
+  accounts?: PortalAccount[];
 }
 
 interface BirthdayEditor {
@@ -34,6 +42,7 @@ interface BirthdayEditor {
   birthdayMonth: string;
   birthdayDay: string;
   avatar: string;
+  userId: string;
 }
 
 const POSITION_ORDER = [
@@ -130,6 +139,7 @@ function createEditor(person?: BirthdayPerson): BirthdayEditor {
     birthdayMonth: person?.birthday_month ? String(person.birthday_month) : '',
     birthdayDay: person?.birthday_day ? String(person.birthday_day) : '',
     avatar: person?.avatar || '',
+    userId: person?.user_id || '',
   };
 }
 
@@ -221,6 +231,7 @@ export function StaffBirthdaysTab() {
         birthday_month: editor.birthdayMonth ? Number(editor.birthdayMonth) : null,
         birthday_day: editor.birthdayDay ? Number(editor.birthdayDay) : null,
         avatar: editor.avatar,
+        user_id: editor.userId || null,
       }, 'tiflis-staff-api');
       setEditor(null);
       await load();
@@ -247,6 +258,7 @@ export function StaffBirthdaysTab() {
   }
 
   const canManage = data?.permissions.canManage ?? false;
+  const accounts = data?.accounts ?? [];
   const editorDetailOptions = editor ? detailOptions(editor.position) : null;
   const editorDetail2Options = editor?.position2 ? detailOptions(editor.position2) : null;
 
@@ -377,6 +389,20 @@ export function StaffBirthdaysTab() {
                   value={editor.birthdayDay}
                   onChange={(event) => setEditor({ ...editor, birthdayDay: event.target.value })}
                 />
+              </label>
+
+              <label className="is-wide">
+                <span>Акаунт у порталі</span>
+                <select value={editor.userId} onChange={(event) => setEditor({ ...editor, userId: event.target.value })}>
+                  <option value="">Не привʼязано</option>
+                  {editor.userId && !accounts.some((account) => account.id === editor.userId)
+                    ? <option value={editor.userId}>Неактивний акаунт · {editor.userId}</option>
+                    : null}
+                  {accounts.map((account) => (
+                    <option value={account.id} key={account.id}>{account.display_name || account.login} · {account.login}</option>
+                  ))}
+                </select>
+                <small>Цій людині не прийде Telegram-нагадування про її власний день народження.</small>
               </label>
 
               <label className="is-wide"><span>Avatar, HTTPS URL</span><input type="url" value={editor.avatar} maxLength={1000} onChange={(event) => setEditor({ ...editor, avatar: event.target.value })} placeholder="https://…" /></label>

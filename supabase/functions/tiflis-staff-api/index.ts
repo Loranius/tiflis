@@ -424,13 +424,27 @@ Deno.serve(async (req: Request) => {
     if (action === "birthdays_bootstrap") {
       const { data, error } = await admin
         .from("staff_birthdays")
-        .select("id,full_name,position,position_detail,position2,position2_detail,birthday_month,birthday_day,avatar,updated_at")
+        .select("id,full_name,position,position_detail,position2,position2_detail,birthday_month,birthday_day,avatar,user_id,updated_at")
         .order("full_name", { ascending: true });
       if (error) throw error;
+      const canManage = isAdmin(profile);
+      // Admins link roster entries to portal accounts so the day-before
+      // Telegram reminder skips the birthday person.
+      let accounts: { id: string; display_name: string | null; login: string }[] = [];
+      if (canManage) {
+        const accountsResult = await admin
+          .from("users")
+          .select("id,display_name,login")
+          .or("fired.is.null,fired.eq.false")
+          .order("display_name", { ascending: true });
+        if (accountsResult.error) throw accountsResult.error;
+        accounts = accountsResult.data ?? [];
+      }
       return json(req, {
         ok: true,
-        permissions: { canManage: isAdmin(profile) },
+        permissions: { canManage },
         people: data ?? [],
+        accounts,
       });
     }
 
@@ -542,6 +556,12 @@ Deno.serve(async (req: Request) => {
       if (birthday === "invalid") return json(req, { ok: false, error: "Invalid birthday" }, 400);
       const avatar = parseAvatar(body.avatar);
       if (avatar === "invalid") return json(req, { ok: false, error: "Invalid avatar URL" }, 400);
+      const linkedUserId = cleanText(body.user_id, 120) || null;
+      if (linkedUserId) {
+        const { data: account, error: accountError } = await admin.from("users").select("id").eq("id", linkedUserId).maybeSingle();
+        if (accountError) throw accountError;
+        if (!account) return json(req, { ok: false, error: "Акаунт не знайдено" }, 400);
+      }
 
       const row = {
         full_name: fullName,
@@ -552,6 +572,7 @@ Deno.serve(async (req: Request) => {
         birthday_month: birthday?.month ?? null,
         birthday_day: birthday?.day ?? null,
         avatar,
+        user_id: linkedUserId,
         updated_by: profile.legacy_user_id,
       };
 

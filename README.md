@@ -33,6 +33,24 @@ npm run dev
 
 Publishable key дозволено використовувати у фронтенді. `service_role`, Telegram token та інші привілейовані секрети зберігаються тільки в Supabase Edge Function secrets.
 
+## Нагадування про дні народження (Telegram)
+
+Щодня о 07:00 UTC (09:00/10:00 за Києвом) `pg_cron` викликає Edge Function `tiflis-birthday-reminders`. Якщо завтра в когось із розділу «Персонал → День народження» день народження, усі активні користувачі з привʼязаним Telegram отримують нагадування — окрім самого іменинника. Іменинника визначаємо за полем «Акаунт у порталі» в редакторі запису (міграція автоматично привʼязала однозначні збіги за імʼям); для непривʼязаних записів — за збігом імені. Повторний запуск того ж дня не дублює повідомлення (`birthday_reminder_deliveries`).
+
+Налаштування після деплою:
+
+```bash
+supabase secrets set BIRTHDAY_CRON_SECRET=<випадковий-рядок>
+supabase functions deploy tiflis-birthday-reminders
+```
+
+```sql
+select vault.create_secret('https://<project-ref>.supabase.co/functions/v1/tiflis-birthday-reminders', 'birthday_reminders_url');
+select vault.create_secret('<той самий BIRTHDAY_CRON_SECRET>', 'birthday_reminders_secret');
+```
+
+Перевірка без відправки: `POST` на функцію з заголовком `x-cron-secret` і тілом `{"dry_run": true, "date": "2026-11-26"}` (`date` — дата дня народження).
+
 ## Структура
 
 ```text
