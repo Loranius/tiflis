@@ -13,3 +13,5 @@ dist/
 # Impeccable native engine (per-platform, fetched by the launcher)
 .agents/skills/impeccable/scripts/bin/
 .github/skills/impeccable/scripts/bin/
+.claude/skills/impeccable/scripts/bin/
+.claude/settings.local.json
