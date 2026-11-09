@@ -16,9 +16,19 @@ const ACTIONS = new Set([
   "menu_toggle_stop",
   "menu_save_item",
   "menu_delete_item",
+  "menu_upload_photo",
+  "menu_progress_set",
 ]);
 const STOP_ROLES = new Set(["admin", "sysadmin", "chef", "cook"]);
 const EDIT_ROLES = new Set(["admin", "sysadmin", "chef"]);
+const PHOTOS_BUCKET = "images";
+const PHOTOS_PATH_PREFIX = "menu/";
+const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
+const PHOTO_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
 
 type StaffProfile = {
   legacy_user_id: string | null;
@@ -42,7 +52,13 @@ type MenuInput = {
   emoji: string | null;
   stopped: boolean;
   sort_order: number;
+  explain: string | null;
+  sell_line: string | null;
+  pairing: string | null;
+  learning_reviewed: boolean;
 };
+
+const ITEM_COLUMNS = "id,section,category,name,price,weight,description,photo,allergens,cook_time_normal,cook_time_busy,emoji,stopped,sort_order,updated_at,explain,sell_line,pairing,learning_reviewed";
 
 function corsHeaders(req: Request): HeadersInit {
   const origin = req.headers.get("origin") ?? "";
@@ -110,12 +126,38 @@ function parseNullableInteger(value: unknown, max: number): number | null | "inv
 function parsePhoto(value: unknown): string | null | "invalid" {
   const photo = cleanText(value, 1000);
   if (!photo) return null;
+  return ownedPhotoPath(photo) ? photo : "invalid";
+}
+
+// Only photos we uploaded count as "ours": same Supabase origin, the public menu/ folder, and an exact
+// generated name (uuid.ext from menu_upload_photo, timestamp_random.ext from the older uploader).
+// Anything else is rejected on save and never deleted from storage.
+const OWNED_PHOTO_NAME = /^menu\/(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{10,16}_[a-z0-9]{4,20})\.(?:jpe?g|png|webp)$/;
+
+function ownedPhotoPath(url: string | null): string | null {
+  if (!url) return null;
+  let parsed: URL;
   try {
-    const url = new URL(photo);
-    return url.protocol === "https:" ? url.toString() : "invalid";
+    parsed = new URL(url);
   } catch {
-    return "invalid";
+    return null;
   }
+  if (parsed.protocol !== "https:" || parsed.origin !== new URL(SUPABASE_URL).origin) return null;
+  if (parsed.search || parsed.hash) return null;
+  const prefix = `/storage/v1/object/public/${PHOTOS_BUCKET}/`;
+  if (!parsed.pathname.startsWith(prefix)) return null;
+  const path = parsed.pathname.slice(prefix.length);
+  return OWNED_PHOTO_NAME.test(path) ? path : null;
+}
+
+async function removePhotoIfUnused(
+  client: ReturnType<typeof createClient>,
+  url: string | null,
+): Promise<void> {
+  const path = ownedPhotoPath(url);
+  if (!path || !url) return;
+  const { count } = await client.from("menu_items").select("id", { count: "exact", head: true }).eq("photo", url);
+  if ((count ?? 0) === 0) await client.storage.from(PHOTOS_BUCKET).remove([path]);
 }
 
 function parseAllergens(value: unknown): string[] {
@@ -159,19 +201,23 @@ function parseMenuInput(body: Record<string, unknown>): MenuInput | null {
     emoji: cleanText(body.emoji, 16) || null,
     stopped: body.stopped === true,
     sort_order: sortOrder,
+    explain: cleanText(body.explain, 600) || null,
+    sell_line: cleanText(body.sell_line, 600) || null,
+    pairing: cleanText(body.pairing, 600) || null,
+    learning_reviewed: body.learning_reviewed === true,
   };
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
-  if (req.method !== "POST") return json(req, { ok: false, error: "Method not allowed" }, 405);
+  if (req.method !== "POST") return json(req, { ok: false, error: "Метод не підтримується" }, 405);
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-    return json(req, { ok: false, error: "Server configuration error" }, 503);
+    return json(req, { ok: false, error: "Сервер налаштовано неправильно" }, 503);
   }
 
   const authorization = req.headers.get("authorization") ?? "";
   if (!authorization.toLowerCase().startsWith("bearer ")) {
-    return json(req, { ok: false, error: "Authentication required" }, 401);
+    return json(req, { ok: false, error: "Потрібно увійти" }, 401);
   }
 
   const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -179,7 +225,7 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data: authData, error: authError } = await userClient.auth.getUser();
-  if (authError || !authData.user) return json(req, { ok: false, error: "Invalid session" }, 401);
+  if (authError || !authData.user) return json(req, { ok: false, error: "Сесія закінчилась, увійди ще раз" }, 401);
 
   const { data: rawProfile, error: profileError } = await userClient
     .from("staff_profiles")
@@ -188,18 +234,18 @@ Deno.serve(async (req: Request) => {
     .single();
   const profile = rawProfile as StaffProfile | null;
   if (profileError || !profile || !profile.active || !profile.legacy_user_id) {
-    return json(req, { ok: false, error: "Active staff profile required" }, 403);
+    return json(req, { ok: false, error: "Потрібен активний профіль працівника" }, 403);
   }
 
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
-    return json(req, { ok: false, error: "Invalid JSON" }, 400);
+    return json(req, { ok: false, error: "Некоректний запит" }, 400);
   }
 
   const action = typeof body.action === "string" ? body.action : "";
-  if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Unsupported action" }, 400);
+  if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Невідома дія" }, 400);
 
   const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -209,12 +255,18 @@ Deno.serve(async (req: Request) => {
     if (action === "menu_bootstrap") {
       const { data, error } = await serviceClient
         .from("menu_items")
-        .select("id,section,category,name,price,weight,description,photo,allergens,cook_time_normal,cook_time_busy,emoji,stopped,sort_order,updated_at")
+        .select(ITEM_COLUMNS)
         .order("section", { ascending: true })
         .order("category", { ascending: true })
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true });
       if (error) throw error;
+
+      const { data: progress, error: progressError } = await serviceClient
+        .from("menu_learning")
+        .select("item_id,status")
+        .eq("legacy_user_id", profile.legacy_user_id);
+      if (progressError) throw progressError;
 
       return json(req, {
         ok: true,
@@ -223,16 +275,43 @@ Deno.serve(async (req: Request) => {
           canEdit: hasAnyRole(profile, EDIT_ROLES),
         },
         items: data ?? [],
+        progress: progress ?? [],
       });
+    }
+
+    if (action === "menu_progress_set") {
+      // Every active staff member keeps their own learning progress.
+      const id = parsePositiveId(body.id);
+      const status = body.status;
+      if (!id || (status !== "learning" && status !== "known" && status !== null)) {
+        return json(req, { ok: false, error: "Некоректний прогрес" }, 400);
+      }
+      if (status === null) {
+        const { error } = await serviceClient
+          .from("menu_learning")
+          .delete()
+          .eq("legacy_user_id", profile.legacy_user_id)
+          .eq("item_id", id);
+        if (error) throw error;
+        return json(req, { ok: true });
+      }
+      const { error } = await serviceClient
+        .from("menu_learning")
+        .upsert({ legacy_user_id: profile.legacy_user_id, item_id: id, status, updated_at: new Date().toISOString() });
+      if (error) {
+        if (error.code === "23503") return json(req, { ok: false, error: "Позицію не знайдено" }, 404);
+        throw error;
+      }
+      return json(req, { ok: true });
     }
 
     if (action === "menu_toggle_stop") {
       if (!hasAnyRole(profile, STOP_ROLES)) {
-        return json(req, { ok: false, error: "Insufficient permissions" }, 403);
+        return json(req, { ok: false, error: "Недостатньо прав" }, 403);
       }
       const id = parsePositiveId(body.id);
       if (!id || typeof body.stopped !== "boolean") {
-        return json(req, { ok: false, error: "Invalid menu item" }, 400);
+        return json(req, { ok: false, error: "Некоректна позиція" }, 400);
       }
       const { data, error } = await serviceClient
         .from("menu_items")
@@ -240,26 +319,72 @@ Deno.serve(async (req: Request) => {
         .eq("id", id)
         .select("id,stopped,updated_at")
         .single();
-      if (error || !data) return json(req, { ok: false, error: "Menu item not found" }, 404);
+      if (error || !data) return json(req, { ok: false, error: "Позицію не знайдено" }, 404);
       return json(req, { ok: true, item: data });
     }
 
     if (action === "menu_delete_item") {
       if (!hasAnyRole(profile, EDIT_ROLES)) {
-        return json(req, { ok: false, error: "Insufficient permissions" }, 403);
+        return json(req, { ok: false, error: "Недостатньо прав" }, 403);
       }
       const id = parsePositiveId(body.id);
-      if (!id) return json(req, { ok: false, error: "Invalid menu item" }, 400);
+      if (!id) return json(req, { ok: false, error: "Некоректна позиція" }, 400);
+      const { data: existing } = await serviceClient
+        .from("menu_items")
+        .select("photo")
+        .eq("id", id)
+        .maybeSingle();
       const { error } = await serviceClient.from("menu_items").delete().eq("id", id);
       if (error) throw error;
+      await removePhotoIfUnused(serviceClient, existing?.photo ?? null);
       return json(req, { ok: true });
     }
 
-    if (!hasAnyRole(profile, EDIT_ROLES)) {
-      return json(req, { ok: false, error: "Insufficient permissions" }, 403);
+    if (action === "menu_upload_photo") {
+      if (!hasAnyRole(profile, EDIT_ROLES)) {
+        return json(req, { ok: false, error: "Недостатньо прав" }, 403);
+      }
+      const contentType = cleanText(body.content_type, 40);
+      const extension = PHOTO_EXTENSIONS[contentType];
+      const rawData = cleanText(body.data, 12_000_000);
+      if (!extension || !rawData) {
+        return json(req, { ok: false, error: "Непідтримуваний формат фото" }, 400);
+      }
+
+      const base64 = rawData.includes(",") ? rawData.slice(rawData.indexOf(",") + 1) : rawData;
+      let bytes: Uint8Array;
+      try {
+        bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+      } catch {
+        return json(req, { ok: false, error: "Некоректні дані фото" }, 400);
+      }
+      if (bytes.length === 0 || bytes.length > MAX_PHOTO_BYTES) {
+        return json(req, { ok: false, error: "Фото завелике (максимум 6 МБ)" }, 400);
+      }
+
+      const path = `${PHOTOS_PATH_PREFIX}${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await serviceClient.storage
+        .from(PHOTOS_BUCKET)
+        .upload(path, bytes, { contentType, upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = serviceClient.storage.from(PHOTOS_BUCKET).getPublicUrl(path);
+      return json(req, { ok: true, photo: publicUrlData.publicUrl });
     }
-    const item = parseMenuInput(body);
-    if (!item) return json(req, { ok: false, error: "Invalid menu item" }, 400);
+
+    if (!hasAnyRole(profile, EDIT_ROLES)) {
+      return json(req, { ok: false, error: "Недостатньо прав" }, 403);
+    }
+    // An edit that keeps the item's current photo must save even if that photo predates the owned-URL rule.
+    const editId = parsePositiveId(body.id);
+    let keptPhoto: string | null = null;
+    if (editId && typeof body.photo === "string" && body.photo) {
+      const { data: current } = await serviceClient.from("menu_items").select("photo").eq("id", editId).maybeSingle();
+      if (current?.photo && current.photo === body.photo) keptPhoto = current.photo;
+    }
+    const item = parseMenuInput(keptPhoto ? { ...body, photo: "" } : body);
+    if (!item) return json(req, { ok: false, error: "Перевір назву, категорію, ціну, час і фото" }, 400);
+    if (keptPhoto) item.photo = keptPhoto;
 
     const payload = {
       section: item.section,
@@ -275,18 +400,30 @@ Deno.serve(async (req: Request) => {
       emoji: item.emoji,
       stopped: item.stopped,
       sort_order: item.sort_order,
+      explain: item.explain,
+      sell_line: item.sell_line,
+      pairing: item.pairing,
+      learning_reviewed: item.learning_reviewed,
     };
 
     if (item.id) {
+      const { data: existing } = await serviceClient
+        .from("menu_items")
+        .select("photo")
+        .eq("id", item.id)
+        .maybeSingle();
       const { data, error } = await serviceClient
         .from("menu_items")
         .update(payload)
         .eq("id", item.id)
-        .select("id,section,category,name,price,weight,description,photo,allergens,cook_time_normal,cook_time_busy,emoji,stopped,sort_order,updated_at")
+        .select(ITEM_COLUMNS)
         .single();
       if (error) {
         if (error.code === "23505") return json(req, { ok: false, error: "Така позиція вже існує" }, 409);
         throw error;
+      }
+      if (existing?.photo && existing.photo !== item.photo) {
+        await removePhotoIfUnused(serviceClient, existing.photo);
       }
       return json(req, { ok: true, item: data });
     }
@@ -307,7 +444,7 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await serviceClient
       .from("menu_items")
       .insert({ ...payload, sort_order: sortOrder })
-      .select("id,section,category,name,price,weight,description,photo,allergens,cook_time_normal,cook_time_busy,emoji,stopped,sort_order,updated_at")
+      .select(ITEM_COLUMNS)
       .single();
     if (error) {
       if (error.code === "23505") return json(req, { ok: false, error: "Така позиція вже існує" }, 409);
@@ -316,6 +453,6 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: true, item: data });
   } catch (error) {
     console.error("tiflis-menu-api failed", error);
-    return json(req, { ok: false, error: "Operation failed" }, 502);
+    return json(req, { ok: false, error: "Не вдалося виконати дію, спробуй ще раз" }, 502);
   }
 });
