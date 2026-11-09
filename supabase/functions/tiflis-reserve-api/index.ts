@@ -4,6 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const BOT_TOKEN = Deno.env.get("BOT_TOKEN") ?? "";
 const ALLOWED_ORIGINS = new Set(
   (Deno.env.get("ALLOWED_ORIGINS") ?? "")
     .split(",")
@@ -14,10 +15,17 @@ const ALLOWED_ORIGINS = new Set(
 const ACTIONS = new Set([
   "reserve_bootstrap",
   "reserve_save",
+  "reserve_status",
   "reserve_delete",
 ]);
 const MANAGE_ROLES = new Set(["admin", "sysadmin", "hostess", "waiter"]);
+const NOTIFY_ROLES = new Set(["waiter"]);
+const NON_WORK_SHIFT_CODES = new Set(["", "Х", "О"]);
 const STATUSES = new Set(["booked", "occupied", "completed", "cancelled", "no_show"]);
+const LIVE_STATUSES = new Set(["booked", "occupied"]);
+const RESERVATION_COLUMNS = "id,hall_id,table_id,reserved_date,reserved_time,duration_minutes,guests,guest_name,phone,menu_note,note,status,merged_tables,created_by,updated_by,created_at,updated_at";
+/** A seated table stays taken at least this long past "now", even after its booked end. */
+const SEATED_GRACE_MINUTES = 15;
 
 type StaffProfile = {
   legacy_user_id: string | null;
@@ -65,6 +73,8 @@ type ReservationRow = {
   created_at: string;
   updated_at: string;
 };
+
+type ScheduleRow = { user_id: string; shift: string | null };
 
 type ReservationInput = {
   id: number | null;
@@ -202,16 +212,148 @@ function overlaps(startA: number, durationA: number, startB: number, durationB: 
   return startA < startB + durationB && startB < startA + durationA;
 }
 
+function kyivNow(): { date: string; minutes: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")) };
+}
+
+/** Length a live booking blocks its tables: the booked duration, stretched while guests are still seated today. */
+function blockedMinutes(reservation: { reserved_time: string; duration_minutes: number | null; status: string }, date: string): number {
+  const start = minutes(String(reservation.reserved_time));
+  const duration = Number(reservation.duration_minutes || 120);
+  if (reservation.status !== "occupied") return duration;
+  const now = kyivNow();
+  if (now.date !== date) return duration;
+  return Math.max(duration, now.minutes + SEATED_GRACE_MINUTES - start);
+}
+
+type ConflictCheck = {
+  id: number | null;
+  hallId: number;
+  date: string;
+  time: string;
+  durationMinutes: number;
+  labels: Set<string>;
+};
+
+async function findConflict(serviceClient: any, check: ConflictCheck): Promise<boolean> {
+  const [{ data: sameDay, error: sameDayError }, { data: hallTables, error: tablesError }] = await Promise.all([
+    serviceClient
+      .from("reservations")
+      .select("id,table_id,reserved_time,duration_minutes,status,merged_tables")
+      .eq("hall_id", check.hallId)
+      .eq("reserved_date", check.date)
+      .in("status", ["booked", "occupied"]),
+    serviceClient.from("reserve_tables").select("id,label").eq("hall_id", check.hallId),
+  ]);
+  if (sameDayError) throw sameDayError;
+  if (tablesError) throw tablesError;
+  const tableLabelById = new Map((hallTables ?? []).map((table: { id: number; label: string }) => [Number(table.id), String(table.label)]));
+  const requestedStart = minutes(check.time);
+  return (sameDay ?? []).some((reservation: any) => {
+    if (check.id && Number(reservation.id) === check.id) return false;
+    const existingStart = minutes(String(reservation.reserved_time));
+    if (!overlaps(requestedStart, check.durationMinutes, existingStart, blockedMinutes(reservation, check.date))) return false;
+    const existingLabels = new Set([
+      tableLabelById.get(Number(reservation.table_id)) || "",
+      ...((reservation.merged_tables || []) as string[]),
+    ]);
+    return [...check.labels].some((label) => existingLabels.has(label));
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function formatDateUk(value: string): string {
+  return new Intl.DateTimeFormat("uk-UA", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "Europe/Kyiv",
+  }).format(new Date(`${value}T12:00:00+03:00`));
+}
+
+async function sendTelegram(destination: number | null, text: string): Promise<boolean> {
+  if (!BOT_TOKEN || !destination || !Number.isSafeInteger(destination)) return false;
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: destination, text, parse_mode: "HTML", disable_web_page_preview: true }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function notifyNewReservation(
+  serviceClient: any,
+  reservation: ReservationRow,
+  hallName: string,
+  tableLabel: string,
+): Promise<void> {
+  try {
+    const [usersResult, scheduleResult] = await Promise.all([
+      serviceClient
+        .from("users")
+        .select("id,role,role2,chat_id,tg_id,fired")
+        .or("fired.is.null,fired.eq.false"),
+      serviceClient
+        .from("schedule")
+        .select("user_id,shift")
+        .eq("date", reservation.reserved_date),
+    ]);
+    if (usersResult.error || !usersResult.data) return;
+    if (scheduleResult.error) return;
+
+    const shifts = new Map(
+      ((scheduleResult.data ?? []) as ScheduleRow[]).map((row) => [String(row.user_id), String(row.shift || "").trim()]),
+    );
+
+    const tableLine = reservation.merged_tables?.length
+      ? `${tableLabel} + ${reservation.merged_tables.join(", ")}`
+      : tableLabel;
+    const lines = [
+      "🆕 <b>Нове бронювання</b>",
+      `\n👤 ${escapeHtml(reservation.guest_name)}`,
+      `👥 ${reservation.guests} ${reservation.guests === 1 ? "гість" : "гостей"}`,
+      `🍽️ ${escapeHtml(hallName)}, стіл ${escapeHtml(tableLine)}`,
+      `🕒 ${formatDateUk(reservation.reserved_date)} о ${reservation.reserved_time}`,
+    ];
+    const text = lines.join("\n");
+
+    const recipients = usersResult.data.filter((row: any) => {
+      if (row.fired === true) return false;
+      if (!NOTIFY_ROLES.has(normalizeRole(row.role)) && !NOTIFY_ROLES.has(normalizeRole(row.role2))) return false;
+      const shift = shifts.get(String(row.id)) || "";
+      return !NON_WORK_SHIFT_CODES.has(shift);
+    });
+    await Promise.allSettled(recipients.map((row: any) => sendTelegram(row.chat_id || row.tg_id, text)));
+  } catch (error) {
+    console.error("tiflis-reserve-api notifyNewReservation failed", error);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
-  if (req.method !== "POST") return json(req, { ok: false, error: "Method not allowed" }, 405);
+  if (req.method !== "POST") return json(req, { ok: false, error: "Метод не підтримується" }, 405);
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-    return json(req, { ok: false, error: "Server configuration error" }, 503);
+    return json(req, { ok: false, error: "Сервер налаштовано неправильно" }, 503);
   }
 
   const authorization = req.headers.get("authorization") ?? "";
   if (!authorization.toLowerCase().startsWith("bearer ")) {
-    return json(req, { ok: false, error: "Authentication required" }, 401);
+    return json(req, { ok: false, error: "Потрібно увійти" }, 401);
   }
 
   const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -219,7 +361,7 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data: authData, error: authError } = await userClient.auth.getUser();
-  if (authError || !authData.user) return json(req, { ok: false, error: "Invalid session" }, 401);
+  if (authError || !authData.user) return json(req, { ok: false, error: "Сесія закінчилась, увійди ще раз" }, 401);
 
   const { data: rawProfile, error: profileError } = await userClient
     .from("staff_profiles")
@@ -228,18 +370,18 @@ Deno.serve(async (req: Request) => {
     .single();
   const profile = rawProfile as StaffProfile | null;
   if (profileError || !profile || !profile.active || !profile.legacy_user_id) {
-    return json(req, { ok: false, error: "Active staff profile required" }, 403);
+    return json(req, { ok: false, error: "Потрібен активний профіль працівника" }, 403);
   }
 
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
-    return json(req, { ok: false, error: "Invalid JSON" }, 400);
+    return json(req, { ok: false, error: "Некоректний запит" }, 400);
   }
 
   const action = typeof body.action === "string" ? body.action : "";
-  if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Unsupported action" }, 400);
+  if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Невідома дія" }, 400);
 
   const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -248,7 +390,7 @@ Deno.serve(async (req: Request) => {
   try {
     if (action === "reserve_bootstrap") {
       const selectedDate = parseDate(body.date);
-      if (!selectedDate) return json(req, { ok: false, error: "Invalid date" }, 400);
+      if (!selectedDate) return json(req, { ok: false, error: "Некоректна дата" }, 400);
       const from = addDays(selectedDate, -14);
       const to = addDays(selectedDate, 35);
 
@@ -266,7 +408,7 @@ Deno.serve(async (req: Request) => {
           .order("sort_order", { ascending: true }),
         serviceClient
           .from("reservations")
-          .select("id,hall_id,table_id,reserved_date,reserved_time,duration_minutes,guests,guest_name,phone,menu_note,note,status,merged_tables,created_by,updated_by,created_at,updated_at")
+          .select(RESERVATION_COLUMNS)
           .gte("reserved_date", from)
           .lte("reserved_date", to)
           .order("reserved_date", { ascending: true })
@@ -287,32 +429,59 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!canManage(profile)) {
-      return json(req, { ok: false, error: "Insufficient permissions" }, 403);
+      return json(req, { ok: false, error: "Недостатньо прав" }, 403);
     }
+
+    const { data: authorRow } = await serviceClient.from("users").select("login,display_name").eq("id", profile.legacy_user_id).maybeSingle();
+    const author = authorRow?.display_name || authorRow?.login || "Працівник";
 
     if (action === "reserve_delete") {
       const id = parsePositiveId(body.id);
-      if (!id) return json(req, { ok: false, error: "Invalid reservation" }, 400);
+      if (!id) return json(req, { ok: false, error: "Некоректний резерв" }, 400);
       const { error } = await serviceClient.from("reservations").delete().eq("id", id);
       if (error) throw error;
       return json(req, { ok: true });
     }
 
-    const input = parseReservation(body);
-    if (!input) return json(req, { ok: false, error: "Invalid reservation" }, 400);
+    if (action === "reserve_status") {
+      // Changes only the status, so a tap never overwrites a concurrent edit. Closing a booking never conflicts;
+      // reopening or seating it must still fit the table.
+      const id = parsePositiveId(body.id);
+      const status = cleanText(body.status, 30);
+      if (!id || !STATUSES.has(status)) return json(req, { ok: false, error: "Некоректний статус" }, 400);
+      const { data: current, error: currentError } = await serviceClient.from("reservations").select(RESERVATION_COLUMNS).eq("id", id).maybeSingle();
+      if (currentError) throw currentError;
+      if (!current) return json(req, { ok: false, error: "Резерв не знайдено" }, 404);
+      if (LIVE_STATUSES.has(status) && !LIVE_STATUSES.has(String(current.status))) {
+        const { data: primary } = await serviceClient.from("reserve_tables").select("label").eq("id", current.table_id).maybeSingle();
+        const conflict = await findConflict(serviceClient, {
+          id,
+          hallId: Number(current.hall_id),
+          date: String(current.reserved_date),
+          time: String(current.reserved_time).slice(0, 5),
+          durationMinutes: Number(current.duration_minutes || 120),
+          labels: new Set([String(primary?.label || ""), ...((current.merged_tables || []) as string[])].filter(Boolean)),
+        });
+        if (conflict) return json(req, { ok: false, error: "Цей стіл уже зайнятий у цей час — відкрий резерв і обери інший" }, 409);
+      }
+      const { data, error } = await serviceClient.from("reservations").update({ status, updated_by: author }).eq("id", id).select(RESERVATION_COLUMNS).single();
+      if (error) throw error;
+      return json(req, { ok: true, reservation: data });
+    }
 
-    const [hallResult, tableResult, hallTablesResult, authorResult] = await Promise.all([
-      serviceClient.from("reserve_halls").select("id,active").eq("id", input.hallId).single(),
+    const input = parseReservation(body);
+    if (!input) return json(req, { ok: false, error: "Резерв не збережено: перевір дату, час, гостей, імʼя і стіл" }, 400);
+
+    const [hallResult, tableResult, hallTablesResult] = await Promise.all([
+      serviceClient.from("reserve_halls").select("id,name,active").eq("id", input.hallId).single(),
       serviceClient.from("reserve_tables").select("id,hall_id,label,active").eq("id", input.tableId).single(),
       serviceClient.from("reserve_tables").select("id,label,capacity,active").eq("hall_id", input.hallId).eq("active", true),
-      serviceClient.from("users").select("login,display_name").eq("id", profile.legacy_user_id).single(),
     ]);
-    if (hallResult.error || !hallResult.data?.active) return json(req, { ok: false, error: "Hall not found" }, 404);
+    if (hallResult.error || !hallResult.data?.active) return json(req, { ok: false, error: "Зал не знайдено" }, 404);
     if (tableResult.error || !tableResult.data?.active || tableResult.data.hall_id !== input.hallId) {
-      return json(req, { ok: false, error: "Table not found" }, 404);
+      return json(req, { ok: false, error: "Стіл не знайдено" }, 404);
     }
     if (hallTablesResult.error) throw hallTablesResult.error;
-    if (authorResult.error) throw authorResult.error;
 
     const hallTables = hallTablesResult.data ?? [];
     const labels = new Set(hallTables.map((table) => String(table.label)));
@@ -323,33 +492,18 @@ Deno.serve(async (req: Request) => {
       .filter((table) => requestedLabels.has(String(table.label)))
       .reduce((sum, table) => sum + Number(table.capacity || 0), 0);
 
-    const { data: sameDay, error: sameDayError } = await serviceClient
-      .from("reservations")
-      .select("id,table_id,reserved_time,duration_minutes,status,merged_tables")
-      .eq("hall_id", input.hallId)
-      .eq("reserved_date", input.date)
-      .in("status", ["booked", "occupied"]);
-    if (sameDayError) throw sameDayError;
-
-    const tableLabelById = new Map(hallTables.map((table) => [Number(table.id), String(table.label)]));
-    const requestedStart = minutes(input.time);
-    const conflict = (sameDay ?? []).find((reservation) => {
-      if (input.id && Number(reservation.id) === input.id) return false;
-      const existingStart = minutes(String(reservation.reserved_time));
-      if (!overlaps(requestedStart, input.durationMinutes, existingStart, Number(reservation.duration_minutes || 120))) {
-        return false;
-      }
-      const existingLabels = new Set([
-        tableLabelById.get(Number(reservation.table_id)) || "",
-        ...((reservation.merged_tables || []) as string[]),
-      ]);
-      return [...requestedLabels].some((label) => existingLabels.has(label));
-    });
-    if (conflict) {
-      return json(req, { ok: false, error: "Цей стіл уже зайнятий у вибраний час" }, 409);
+    if (LIVE_STATUSES.has(input.status)) {
+      const conflict = await findConflict(serviceClient, {
+        id: input.id,
+        hallId: input.hallId,
+        date: input.date,
+        time: input.time,
+        durationMinutes: input.durationMinutes,
+        labels: requestedLabels,
+      });
+      if (conflict) return json(req, { ok: false, error: "Цей стіл уже зайнятий у вибраний час" }, 409);
     }
 
-    const author = authorResult.data.display_name || authorResult.data.login || "Працівник";
     const payload = {
       hall_id: input.hallId,
       table_id: input.tableId,
@@ -371,7 +525,7 @@ Deno.serve(async (req: Request) => {
         .from("reservations")
         .update(payload)
         .eq("id", input.id)
-        .select("id,hall_id,table_id,reserved_date,reserved_time,duration_minutes,guests,guest_name,phone,menu_note,note,status,merged_tables,created_by,updated_by,created_at,updated_at")
+        .select(RESERVATION_COLUMNS)
         .single();
       if (error || !data) throw error || new Error("Reservation not found");
       return json(req, { ok: true, reservation: data, capacity: requestedCapacity });
@@ -380,12 +534,13 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await serviceClient
       .from("reservations")
       .insert({ ...payload, created_by: author })
-      .select("id,hall_id,table_id,reserved_date,reserved_time,duration_minutes,guests,guest_name,phone,menu_note,note,status,merged_tables,created_by,updated_by,created_at,updated_at")
+      .select(RESERVATION_COLUMNS)
       .single();
     if (error) throw error;
+    await notifyNewReservation(serviceClient, data as ReservationRow, String(hallResult.data.name), primaryLabel);
     return json(req, { ok: true, reservation: data, capacity: requestedCapacity });
   } catch (error) {
     console.error("tiflis-reserve-api failed", error);
-    return json(req, { ok: false, error: "Operation failed" }, 502);
+    return json(req, { ok: false, error: "Не вдалося зберегти, спробуй ще раз" }, 502);
   }
 });

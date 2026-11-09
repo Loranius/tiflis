@@ -95,14 +95,35 @@ const DOW = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
 /* ---------- helpers ---------- */
 
-function localIso(date = new Date()): string {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+/** Today in Kyiv, whatever the device clock zone is. */
+function kyivToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' }).format(new Date());
+}
+
+function kyivMinutesNow(): number {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+  return Number(parts.find((part) => part.type === 'hour')?.value || 0) * 60 + Number(parts.find((part) => part.type === 'minute')?.value || 0);
 }
 
 function addDays(value: string, amount: number): string {
-  const date = new Date(`${value}T12:00:00`);
-  date.setDate(date.getDate() + amount);
-  return localIso(date);
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Same as the server: a missing duration counts as two hours. */
+const lengthOf = (reservation: Reservation) => Number(reservation.duration_minutes || 120);
+const SEATED_GRACE = 15;
+
+/** Minutes a live booking blocks its tables; seated guests keep the table until at least now + 15 min (as the server does). */
+function blockedLength(reservation: Reservation, today: string): number {
+  if (reservation.status !== 'occupied' || reservation.reserved_date !== today) return lengthOf(reservation);
+  return Math.max(lengthOf(reservation), kyivMinutesNow() + SEATED_GRACE - toMinutes(reservation.reserved_time));
+}
+
+function endTime(reservation: Reservation): string {
+  const end = toMinutes(reservation.reserved_time) + lengthOf(reservation);
+  return `${String(Math.floor(end / 60) % 24).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
 }
 
 function dayTitle(value: string, today: string): string {
@@ -120,7 +141,7 @@ function shortDay(value: string, today: string): string {
 }
 
 const hhmm = (value: string) => value.slice(0, 5);
-const toMinutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+function toMinutes(value: string): number { return Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5)); }
 const overlaps = (startA: number, lenA: number, startB: number, lenB: number) => startA < startB + lenB && startB < startA + lenA;
 const isLive = (reservation: Reservation) => reservation.status === 'booked' || reservation.status === 'occupied';
 
@@ -139,17 +160,21 @@ function durationLabel(minutes: number): string {
   return minutes % 60 ? `${hours},5 год` : `${hours} год`;
 }
 
+/** Occasions live on the note's first line after a marker, so free text that looks like a tag is never mistaken for one:
+    «Привід: День народження · Свій торт» + newline + free text. Waiters reading the raw note elsewhere still understand it. */
+const OCCASION_MARKER = 'Привід: ';
+
 function splitNote(note: string | null): { occasions: string[]; text: string } {
   if (!note) return { occasions: [], text: '' };
-  const [head, ...rest] = note.split('. ');
-  const tags = (head || '').split(' · ');
-  if (tags.length && tags.every((tag) => OCCASIONS.includes(tag))) return { occasions: tags, text: rest.join('. ') };
-  return { occasions: [], text: note };
+  if (!note.startsWith(OCCASION_MARKER)) return { occasions: [], text: note };
+  const [head, ...rest] = note.split('\n');
+  const tags = (head || '').slice(OCCASION_MARKER.length).split(' · ').filter((tag) => OCCASIONS.includes(tag));
+  return { occasions: tags, text: rest.join('\n') };
 }
 
 function joinNote(occasions: string[], text: string): string {
   const tags = OCCASIONS.filter((tag) => occasions.includes(tag)).join(' · ');
-  return [tags, text.trim()].filter(Boolean).join('. ');
+  return [tags ? `${OCCASION_MARKER}${tags}` : '', text.trim()].filter(Boolean).join('\n');
 }
 
 function tableLabels(reservation: Reservation, tableById: Map<number, Table>): string[] {
@@ -162,7 +187,7 @@ function draftFrom(reservation: Reservation): Draft {
     id: reservation.id,
     date: reservation.reserved_date,
     time: hhmm(reservation.reserved_time),
-    duration: reservation.duration_minutes,
+    duration: lengthOf(reservation),
     guests: reservation.guests,
     name: reservation.guest_name,
     phone: reservation.phone || '',
@@ -180,30 +205,18 @@ function newDraft(date: string, hallId: number | null = null, tableId: number | 
   return { id: null, date, time: '', duration: 120, guests: 2, name: '', phone: '', occasions: [], note: '', menuNote: '', hallId, tableId, merged: [], status: 'booked' };
 }
 
-function payloadFor(reservation: Reservation, status: Status) {
-  return {
-    action: 'reserve_save',
-    id: reservation.id,
-    hall_id: reservation.hall_id,
-    table_id: reservation.table_id,
-    date: reservation.reserved_date,
-    time: hhmm(reservation.reserved_time),
-    duration_minutes: reservation.duration_minutes,
-    guests: reservation.guests,
-    guest_name: reservation.guest_name,
-    phone: reservation.phone || '',
-    menu_note: reservation.menu_note || '',
-    note: reservation.note || '',
-    status,
-    merged_tables: reservation.merged_tables || [],
-  };
-}
-
 /* ---------- page ---------- */
 
 export function ReservePage() {
-  const today = localIso();
+  const [today, setToday] = useState(kyivToday);
   const [date, setDate] = useState(today);
+  // A tablet left open past midnight must move to the new day.
+  useEffect(() => {
+    const refresh = () => setToday((current) => { const next = kyivToday(); if (next !== current) setDate((selected) => (selected === current ? next : selected)); return next; });
+    document.addEventListener('visibilitychange', refresh);
+    const timer = window.setInterval(refresh, 60_000);
+    return () => { document.removeEventListener('visibilitychange', refresh); window.clearInterval(timer); };
+  }, []);
   const [data, setData] = useState<Bootstrap | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,6 +227,7 @@ export function ReservePage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [tableSheet, setTableSheet] = useState<Table | null>(null);
   const [pending, setPending] = useState<number | null>(null);
+  const [cardError, setCardError] = useState<{ id: number; message: string } | null>(null);
   const requestId = useRef(0);
 
   const load = useCallback(async (target = date) => {
@@ -255,13 +269,14 @@ export function ReservePage() {
   const seated = live.filter((reservation) => reservation.status === 'occupied').length;
 
   const needle = query.trim().toLocaleLowerCase('uk-UA');
-  const visible = dayReservations.filter((reservation) => {
-    if (!showClosed && !isLive(reservation)) return false;
+  const matches = (reservation: Reservation) => {
     if (hallFilter !== 'all' && reservation.hall_id !== hallFilter) return false;
     if (!needle) return true;
     return [reservation.guest_name, reservation.phone, reservation.note, reservation.menu_note, ...tableLabels(reservation, tableById)]
       .join(' ').toLocaleLowerCase('uk-UA').includes(needle);
-  });
+  };
+  const visible = dayReservations.filter((reservation) => isLive(reservation) && matches(reservation));
+  const closedVisible = dayReservations.filter((reservation) => !isLive(reservation) && matches(reservation));
 
   const slots: { time: string; items: Reservation[] }[] = [];
   visible.forEach((reservation) => {
@@ -272,16 +287,22 @@ export function ReservePage() {
 
   // The floor always shows one concrete hall: the picked one, or the first.
   const floorHallId = hallFilter === 'all' ? halls[0]?.id ?? null : hallFilter;
-  const strip = Array.from({ length: 14 }, (_, index) => addDays(today, index - 1));
+  // The strip starts yesterday, or at the picked day when it is further away, so the selected day always has a chip.
+  const stripStart = date < addDays(today, -1) || date > addDays(today, 12) ? addDays(date, -1) : addDays(today, -1);
+  const strip = Array.from({ length: 14 }, (_, index) => addDays(stripStart, index));
+  const windowFrom = data ? addDays(data.selectedDate, -14) : '';
+  const windowTo = data ? addDays(data.selectedDate, 35) : '';
+  const inWindow = (value: string) => Boolean(data) && value >= windowFrom && value <= windowTo;
 
+  // Status taps change only the status (reserve_status), and report on the card that was tapped.
   async function setStatus(reservation: Reservation, status: Status) {
     setPending(reservation.id);
-    setError(null);
+    setCardError(null);
     try {
-      await secureApi(payloadFor(reservation, status), 'tiflis-reserve-api');
-      setData((current) => current && ({ ...current, reservations: current.reservations.map((item) => (item.id === reservation.id ? { ...item, status } : item)) }));
+      const response = await secureApi<{ ok: true; reservation: Reservation }>({ action: 'reserve_status', id: reservation.id, status }, 'tiflis-reserve-api');
+      setData((current) => current && ({ ...current, reservations: current.reservations.map((item) => (item.id === reservation.id ? { ...item, ...response.reservation } : item)) }));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Статус не змінено.');
+      setCardError({ id: reservation.id, message: reason instanceof Error ? reason.message : 'Статус не змінено.' });
     } finally {
       setPending(null);
     }
@@ -289,15 +310,17 @@ export function ReservePage() {
 
   return (
     <div className="rv3">
-      <div className="rv3-days" role="radiogroup" aria-label="Дата">
+      <div className="rv3-days" role="group" aria-label="Дата">
         {strip.map((value) => {
-          const parsed = new Date(`${value}T12:00:00`);
-          const count = countByDate.get(value) || 0;
+          const parsed = new Date(`${value}T12:00:00Z`);
+          const known = inWindow(value);
+          const count = known ? countByDate.get(value) || 0 : 0;
+          const label = `${value === today ? 'сьогодні, ' : ''}${new Intl.DateTimeFormat('uk-UA', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(parsed)}${count ? `, ${count} ${reserveWord(count)}` : ''}`;
           return (
-            <button key={value} type="button" role="radio" aria-checked={value === date} className={`${value === date ? 'is-on' : ''}${value === today ? ' is-today' : ''}`} onClick={() => setDate(value)}>
-              <small>{DOW[parsed.getDay()]}</small>
-              <b>{parsed.getDate()}</b>
-              <i aria-label={count ? `${count} ${reserveWord(count)}` : undefined}>{count || ''}</i>
+            <button key={value} type="button" aria-pressed={value === date} aria-label={label} className={`${value === date ? 'is-on' : ''}${value === today ? ' is-today' : ''}`} onClick={() => setDate(value)}>
+              <small aria-hidden="true">{DOW[parsed.getUTCDay()]}</small>
+              <b aria-hidden="true">{parsed.getUTCDate()}</b>
+              <i aria-hidden="true">{count || ''}</i>
             </button>
           );
         })}
@@ -316,9 +339,9 @@ export function ReservePage() {
       </header>
 
       <div className="rv3-tools">
-        <div className="rv3-seg" role="radiogroup" aria-label="Вигляд">
-          <button type="button" role="radio" aria-checked={view === 'list'} className={view === 'list' ? 'is-on' : ''} onClick={() => setView('list')}>Список</button>
-          <button type="button" role="radio" aria-checked={view === 'floor'} className={view === 'floor' ? 'is-on' : ''} onClick={() => setView('floor')}>Схема залу</button>
+        <div className="rv3-seg" role="group" aria-label="Вигляд">
+          <button type="button" aria-pressed={view === 'list'} className={view === 'list' ? 'is-on' : ''} onClick={() => setView('list')}>Список</button>
+          <button type="button" aria-pressed={view === 'floor'} className={view === 'floor' ? 'is-on' : ''} onClick={() => setView('floor')}>Схема залу</button>
         </div>
         {view === 'list' ? (
           <label className="rv3-search">
@@ -355,7 +378,7 @@ export function ReservePage() {
         <>
           {!slots.length ? (
             <div className="rv3-empty">
-              <p>{needle ? `Нічого не знайдено за «${query.trim()}».` : `${dayTitle(date, today)} резервів ще немає.`}</p>
+              <p>{needle ? `Нічого не знайдено за «${query.trim()}».` : date === today ? 'Сьогодні резервів ще немає.' : date === addDays(today, 1) ? 'На завтра резервів ще немає.' : `На ${dayTitle(date, today).toLowerCase()} резервів ще немає.`}</p>
               {canManage && !needle ? <button type="button" className="rv3-secondary" onClick={() => setDraft(newDraft(date))}><Plus size={17} aria-hidden="true" /> Записати перший</button> : null}
             </div>
           ) : (
@@ -372,6 +395,7 @@ export function ReservePage() {
                           hall={hallById.get(reservation.hall_id)?.name || ''}
                           canManage={canManage}
                           busy={pending === reservation.id}
+                          error={cardError?.id === reservation.id ? cardError.message : null}
                           onOpen={() => canManage && setDraft(draftFrom(reservation))}
                           onStatus={(status) => void setStatus(reservation, status)}
                         />
@@ -383,9 +407,29 @@ export function ReservePage() {
             </ol>
           )}
           {closedCount ? (
-            <button type="button" className="rv3-link" onClick={() => setShowClosed((value) => !value)}>
-              {showClosed ? 'Сховати завершені й скасовані' : `Показати завершені й скасовані · ${closedCount}`}
-            </button>
+            <section className="rv3-closed" aria-label="Завершені й скасовані">
+              <button type="button" className="rv3-link" aria-expanded={showClosed} onClick={() => setShowClosed((value) => !value)}>
+                {showClosed ? 'Сховати завершені й скасовані' : `Показати завершені й скасовані · ${closedCount}`}
+              </button>
+              {showClosed ? (
+                <ul>
+                  {closedVisible.map((reservation) => (
+                    <li key={reservation.id}>
+                      <Booking
+                        reservation={reservation}
+                        labels={tableLabels(reservation, tableById)}
+                        hall={hallById.get(reservation.hall_id)?.name || ''}
+                        canManage={canManage}
+                        busy={pending === reservation.id}
+                        error={cardError?.id === reservation.id ? cardError.message : null}
+                        onOpen={() => canManage && setDraft(draftFrom(reservation))}
+                        onStatus={(status) => void setStatus(reservation, status)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </section>
           ) : null}
         </>
       ) : null}
@@ -396,6 +440,7 @@ export function ReservePage() {
           hallId={floorHallId}
           tables={tables}
           reservations={live}
+          today={today}
           onTable={setTableSheet}
         />
       ) : null}
@@ -437,11 +482,13 @@ export function ReservePage() {
 
 /* ---------- one booking in the agenda ---------- */
 
-function Booking({ reservation, labels, hall, canManage, busy, onOpen, onStatus }: {
-  reservation: Reservation; labels: string[]; hall: string; canManage: boolean; busy: boolean;
+function Booking({ reservation, labels, hall, canManage, busy, error, onOpen, onStatus }: {
+  reservation: Reservation; labels: string[]; hall: string; canManage: boolean; busy: boolean; error: string | null;
   onOpen: () => void; onStatus: (status: Status) => void;
 }) {
   const [more, setMore] = useState(false);
+  const noShowRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (more) noShowRef.current?.focus(); }, [more]);
   const { occasions, text } = splitNote(reservation.note);
   const closed = !isLive(reservation);
 
@@ -452,25 +499,25 @@ function Booking({ reservation, labels, hall, canManage, busy, onOpen, onStatus 
           <strong>{reservation.guest_name}</strong>
           <span className="rv3-guests">{reservation.guests} <small>{guestWord(reservation.guests)}</small></span>
         </span>
-        <span className="rv3-booking-where">{labels.length > 1 ? 'Столи' : 'Стіл'} {labels.join(' + ')} · {hall} · до {(() => { const end = toMinutes(reservation.reserved_time) + reservation.duration_minutes; return `${String(Math.floor(end / 60) % 24).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`; })()}</span>
+        <span className="rv3-booking-where">{labels.length > 1 ? 'Столи' : 'Стіл'} {labels.join(' + ')} · {hall} · до {endTime(reservation)}</span>
         {occasions.length ? <span className="rv3-tags">{occasions.map((tag) => <b key={tag}>{tag}</b>)}</span> : null}
         {reservation.menu_note ? <span className="rv3-booking-note"><em>Меню:</em> {reservation.menu_note}</span> : null}
         {text ? <span className="rv3-booking-note">{text}</span> : null}
-        {closed ? <span className="rv3-state">{STATUS_LABEL[reservation.status]}</span> : reservation.status === 'occupied' ? <span className="rv3-state is-seated">За столом</span> : null}
+        {closed ? <span className="rv3-state">{STATUS_LABEL[reservation.status]}</span> : reservation.status === 'occupied' ? <span className="rv3-state is-seated"><Check size={13} aria-hidden="true" /> За столом</span> : null}
       </button>
 
       {canManage ? (
         <div className="rv3-booking-actions">
-          {reservation.phone ? <a className="rv3-icon" href={`tel:${reservation.phone.replace(/[^\d+]/g, '')}`} aria-label={`Подзвонити ${reservation.guest_name}`}><Phone size={17} aria-hidden="true" /></a> : null}
+          {reservation.phone ? <a className="rv3-icon" href={`tel:${reservation.phone.replace(/[^\d+]/g, '')}`} aria-label={`Подзвонити: ${reservation.guest_name}`}><Phone size={17} aria-hidden="true" /></a> : null}
           {reservation.status === 'booked' ? (
             <>
               <button type="button" className="rv3-act is-seat" onClick={() => onStatus('occupied')} disabled={busy}>{busy ? <RefreshCw size={15} className="rv3-spin" aria-hidden="true" /> : <Check size={16} aria-hidden="true" />} Прийшли</button>
               {more ? (
                 <>
-                  <button type="button" className="rv3-act" onClick={() => onStatus('no_show')} disabled={busy}>Не прийшли</button>
+                  <button ref={noShowRef} type="button" className="rv3-act" onClick={() => onStatus('no_show')} disabled={busy}>Не прийшли</button>
                   <button type="button" className="rv3-act" onClick={() => onStatus('cancelled')} disabled={busy}>Скасували</button>
                 </>
-              ) : <button type="button" className="rv3-act is-quiet" onClick={() => setMore(true)} aria-expanded={false}>Інше</button>}
+              ) : <button type="button" className="rv3-act is-quiet" onClick={() => setMore(true)} aria-expanded="false">Інше</button>}
             </>
           ) : reservation.status === 'occupied' ? (
             <>
@@ -482,14 +529,15 @@ function Booking({ reservation, labels, hall, canManage, busy, onOpen, onStatus 
           )}
         </div>
       ) : null}
+      {error ? <p className="rv3-card-error" role="alert">{error}</p> : null}
     </article>
   );
 }
 
 /* ---------- floor view ---------- */
 
-function Floor({ halls, hallId, tables, reservations, onTable }: {
-  halls: Hall[]; hallId: number | null; tables: Table[]; reservations: Reservation[]; onTable: (table: Table) => void;
+function Floor({ halls, hallId, tables, reservations, today, onTable }: {
+  halls: Hall[]; hallId: number | null; tables: Table[]; reservations: Reservation[]; today: string; onTable: (table: Table) => void;
 }) {
   if (!hallId) return <p className="rv3-empty">Залів ще не налаштовано.</p>;
   const hallTables = tables.filter((table) => table.hall_id === hallId).sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label, 'uk', { numeric: true }));
@@ -501,12 +549,14 @@ function Floor({ halls, hallId, tables, reservations, onTable }: {
 
   return (
     <section className="rv3-floor" aria-label={`Схема: ${hall?.name || ''}`}>
-      <div className="rv3-legend"><span className="is-free">Вільний</span><span className="is-booked">Резерв</span><span className="is-occupied">За столом</span></div>
+      <div className="rv3-legend" aria-hidden="true"><span className="is-free">Вільний · місць</span><span className="is-booked">Резерв · час</span><span className="is-occupied">За столом</span></div>
       <div className="rv3-canvas" style={{ aspectRatio: `${Math.max(1.2, maxX / maxY)}` }}>
         {hallTables.map((table) => {
           const bookings = bookingsFor(table);
           const tone = bookings.some((reservation) => reservation.status === 'occupied') ? 'occupied' : bookings.length ? 'booked' : 'free';
-          const next = bookings[0];
+          const next = bookings.find((reservation) => reservation.status === 'occupied') || bookings[0];
+          const seatedNow = tone === 'occupied' && next?.reserved_date === today;
+          const stateWord = tone === 'free' ? 'вільний' : tone === 'occupied' ? 'за столом' : 'резерв';
           return (
             <button
               key={table.id}
@@ -514,10 +564,10 @@ function Floor({ halls, hallId, tables, reservations, onTable }: {
               className={`rv3-table is-${tone}`}
               style={{ left: `${((Number(table.position_x || 0) + 0.5) / maxX) * 100}%`, top: `${((Number(table.position_y || 0) + 0.5) / maxY) * 100}%` }}
               onClick={() => onTable(table)}
-              aria-label={`Стіл ${table.label}, ${table.capacity} місць, ${tone === 'free' ? 'вільний' : next ? `${hhmm(next.reserved_time)} ${next.guest_name}` : ''}`}
+              aria-label={`Стіл ${table.label}, ${table.capacity} ${plural(table.capacity, 'місце', 'місця', 'місць')}, ${stateWord}${next ? `, ${hhmm(next.reserved_time)}, ${next.guest_name}` : ''}`}
             >
               <b>{table.label}</b>
-              <small>{next ? hhmm(next.reserved_time) : `${table.capacity} м.`}</small>
+              <small>{tone === 'occupied' ? (seatedNow ? 'за столом' : hhmm(next!.reserved_time)) : next ? hhmm(next.reserved_time) : `${table.capacity} м.`}</small>
             </button>
           );
         })}
@@ -576,23 +626,23 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
   const titleRef = useRef<HTMLHeadingElement>(null);
   useLayoutEffect(() => { titleRef.current?.setAttribute('autofocus', ''); }, []);
 
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
+  const tableStepRef = useRef<HTMLFieldSetElement>(null);
+  const [freshness, setFreshness] = useState(0);
+  // Any change clears the last error: it described the previous attempt.
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => { setProblem(null); setDraft((current) => ({ ...current, [key]: value })); };
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
 
-  // Availability for the chosen day: reuse what the page loaded when it covers that date, otherwise ask the API.
+  // Availability is always fetched fresh for the chosen day (another hostess may have booked a minute ago).
+  // Until it arrives, the page's own copy is shown when it covers that day.
   useEffect(() => {
     let cancelled = false;
     const covers = loaded && draft.date >= addDays(loaded.selectedDate, -14) && draft.date <= addDays(loaded.selectedDate, 35);
-    if (covers) {
-      setDayReservations(loaded.reservations.filter((reservation) => reservation.reserved_date === draft.date));
-      return;
-    }
-    setDayReservations(null);
+    setDayReservations(covers ? loaded.reservations.filter((reservation) => reservation.reserved_date === draft.date) : null);
     secureApi<Bootstrap>({ action: 'reserve_bootstrap', date: draft.date }, 'tiflis-reserve-api')
       .then((response) => { if (!cancelled) setDayReservations(response.reservations.filter((reservation) => reservation.reserved_date === draft.date)); })
-      .catch(() => { if (!cancelled) setDayReservations([]); });
+      .catch(() => { if (!cancelled && !covers) setDayReservations([]); });
     return () => { cancelled = true; };
-  }, [draft.date, loaded]);
+  }, [draft.date, loaded, freshness]);
 
   const tableById = useMemo(() => new Map(tables.map((table) => [table.id, table])), [tables]);
 
@@ -602,22 +652,26 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
     if (!draft.time || !dayReservations) return map;
     const start = toMinutes(draft.time);
     dayReservations.filter((reservation) => isLive(reservation) && reservation.id !== draft.id).forEach((reservation) => {
-      if (!overlaps(start, draft.duration, toMinutes(reservation.reserved_time), reservation.duration_minutes)) return;
+      if (!overlaps(start, draft.duration, toMinutes(reservation.reserved_time), blockedLength(reservation, today))) return;
       const set = map.get(reservation.hall_id) || new Set<string>();
       tableLabels(reservation, tableById).forEach((label) => set.add(label));
       map.set(reservation.hall_id, set);
     });
     return map;
-  }, [dayReservations, draft.duration, draft.id, draft.time, tableById]);
+  }, [dayReservations, draft.duration, draft.id, draft.time, tableById, today]);
 
   const isFree = (table: Table) => !busyLabels.get(table.hall_id)?.has(table.label);
 
-  /** Suggestions: free tables that seat the party, smallest fit first, at most two spare seats unless asked for all. */
+  /** Suggestions: free tables that seat the party, smallest fit first, at most two spare seats. When none fits (a big
+      party) or the hostess asks, every free table is offered so she can pick one and merge its neighbours. */
   const hallOrder = (id: number) => halls.findIndex((hall) => hall.id === id);
-  const ranked = tables
-    .filter((table) => isFree(table) && table.capacity >= draft.guests)
-    .sort((a, b) => a.capacity - b.capacity || hallOrder(a.hall_id) - hallOrder(b.hall_id) || a.label.localeCompare(b.label, 'uk', { numeric: true }));
-  const suggestions = showAllTables ? ranked : ranked.filter((table) => table.capacity <= draft.guests + 2).slice(0, 8);
+  const byFit = (a: Table, b: Table) => a.capacity - b.capacity || hallOrder(a.hall_id) - hallOrder(b.hall_id) || a.label.localeCompare(b.label, 'uk', { numeric: true });
+  const free = tables.filter(isFree);
+  const fitting = free.filter((table) => table.capacity >= draft.guests).sort(byFit);
+  const noneFits = fitting.length === 0;
+  const suggestions = showAllTables || noneFits
+    ? [...free].sort((a, b) => b.capacity - a.capacity || hallOrder(a.hall_id) - hallOrder(b.hall_id) || a.label.localeCompare(b.label, 'uk', { numeric: true }))
+    : fitting.filter((table) => table.capacity <= draft.guests + 2).slice(0, 8);
 
   const chosen = draft.tableId ? tableById.get(draft.tableId) || null : null;
   const hallTables = chosen ? tables.filter((table) => table.hall_id === chosen.hall_id && table.id !== chosen.id).sort((a, b) => a.label.localeCompare(b.label, 'uk', { numeric: true })) : [];
@@ -630,14 +684,16 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
 
   function requestClose() {
     if (busy) return;
-    if (dirty && !window.confirm('Закрити без збереження? Резерв не буде записано.')) return;
+    if (dirty && !window.confirm(draft.id ? 'Закрити? Зміни не збережуться.' : 'Закрити без збереження? Резерв не буде записано.')) return;
     onClose();
   }
 
   async function save() {
     if (!draft.time) { setProblem('Обери час.'); return; }
     if (!draft.name.trim()) { setProblem('Вкажи імʼя гостя.'); nameRef.current?.focus(); return; }
-    if (!chosen) { setProblem('Обери стіл.'); return; }
+    if (!chosen) { setProblem('Обери стіл.'); tableStepRef.current?.scrollIntoView({ block: 'start' }); return; }
+    if (chosenTaken) { setProblem('Цей стіл у цей час уже зайнятий — обери інший.'); tableStepRef.current?.scrollIntoView({ block: 'start' }); return; }
+    if (seats < draft.guests) { setProblem(`За обраними столами ${seats} ${plural(seats, 'місце', 'місця', 'місць')} на ${draft.guests} ${guestWord(draft.guests)} — додай стіл поруч.`); tableStepRef.current?.scrollIntoView({ block: 'start' }); return; }
     setBusy('save');
     setProblem(null);
     try {
@@ -659,7 +715,14 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
       }, 'tiflis-reserve-api');
       await onSaved(draft.date);
     } catch (reason) {
-      setProblem(reason instanceof Error ? reason.message : 'Резерв не збережено.');
+      const message = reason instanceof Error ? reason.message : 'Резерв не збережено.';
+      // Someone took the table meanwhile: refresh availability, drop the stale pick and take the hostess back to tables.
+      if (/зайнятий/.test(message)) {
+        setDraft((current) => ({ ...current, tableId: null, hallId: null, merged: [] }));
+        setFreshness((value) => value + 1);
+        tableStepRef.current?.scrollIntoView({ block: 'start' });
+      }
+      setProblem(message);
       setBusy(null);
     }
   }
@@ -679,6 +742,16 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
 
   const dateChips = Array.from({ length: 4 }, (_, index) => addDays(today, index));
 
+  // 24-hour time typed as digits: «1845» or «18:45». Only a valid HH:MM is applied to the draft.
+  const [timeText, setTimeText] = useState(initial.time);
+  useEffect(() => { setTimeText(draft.time); }, [draft.time]);
+  function typeTime(raw: string) {
+    const digits = raw.replace(/\D/g, '').slice(0, 4);
+    const text = digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+    setTimeText(text);
+    if (/^([01]\d|2[0-3]):[0-5]\d$/.test(text)) set('time', text);
+  }
+
   return (
     <div className="rv3-backdrop" onMouseDown={requestClose}>
       <section className="rv3-sheet rv3-form" role="dialog" aria-modal="true" aria-labelledby="rv3-form-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -689,9 +762,9 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
 
         <fieldset className="rv3-step">
           <legend>Коли</legend>
-          <div className="rv3-pills" role="radiogroup" aria-label="Дата">
+          <div className="rv3-pills" role="group" aria-label="Дата">
             {dateChips.map((value) => (
-              <button key={value} type="button" role="radio" aria-checked={draft.date === value} className={draft.date === value ? 'is-on' : ''} onClick={() => set('date', value)}>{shortDay(value, today)}</button>
+              <button key={value} type="button" aria-pressed={draft.date === value} className={draft.date === value ? 'is-on' : ''} onClick={() => set('date', value)}>{shortDay(value, today)}</button>
             ))}
             <label className={`rv3-pill-date${dateChips.includes(draft.date) ? '' : ' is-on'}`}>
               <span>{dateChips.includes(draft.date) ? 'Інша дата' : shortDay(draft.date, today)}</span>
@@ -702,18 +775,18 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
 
         <fieldset className="rv3-step">
           <legend>О котрій</legend>
-          <div className="rv3-times" role="radiogroup" aria-label="Час">
+          <div className="rv3-times" role="group" aria-label="Час">
             {TIME_SLOTS.map((slot) => (
-              <button key={slot} type="button" role="radio" aria-checked={draft.time === slot} className={draft.time === slot ? 'is-on' : ''} onClick={() => set('time', slot)}>{slot}</button>
+              <button key={slot} type="button" aria-pressed={draft.time === slot} className={draft.time === slot ? 'is-on' : ''} onClick={() => set('time', slot)}>{slot}</button>
             ))}
           </div>
           <div className="rv3-inline">
-            <label className="rv3-field is-small"><span>Точний час</span><input type="time" value={draft.time} onChange={(event) => set('time', event.target.value)} /></label>
+            <label className="rv3-field is-small"><span>Точний час</span><input inputMode="numeric" placeholder="18:45" maxLength={5} value={timeText} onChange={(event) => typeTime(event.target.value)} aria-describedby="rv3-time-hint" /><small id="rv3-time-hint" className="rv3-sr">24-годинний формат, наприклад 18:45</small></label>
             <div className="rv3-field">
               <span>Скільки сидітимуть</span>
-              <div className="rv3-pills is-tight" role="radiogroup" aria-label="Тривалість">
+              <div className="rv3-pills is-tight" role="group" aria-label="Тривалість">
                 {DURATIONS.map((minutes) => (
-                  <button key={minutes} type="button" role="radio" aria-checked={draft.duration === minutes} className={draft.duration === minutes ? 'is-on' : ''} onClick={() => set('duration', minutes)}>{durationLabel(minutes)}</button>
+                  <button key={minutes} type="button" aria-pressed={draft.duration === minutes} className={draft.duration === minutes ? 'is-on' : ''} onClick={() => set('duration', minutes)}>{durationLabel(minutes)}</button>
                 ))}
               </div>
             </div>
@@ -722,9 +795,9 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
 
         <fieldset className="rv3-step">
           <legend>Скільки гостей</legend>
-          <div className="rv3-pills" role="radiogroup" aria-label="Гостей">
+          <div className="rv3-pills" role="group" aria-label="Гостей">
             {GUEST_CHIPS.map((count) => (
-              <button key={count} type="button" role="radio" aria-checked={draft.guests === count} className={`is-num${draft.guests === count ? ' is-on' : ''}`} onClick={() => set('guests', count)}>{count}</button>
+              <button key={count} type="button" aria-pressed={draft.guests === count} className={`is-num${draft.guests === count ? ' is-on' : ''}`} onClick={() => set('guests', count)}>{count}</button>
             ))}
             <label className="rv3-pill-num">
               <span className="rv3-sr">Інша кількість гостей</span>
@@ -741,21 +814,22 @@ function ReservationForm({ initial, today, halls, tables, loaded, onClose, onSav
           </div>
         </fieldset>
 
-        <fieldset className="rv3-step">
+        <fieldset className="rv3-step" ref={tableStepRef}>
           <legend>Стіл</legend>
           {!draft.time ? <p className="rv3-hint">Спершу обери час — тоді покажу вільні столи.</p> : dayReservations === null ? <p className="rv3-hint">Перевіряю вільні столи…</p> : (
             <>
               {suggestions.length ? (
-                <div className="rv3-suggest" role="radiogroup" aria-label="Вільні столи">
+                <div className="rv3-suggest" role="group" aria-label="Вільні столи">
                   {suggestions.map((table) => (
-                    <button key={table.id} type="button" role="radio" aria-checked={draft.tableId === table.id} className={draft.tableId === table.id ? 'is-on' : ''} onClick={() => pickTable(table)}>
+                    <button key={table.id} type="button" aria-pressed={draft.tableId === table.id} className={draft.tableId === table.id ? 'is-on' : ''} onClick={() => pickTable(table)}>
                       <b>{table.label}</b>
                       <small>{hallName(halls, table.hall_id)} · {table.capacity} м.</small>
                     </button>
                   ))}
                 </div>
-              ) : <p className="rv3-hint is-warn">Вільного столу на {draft.guests} {guestWord(draft.guests)} о {draft.time} немає. Покажи всі столи або обʼєднай кілька.</p>}
-              <button type="button" className="rv3-link" onClick={() => setShowAllTables((value) => !value)}>{showAllTables ? 'Лише ті, що підходять' : 'Показати всі вільні столи'}</button>
+              ) : <p className="rv3-hint is-warn">О {draft.time} вільних столів немає.</p>}
+              {noneFits && suggestions.length ? <p className="rv3-hint is-warn">Жоден стіл не вміщує {draft.guests} {guestWord(draft.guests)}. Обери стіл і додай до нього сусідні.</p> : null}
+              {!noneFits ? <button type="button" className="rv3-link" onClick={() => setShowAllTables((value) => !value)}>{showAllTables ? 'Лише ті, що підходять' : 'Показати всі вільні столи'}</button> : null}
               {chosen ? (
                 <div className="rv3-merge">
                   <p>Обрано: <b>стіл {[chosen.label, ...draft.merged].join(' + ')}</b> · {hallName(halls, chosen.hall_id)} · {seats} {plural(seats, 'місце', 'місця', 'місць')}</p>
