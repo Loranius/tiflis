@@ -20,7 +20,12 @@ const ACTIONS = new Set([
   "birthdays_bootstrap",
   "birthdays_save",
   "birthdays_delete",
+  "staff_upload_avatar",
 ]);
+const AVATAR_BUCKET = "images";
+const AVATAR_PREFIX = "avatars/";
+const MAX_AVATAR_BYTES = 3 * 1024 * 1024;
+const AVATAR_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 const ADMIN_ROLES = new Set(["admin", "sysadmin"]);
 const BIRTHDAY_POSITIONS = new Set([
   "admin", "bartender", "waiter", "hostess", "runner", "sommelier",
@@ -297,20 +302,20 @@ function safeStaff(staff: LegacyStaff, linked: Map<string, StaffProfile>, nextSh
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
-  if (req.method !== "POST") return json(req, { ok: false, error: "Method not allowed" }, 405);
+  if (req.method !== "POST") return json(req, { ok: false, error: "Метод не підтримується" }, 405);
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-    return json(req, { ok: false, error: "Server configuration error" }, 503);
+    return json(req, { ok: false, error: "Сервер налаштовано неправильно" }, 503);
   }
 
   const authorization = req.headers.get("authorization") ?? "";
-  if (!authorization.toLowerCase().startsWith("bearer ")) return json(req, { ok: false, error: "Authentication required" }, 401);
+  if (!authorization.toLowerCase().startsWith("bearer ")) return json(req, { ok: false, error: "Потрібно увійти" }, 401);
 
   const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: authorization } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data: authData, error: authError } = await userClient.auth.getUser();
-  if (authError || !authData.user) return json(req, { ok: false, error: "Invalid session" }, 401);
+  if (authError || !authData.user) return json(req, { ok: false, error: "Сесія закінчилась, увійди ще раз" }, 401);
 
   const { data: rawProfile, error: profileError } = await userClient
     .from("staff_profiles")
@@ -319,17 +324,17 @@ Deno.serve(async (req: Request) => {
     .single();
   const profile = rawProfile as StaffProfile | null;
   if (profileError || !profile || !profile.active || !profile.legacy_user_id) {
-    return json(req, { ok: false, error: "Active staff profile required" }, 403);
+    return json(req, { ok: false, error: "Потрібен активний профіль працівника" }, 403);
   }
 
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
-    return json(req, { ok: false, error: "Invalid JSON" }, 400);
+    return json(req, { ok: false, error: "Некоректний запит" }, 400);
   }
   const action = typeof body.action === "string" ? body.action : "";
-  if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Unsupported action" }, 400);
+  if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Невідома дія" }, 400);
 
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -378,13 +383,13 @@ Deno.serve(async (req: Request) => {
     if (action === "staff_save") {
       const targetId = cleanText(body.user_id, 120);
       const { data: current, error: currentError } = await admin.from("users").select("id,login,role,role2,display_name,nick,avatar,tg_id,tg_username,ig,fired,created_at,display_role,birthday,trainee_days,zodiac,can_notify,credo,credential_source,updated_at").eq("id", targetId).single();
-      if (currentError || !current) return json(req, { ok: false, error: "Staff member not found" }, 404);
+      if (currentError || !current) return json(req, { ok: false, error: "Працівника не знайдено" }, 404);
       const manages = isAdmin(profile);
-      if (!manages && targetId !== profile.legacy_user_id) return json(req, { ok: false, error: "Insufficient permissions" }, 403);
-      if (targetId === "sysadmin" && profile.legacy_user_id !== "sysadmin") return json(req, { ok: false, error: "Protected account" }, 403);
+      if (!manages && targetId !== profile.legacy_user_id) return json(req, { ok: false, error: "Недостатньо прав" }, 403);
+      if (targetId === "sysadmin" && profile.legacy_user_id !== "sysadmin") return json(req, { ok: false, error: "Цей акаунт захищений" }, 403);
 
       const parsed = parseStaffSave(body, current as LegacyStaff, manages);
-      if (!parsed) return json(req, { ok: false, error: "Invalid staff profile" }, 400);
+      if (!parsed) return json(req, { ok: false, error: "Перевір логін, імʼя, роль і дату" }, 400);
 
       const { error } = await admin.from("users").update({
         login: parsed.login,
@@ -421,6 +426,33 @@ Deno.serve(async (req: Request) => {
       return json(req, { ok: true });
     }
 
+    if (action === "staff_upload_avatar") {
+      // Anyone may upload their own photo; admins may upload for any colleague. The URL is saved with staff_save.
+      const targetId = cleanText(body.user_id, 120) || profile.legacy_user_id;
+      if (targetId !== profile.legacy_user_id && !isAdmin(profile)) {
+        return json(req, { ok: false, error: "Недостатньо прав" }, 403);
+      }
+      const contentType = cleanText(body.content_type, 40);
+      const extension = AVATAR_TYPES[contentType];
+      const rawData = cleanText(body.data, 6_000_000);
+      if (!extension || !rawData) return json(req, { ok: false, error: "Непідтримуваний формат фото" }, 400);
+      const base64 = rawData.includes(",") ? rawData.slice(rawData.indexOf(",") + 1) : rawData;
+      let bytes: Uint8Array;
+      try {
+        bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+      } catch {
+        return json(req, { ok: false, error: "Некоректні дані фото" }, 400);
+      }
+      if (bytes.length === 0 || bytes.length > MAX_AVATAR_BYTES) {
+        return json(req, { ok: false, error: "Фото завелике (максимум 3 МБ)" }, 400);
+      }
+      const path = `${AVATAR_PREFIX}${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await admin.storage.from(AVATAR_BUCKET).upload(path, bytes, { contentType, upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: publicUrl } = admin.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+      return json(req, { ok: true, avatar: publicUrl.publicUrl });
+    }
+
     if (action === "birthdays_bootstrap") {
       const { data, error } = await admin
         .from("staff_birthdays")
@@ -448,7 +480,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    if (!isAdmin(profile)) return json(req, { ok: false, error: "Insufficient permissions" }, 403);
+    if (!isAdmin(profile)) return json(req, { ok: false, error: "Недостатньо прав" }, 403);
 
     if (action === "staff_create") {
       const login = cleanLogin(body.login);
@@ -456,7 +488,7 @@ Deno.serve(async (req: Request) => {
       const role = parseRole(body.role);
       const role2 = parseRole(body.role2, true);
       if (!validLogin(login) || !displayName || !role || role === "sysadmin" || role2 === role) {
-        return json(req, { ok: false, error: "Invalid staff member" }, 400);
+        return json(req, { ok: false, error: "Перевір логін, імʼя і роль" }, 400);
       }
 
       const id = legacyId();
@@ -473,7 +505,7 @@ Deno.serve(async (req: Request) => {
       const avatar = parseAvatar(body.avatar);
       if (avatar === "invalid") {
         await admin.auth.admin.deleteUser(authUser.user.id);
-        return json(req, { ok: false, error: "Invalid avatar URL" }, 400);
+        return json(req, { ok: false, error: "Некоректне посилання на фото" }, 400);
       }
 
       const marker = `AUTH_ONLY:${crypto.randomUUID()}`;
@@ -524,7 +556,7 @@ Deno.serve(async (req: Request) => {
       const targetId = cleanText(body.user_id, 120);
       const active = body.active === true;
       if (!targetId || targetId === "sysadmin" || targetId === profile.legacy_user_id && !active) {
-        return json(req, { ok: false, error: "Protected account" }, 400);
+        return json(req, { ok: false, error: "Цей акаунт захищений" }, 400);
       }
       const [legacyUpdate, profileUpdate] = await Promise.all([
         admin.from("users").update({ fired: !active }).eq("id", targetId),
@@ -542,7 +574,7 @@ Deno.serve(async (req: Request) => {
       const position = parseBirthdayPosition(body.position);
       const position2 = parseBirthdayPosition(body.position2, true);
       if (!fullName || position === "invalid" || position2 === "invalid") {
-        return json(req, { ok: false, error: "Invalid birthday entry" }, 400);
+        return json(req, { ok: false, error: "Перевір імʼя і посаду" }, 400);
       }
       if (position2 && position2 === position) {
         return json(req, { ok: false, error: "Друга посада має відрізнятись від першої" }, 400);
@@ -550,12 +582,12 @@ Deno.serve(async (req: Request) => {
       const positionDetail = parseBirthdayPositionDetail(position, body.position_detail);
       const position2Detail = parseBirthdayPositionDetail(position2, body.position2_detail);
       if (positionDetail === "invalid" || position2Detail === "invalid") {
-        return json(req, { ok: false, error: "Invalid position detail" }, 400);
+        return json(req, { ok: false, error: "Некоректне уточнення посади" }, 400);
       }
       const birthday = parseBirthdayDate(body.birthday_month, body.birthday_day);
-      if (birthday === "invalid") return json(req, { ok: false, error: "Invalid birthday" }, 400);
+      if (birthday === "invalid") return json(req, { ok: false, error: "Некоректна дата народження" }, 400);
       const avatar = parseAvatar(body.avatar);
-      if (avatar === "invalid") return json(req, { ok: false, error: "Invalid avatar URL" }, 400);
+      if (avatar === "invalid") return json(req, { ok: false, error: "Некоректне посилання на фото" }, 400);
       // Only touch the account link when the client sends it, so older
       // frontends that don't know about user_id never wipe existing links.
       const updatesLink = Object.prototype.hasOwnProperty.call(body, "user_id");
@@ -583,25 +615,25 @@ Deno.serve(async (req: Request) => {
         ? await admin.from("staff_birthdays").update(row).eq("id", id).select("id").maybeSingle()
         : await admin.from("staff_birthdays").insert(row).select("id").single();
       if (error) throw error;
-      if (hasId && !data) return json(req, { ok: false, error: "Birthday entry not found" }, 404);
+      if (hasId && !data) return json(req, { ok: false, error: "Запис не знайдено" }, 404);
       return json(req, { ok: true, id: (data as { id: number }).id });
     }
 
     if (action === "birthdays_delete") {
       const id = Number(body.id);
-      if (!Number.isInteger(id) || id <= 0) return json(req, { ok: false, error: "Invalid birthday entry" }, 400);
+      if (!Number.isInteger(id) || id <= 0) return json(req, { ok: false, error: "Перевір імʼя і посаду" }, 400);
       const { error } = await admin.from("staff_birthdays").delete().eq("id", id);
       if (error) throw error;
       return json(req, { ok: true });
     }
 
     const targetId = cleanText(body.user_id, 120);
-    if (!targetId) return json(req, { ok: false, error: "Invalid staff member" }, 400);
+    if (!targetId) return json(req, { ok: false, error: "Перевір логін, імʼя і роль" }, 400);
     if (targetId === "sysadmin" && profile.legacy_user_id !== "sysadmin") {
-      return json(req, { ok: false, error: "Protected account" }, 403);
+      return json(req, { ok: false, error: "Цей акаунт захищений" }, 403);
     }
     const { data: mapped, error: mappedError } = await admin.from("staff_profiles").select("user_id").eq("legacy_user_id", targetId).single();
-    if (mappedError || !mapped) return json(req, { ok: false, error: "Auth account is not linked yet" }, 409);
+    if (mappedError || !mapped) return json(req, { ok: false, error: "Працівник ще жодного разу не входив — пароль поки не скинути" }, 409);
     const password = temporaryPassword();
     const { error: resetError } = await admin.auth.admin.updateUserById(String(mapped.user_id), { password });
     if (resetError) throw resetError;
@@ -609,6 +641,6 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: true, temporaryPassword: password });
   } catch (error) {
     console.error("tiflis-staff-api failed", error);
-    return json(req, { ok: false, error: "Operation failed" }, 502);
+    return json(req, { ok: false, error: "Не вдалося виконати дію, спробуй ще раз" }, 502);
   }
 });
