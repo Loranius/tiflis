@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-09T19:20:00Z",
+  "title": "Design System: Tiflis Staff Portal",
+  "extensions": {
+    "colorMeta": {
+      "gold": {
+        "role": "primary",
+        "displayName": "Tiflis Gold",
+        "canonical": "#D1B46B",
+        "tonalRamp": [
+          "#2E2714",
+          "#4A3F22",
+          "#6B5B31",
+          "#8F7A43",
+          "#B39956",
+          "#D1B46B",
+          "#E2CE98",
+          "#F3EAD2"
+        ]
+      },
+      "gold-press": {
+        "role": "primary",
+        "displayName": "Pressed Gold",
+        "canonical": "#BFA25A",
+        "tonalRamp": [
+          "#2A2412",
+          "#453A1E",
+          "#63532B",
+          "#85703B",
+          "#A68C4D",
+          "#BFA25A",
+          "#D9C48E",
+          "#F0E6CC"
+        ]
+      },
+      "gold-tint": {
+        "role": "primary",
+        "displayName": "Gold Wash",
+        "canonical": "rgba(209, 180, 107, 0.12)",
+        "tonalRamp": [
+          "rgba(209,180,107,0.04)",
+          "rgba(209,180,107,0.08)",
+          "rgba(209,180,107,0.12)",
+          "rgba(209,180,107,0.18)",
+          "rgba(209,180,107,0.24)",
+          "rgba(209,180,107,0.35)",
+          "rgba(209,180,107,0.5)",
+          "rgba(209,180,107,0.7)"
+        ]
+      },
+      "on-gold": {
+        "role": "neutral",
+        "displayName": "Ink on Gold",
+        "canonical": "#1A1918",
+        "tonalRamp": [
+          "#0E0D0C",
+          "#1A1918",
+          "#2B2A29",
+          "#46443F",
+          "#6A6760",
+          "#928E85",
+          "#C2BDB2",
+          "#EEEAE2"
+        ]
+      },
+      "up": {
+        "role": "tertiary",
+        "displayName": "Gain Green",
+        "canonical": "#7DC593",
+        "tonalRamp": [
+          "#14261A",
+          "#1F3D29",
+          "#2D5A3C",
+          "#3F7B53",
+          "#58A06E",
+          "#7DC593",
+          "#A8DBB7",
+          "#D6EFDE"
+        ]
+      },
+      "down": {
+        "role": "tertiary",
+        "displayName": "Loss Coral",
+        "canonical": "#E58B80",
+        "tonalRamp": [
+          "#3A1714",
+          "#5A2420",
+          "#7E3630",
+          "#A44C43",
+          "#C96A5F",
+          "#E58B80",
+          "#F2C1BA",
+          "#F8DCD8"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Night Ground",
+        "canonical": "#161514",
+        "tonalRamp": [
+          "#0E0D0C",
+          "#161514",
+          "#201F1E",
+          "#2B2A29",
+          "#353432",
+          "#5A5751",
+          "#A09A90",
+          "#F4F0E8"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Charcoal Surface",
+        "canonical": "#201F1E",
+        "tonalRamp": [
+          "#0E0D0C",
+          "#161514",
+          "#201F1E",
+          "#2B2A29",
+          "#353432",
+          "#5A5751",
+          "#A09A90",
+          "#F4F0E8"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Brand Charcoal",
+        "canonical": "#2B2A29",
+        "tonalRamp": [
+          "#0E0D0C",
+          "#161514",
+          "#201F1E",
+          "#2B2A29",
+          "#353432",
+          "#5A5751",
+          "#A09A90",
+          "#F4F0E8"
+        ]
+      },
+      "surface-3": {
+        "role": "neutral",
+        "displayName": "Raised Charcoal",
+        "canonical": "#353432",
+        "tonalRamp": [
+          "#0E0D0C",
+          "#161514",
+          "#201F1E",
+          "#2B2A29",
+          "#353432",
+          "#5A5751",
+          "#A09A90",
+          "#F4F0E8"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Warm Paper",
+        "canonical": "#F4F0E8",
+        "tonalRamp": [
+          "#0E0D0C",
+          "#161514",
+          "#201F1E",
+          "#2B2A29",
+          "#353432",
+          "#5A5751",
+          "#A09A90",
+          "#F4F0E8"
+        ]
+      },
+      "text-2": {
+        "role": "neutral",
+        "displayName": "Muted Stone",
+        "canonical": "#ADA79C",
+        "tonalRamp": [
+          "#0E0D0C",
+          "#161514",
+          "#201F1E",
+          "#2B2A29",
+          "#353432",
+          "#5A5751",
+          "#A09A90",
+          "#F4F0E8"
+        ]
+      },
+      "text-3": {
+        "role": "neutral",
+        "displayName": "Quiet Stone",
+        "canonical": "#A09A90",
+        "tonalRamp": [
+          "#0E0D0C",
+          "#161514",
+          "#201F1E",
+          "#2B2A29",
+          "#353432",
+          "#5A5751",
+          "#A09A90",
+          "#F4F0E8"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "rgba(244, 238, 226, 0.08)",
+        "tonalRamp": [
+          "rgba(244,238,226,0.04)",
+          "rgba(244,238,226,0.08)",
+          "rgba(244,238,226,0.12)",
+          "rgba(244,238,226,0.16)",
+          "rgba(244,238,226,0.22)",
+          "rgba(244,238,226,0.35)",
+          "rgba(244,238,226,0.6)",
+          "rgba(244,238,226,0.85)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline",
+        "canonical": "rgba(244, 238, 226, 0.16)",
+        "tonalRamp": [
+          "rgba(244,238,226,0.04)",
+          "rgba(244,238,226,0.08)",
+          "rgba(244,238,226,0.12)",
+          "rgba(244,238,226,0.16)",
+          "rgba(244,238,226,0.22)",
+          "rgba(244,238,226,0.35)",
+          "rgba(244,238,226,0.6)",
+          "rgba(244,238,226,0.85)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero money figure only (payout in gold, rank in text colour)."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Dialog titles; shell page title uses the same face at 700."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card titles and section tabs."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "List primary lines and sums, breakdown values."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Segmented options, links, select, empty states, alerts."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Meta, notes, breakdown terms, privacy line in text-3."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Chart day numbers, average tag, Ти badge, stat sub-lines."
+      }
+    },
+    "shadows": [
+      {
+        "name": "segment-thumb",
+        "value": "0 1px 3px rgba(0, 0, 0, 0.35)",
+        "purpose": "Selected option of a segmented control; the only in-content shadow."
+      },
+      {
+        "name": "scrim",
+        "value": "rgba(8, 8, 7, 0.62)",
+        "purpose": "Dialog backdrop."
+      },
+      {
+        "name": "topbar-glass",
+        "value": "background: rgba(22, 21, 20, 0.88); backdrop-filter: blur(16px)",
+        "purpose": "Sticky top bar over scrolling content."
+      },
+      {
+        "name": "focus-ring",
+        "value": "outline: 2px solid #D1B46B; outline-offset: 2px",
+        "purpose": "Keyboard focus on every interactive element."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state",
+        "value": "0.15s ease",
+        "purpose": "Hover/selection colour and background changes."
+      },
+      {
+        "name": "press",
+        "value": "transform 0.1s ease, scale(0.99)",
+        "purpose": "Primary button press."
+      },
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Chart bar height (0.35s) and dialog rise (0.28s, 24px)."
+      },
+      {
+        "name": "fade",
+        "value": "0.18s ease-out",
+        "purpose": "Dialog scrim fade-in."
+      },
+      {
+        "name": "refresh",
+        "value": "opacity 0.2s ease to 0.6",
+        "purpose": "Content dims while data refreshes."
+      },
+      {
+        "name": "skeleton-pulse",
+        "value": "1.4s ease-in-out infinite, to 55% opacity",
+        "purpose": "Loading skeletons."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce disables all animation and transition",
+        "purpose": "Accessibility."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "dialog",
+        "value": "640px"
+      },
+      {
+        "name": "shell-mobile",
+        "value": "980px (max-width)"
+      },
+      {
+        "name": "dashboard",
+        "value": "1024px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single gold action per view, e.g. «Внести касу за сьогодні».",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M12 5v14M5 12h14\"/></svg>Внести касу за сьогодні</button>",
+      "css": ".ds-btn-primary{min-height:52px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 20px;border:0;border-radius:14px;background:var(--t-gold, #D1B46B);color:var(--t-on-gold, #1A1918);font:700 16px var(--t-font, 'Golos Text', system-ui, sans-serif);cursor:pointer;transition:background .15s ease,transform .1s ease} .ds-btn-primary:hover{background:#DCC07A} .ds-btn-primary:active{background:var(--t-gold-press, #BFA25A);transform:scale(.99)} .ds-btn-primary:focus-visible{outline:2px solid var(--t-gold, #D1B46B);outline-offset:2px}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Two-step destructive action; second tap confirms in solid coral.",
+      "html": "<div class=\"ds-row\"><button class=\"ds-btn-danger\">Видалити</button><button class=\"ds-btn-danger is-confirm\">Точно видалити</button></div>",
+      "css": ".ds-row{display:flex;gap:10px} .ds-btn-danger{min-height:52px;padding:0 16px;border:1px solid rgba(229,139,128,.35);border-radius:14px;background:transparent;color:var(--t-down, #E58B80);font:600 15px var(--t-font, 'Golos Text', system-ui, sans-serif);cursor:pointer} .ds-btn-danger.is-confirm{background:var(--t-down, #E58B80);border-color:var(--t-down, #E58B80);color:#1A1918} .ds-btn-danger:focus-visible{outline:2px solid var(--t-gold, #D1B46B);outline-offset:2px}"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "button-icon",
+      "description": "36px circular control for month arrows and dialog close.",
+      "html": "<button class=\"ds-icon-btn\" aria-label=\"Попередній місяць\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m15 18-6-6 6-6\"/></svg></button>",
+      "css": ".ds-icon-btn{width:36px;height:36px;display:grid;place-items:center;border:0;border-radius:50%;background:var(--t-surface-2, #2B2A29);color:var(--t-text, #F4F0E8);cursor:pointer;transition:background .15s ease} .ds-icon-btn:hover{background:var(--t-surface-3, #353432)} .ds-icon-btn:focus-visible{outline:2px solid var(--t-gold, #D1B46B);outline-offset:2px}"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "chip",
+      "refersTo": "segmented",
+      "description": "Period switch (1–14 · 15–кінець · місяць), a radiogroup.",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\"><button class=\"is-on\" role=\"radio\" aria-checked=\"true\">1–14</button><button role=\"radio\" aria-checked=\"false\">15–30</button><button role=\"radio\" aria-checked=\"false\">Місяць</button></div>",
+      "css": ".ds-seg{display:grid;grid-template-columns:repeat(3,1fr);padding:3px;border-radius:12px;background:var(--t-surface-2, #2B2A29);max-width:420px;font-family:var(--t-font, 'Golos Text', system-ui, sans-serif)} .ds-seg button{height:34px;border:0;border-radius:9px;background:transparent;color:var(--t-text-2, #ADA79C);font:500 14px var(--t-font, 'Golos Text', system-ui, sans-serif);cursor:pointer;transition:background .15s ease,color .15s ease} .ds-seg button.is-on{background:var(--t-surface-3, #353432);color:var(--t-text, #F4F0E8);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.35)} .ds-seg button:focus-visible{outline:2px solid var(--t-gold, #D1B46B);outline-offset:2px}"
+    },
+    {
+      "name": "Tabs",
+      "kind": "nav",
+      "refersTo": "title",
+      "description": "Text tabs on a hairline with a gold underline for the active tab.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button class=\"is-on\" role=\"tab\" aria-selected=\"true\">Огляд</button><button role=\"tab\" aria-selected=\"false\">Топ каси</button></div>",
+      "css": ".ds-tabs{display:flex;gap:20px;border-bottom:1px solid var(--t-line, rgba(244,238,226,0.08))} .ds-tabs button{position:relative;border:0;background:none;padding:10px 0 12px;font:600 16px var(--t-font, 'Golos Text', system-ui, sans-serif);color:var(--t-text-3, #A09A90);cursor:pointer;transition:color .15s ease} .ds-tabs button:hover{color:var(--t-text-2, #ADA79C)} .ds-tabs button.is-on{color:var(--t-text, #F4F0E8)} .ds-tabs button.is-on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px;background:var(--t-gold, #D1B46B)} .ds-tabs button:focus-visible{outline:2px solid var(--t-gold, #D1B46B);outline-offset:2px}"
+    },
+    {
+      "name": "Hero Summary Card",
+      "kind": "card",
+      "refersTo": "card-summary",
+      "description": "Payout figure in gold with its formula breakdown; answers the screen in a glance.",
+      "html": "<section class=\"ds-hero\"><div class=\"ds-hero-head\"><h2>До виплати</h2><span>1–14 листопада</span></div><p class=\"ds-hero-sum\">2 908<span>₴</span></p><dl class=\"ds-hero-bd\"><div><dt>4% каси</dt><dd>1 408 ₴</dd></div><div><dt>6 змін × 200</dt><dd>1 200 ₴</dd></div><div><dt>Доплати</dt><dd>300 ₴</dd></div></dl><p class=\"ds-hero-note\">Каса за 1–14, ставка й доплати за 1–15</p></section>",
+      "css": ".ds-hero{display:flex;flex-direction:column;gap:8px;padding:16px 16px 14px;border-radius:20px;background:var(--t-surface-2, #2B2A29);color:var(--t-text, #F4F0E8);font-family:var(--t-font, 'Golos Text', system-ui, sans-serif);font-variant-numeric:tabular-nums} .ds-hero h2,.ds-hero p,.ds-hero dl,.ds-hero dd{margin:0} .ds-hero-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px} .ds-hero-head h2{font-size:15px;font-weight:500;color:var(--t-text-2, #ADA79C)} .ds-hero-head span{font-size:13px;color:var(--t-text-3, #A09A90)} .ds-hero-sum{display:flex;align-items:baseline;gap:8px;font-size:clamp(40px,11vw,52px);line-height:1.02;font-weight:700;letter-spacing:-.02em;color:var(--t-gold, #D1B46B)} .ds-hero-sum span{font-size:.5em;font-weight:600;letter-spacing:0} .ds-hero-bd{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding-top:12px;border-top:1px solid var(--t-line, rgba(244,238,226,0.08))} .ds-hero-bd dt{font-size:12px;color:var(--t-text-3, #A09A90)} .ds-hero-bd dd{margin-top:2px;font-size:15px;font-weight:600} .ds-hero-note{font-size:12.5px;line-height:1.45;color:var(--t-text-3, #A09A90)}"
+    },
+    {
+      "name": "Stat Tile",
+      "kind": "card",
+      "refersTo": "stat-tile",
+      "description": "Compact metric with label, value and a sub-line; movement in green/coral with an arrow.",
+      "html": "<div class=\"ds-stat\"><span>Місце в топі</span><strong>3 з 11</strong><small class=\"is-up\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m5 12 7-7 7 7M12 19V5\"/></svg>1 за день</small></div>",
+      "css": ".ds-stat{display:flex;flex-direction:column;gap:4px;max-width:180px;padding:12px;border-radius:14px;background:var(--t-surface, #201F1E);border:1px solid var(--t-line, rgba(244,238,226,0.08));color:var(--t-text, #F4F0E8);font-family:var(--t-font, 'Golos Text', system-ui, sans-serif);font-variant-numeric:tabular-nums} .ds-stat span{font-size:12px;color:var(--t-text-3, #A09A90)} .ds-stat strong{font-size:17px;font-weight:700} .ds-stat small{display:flex;align-items:center;gap:2px;font-size:11.5px;color:var(--t-text-2, #ADA79C)} .ds-stat small.is-up{color:var(--t-up, #7DC593)}"
+    },
+    {
+      "name": "Money Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Labelled field on brand charcoal with a ₴ suffix; border turns gold on focus.",
+      "html": "<label class=\"ds-field\"><span>Чайові</span><span class=\"ds-money\"><input inputmode=\"numeric\" placeholder=\"0\" value=\"850\" /><b>₴</b></span></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:6px;max-width:320px;font-family:var(--t-font, 'Golos Text', system-ui, sans-serif)} .ds-field>span:first-child{font-size:13px;color:var(--t-text-2, #ADA79C)} .ds-money{position:relative;display:block} .ds-money input{width:100%;height:48px;padding:0 40px 0 14px;border:1px solid var(--t-line-strong, rgba(244,238,226,0.16));border-radius:14px;background:var(--t-surface-2, #2B2A29);color:var(--t-text, #F4F0E8);font:500 16px var(--t-font, 'Golos Text', system-ui, sans-serif);caret-color:var(--t-gold, #D1B46B);color-scheme:dark;box-sizing:border-box} .ds-money input::placeholder{color:var(--t-text-3, #A09A90)} .ds-money input:focus{outline:none;border-color:var(--t-gold, #D1B46B)} .ds-money b{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-weight:600;color:var(--t-text-3, #A09A90);pointer-events:none}"
+    },
+    {
+      "name": "Ranking Row",
+      "kind": "custom",
+      "refersTo": "badge-you",
+      "description": "Leaderboard rows: rank, avatar, name and role, movement; viewer highlighted in gold wash, no sums.",
+      "html": "<ol class=\"ds-rank\"><li class=\"is-podium\"><span class=\"r\">2</span><span class=\"av\">АШ</span><span class=\"p\"><strong>Андрій Ш.</strong><small>Бармен</small></span><span class=\"mv\">–</span></li><li class=\"is-podium is-focus\"><span class=\"r\">3</span><span class=\"av\">ВП</span><span class=\"p\"><strong>Віктор Приклад<em>Ти</em></strong><small>Офіціант</small></span><span class=\"mv is-up\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m5 12 7-7 7 7M12 19V5\"/></svg>1</span></li><li><span class=\"r\">4</span><span class=\"av\">МД</span><span class=\"p\"><strong>Марко Д.</strong><small>Офіціант</small></span><span class=\"mv\">–</span></li></ol>",
+      "css": ".ds-rank{list-style:none;margin:0;padding:0 10px;max-width:380px;font-family:var(--t-font, 'Golos Text', system-ui, sans-serif);color:var(--t-text, #F4F0E8)} .ds-rank li{display:grid;grid-template-columns:24px 36px minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 0} .ds-rank li+li{border-top:1px solid var(--t-line, rgba(244,238,226,0.08))} .ds-rank li.is-focus{margin:0 -10px;padding:10px;border-radius:14px;background:var(--t-gold-tint, rgba(209,180,107,0.12));border-top-color:transparent} .ds-rank li.is-focus+li{border-top-color:transparent} .ds-rank .r{font-size:15px;font-weight:700;color:var(--t-text-3, #A09A90);text-align:center} .ds-rank .is-podium .r{color:var(--t-gold, #D1B46B)} .ds-rank .av{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--t-surface-3, #353432);font-size:13px;font-weight:600;color:var(--t-text-2, #ADA79C)} .ds-rank .p{display:flex;flex-direction:column;gap:2px;min-width:0} .ds-rank strong{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600} .ds-rank em{padding:2px 8px;border-radius:999px;background:var(--t-gold, #D1B46B);color:var(--t-on-gold, #1A1918);font-size:11px;font-style:normal;font-weight:700} .ds-rank small{font-size:12.5px;color:var(--t-text-3, #A09A90)} .ds-rank .mv{display:inline-flex;align-items:center;justify-content:flex-end;gap:2px;min-width:40px;font-size:13px;font-weight:600;color:var(--t-text-3, #A09A90)} .ds-rank .mv.is-up{color:var(--t-up, #7DC593)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night-Shift Ledger",
+    "overview": "Creative North Star: \"The Night-Shift Ledger\"\n\nA category-standard staff dashboard played straight and finished to banking-app craft (the owner's reference is monobank). The worker's money comes first: one large gold figure, its formula spelled out beneath it, one primary action, then data in calm cards. Everything sits on a warm charcoal ground taken from the supplied Tiflis logo, tuned for a phone held in one hand in a dim restaurant hall. The ground is dark only: the owner rejected a light theme for evening use.\n\nThe system carries no themed ornament: no wine, menu, Georgian folklore or other motifs, and no gradients, glows or patterns. Character comes from the brand pair (charcoal and gold), confident tabular numbers in one sans, tonal surface steps, and generous 14–20px radii. Gold is scarce and always means something: your money, your action, your current selection.\n\nMigration state. The cash screen (`src/pages/CashPage.tsx`, `src/components/CashTopList.tsx`, styles in `src/pages/cash-v3.css`) is the first and so far only screen built on this system. The portal tokens (`--t-*`) live in `src/theme/tiflis-theme.css`, which loads last and also rethemes the shared shell (sidebar, top bar, mobile bottom nav, avatars). Every other screen still carries legacy styles: hard-coded greens from the old portal, Prata headings, and older panel patterns. As a bridge, the legacy token names (`--bg`, `--surface`, `--surface-2`, `--surface-3`, `--surface-raised`, `--border`, `--border-strong`, `--text`, `--muted`, `--gold`, `--gold-soft`, `--green`, `--danger`) now resolve to the `--t-*` values, so older screens get the brand ground without being redesigned. The bridge is temporary. When you migrate a screen, use the `--t-*` tokens and the cash-v3 component patterns below, and remove its hard-coded colours and Prata. Don't add new uses of the legacy names.",
+    "keyCharacteristics": [
+      "Warm charcoal ground with three tonal surface steps; depth comes from tone, not shadow.",
+      "Brand gold (#D1B46B) used sparingly, only for meaning.",
+      "One self-hosted UI sans (Golos Text, 400–700), tabular figures everywhere money appears.",
+      "Summary first, one gold primary action per view, data in rounded cards.",
+      "Phone-first single column, which becomes a two-column dashboard at 1024px.",
+      "Green and red only for gain and loss, always paired with an arrow or sign."
+    ],
+    "rules": [
+      {
+        "name": "The Gold Is Earned Rule",
+        "body": "Gold marks money that belongs to the viewer, the one primary action, or the current selection. It is never a background wash for a section, a decorative border, or a heading colour.",
+        "section": "colors"
+      },
+      {
+        "name": "The Green Means Gain Rule",
+        "body": "Green and coral appear only for movement and consequence (gain, loss, delete, error) and always with an arrow, sign or word next to them. Green is never a brand or success-decoration colour. This rule retires the old green-era palette.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Money Rule",
+        "body": "Every screen showing sums sets `tabular-nums`. Amounts are formatted uk-UA (space-grouped thousands) with a trailing ₴, so columns of money line up.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Face Rule",
+        "body": "Golos Text is the only interface face. Prata and system display faces belong to the legacy screens and are removed during migration.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tone Not Shadow Rule",
+        "body": "To raise something, move it one step up the surface ramp. Don't add a drop shadow, glow or gradient. The summary card sits on brand charcoal, while ordinary cards sit one step lower with a hairline border.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do build migrated screens on the `--t-*` tokens and the cash-v3 patterns (hero summary, stat tiles, segmented control, cards, hairline lists, dialog).",
+      "Do keep gold for the viewer's money, the single primary action, and the current selection (The Gold Is Earned Rule).",
+      "Do show sums with `tabular-nums`, uk-UA grouping and a trailing ₴, and explain each total with its formula directly beneath it.",
+      "Do put the primary action within thumb reach above long content, and size touch targets at 36px or more (52px for primary actions).",
+      "Do raise elements by stepping up the surface ramp (ground → surface → surface-2 → surface-3) with 1px warm hairlines.",
+      "Do pair gain green and loss coral with an arrow, sign or word.",
+      "Do use the supplied gold wordmark file as-is in the shell.",
+      "Do keep every dialog on the shared ModalRuntime so dialogs centre consistently on phones."
+    ],
+    "donts": [
+      "Don't add a light theme; the ground is dark only.",
+      "Don't add themed ornament (wine, menu, Georgian folklore or other motifs), gradients, glows or patterns.",
+      "Don't reintroduce the old green palette, wine accent or Prata, or reference the legacy token names (`--bg`, `--gold`, `--green`, …) in new code.",
+      "Don't use more than one gold-filled button in a view, or use gold as a section background.",
+      "Don't add drop shadows to cards; the segment-thumb shadow is the only one.",
+      "Don't show other people's sums in rankings or shared views; show place and movement.",
+      "Don't redraw, re-letter or recolour the Tiflis wordmark beyond the supplied variants."
+    ]
+  }
+}
