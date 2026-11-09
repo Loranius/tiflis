@@ -519,9 +519,9 @@ function NowMarker({ minutes }: { minutes: number }) {
   );
 }
 
-function Pulse({ label, value, gold = false }: { label: string; value: string; gold?: boolean }) {
+function Pulse({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`hv3-pulse-item${gold ? ' is-gold' : ''}`} role="listitem">
+    <div className="hv3-pulse-item" role="listitem">
       <strong>{value}</strong>
       <small>{label}</small>
     </div>

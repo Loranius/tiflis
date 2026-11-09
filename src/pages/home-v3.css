@@ -172,16 +172,16 @@
   color: var(--t-text-3);
 }
 
-/* The world's shift code chip (DESIGN.md "Shift Code Chip"): breakfasts in gold tint, work in primary text. */
+/* Legend-size variant of the Shift Code Chip (DESIGN.md): breakfasts in gold tint, work in primary text. */
 .hv3-code {
   display: inline-block;
   min-width: 26px;
   margin-right: 4px;
-  padding: 2px 6px;
-  border-radius: 6px;
+  padding: 3px 6px;
+  border-radius: 9px;
   background: var(--t-surface-3);
   color: var(--t-text);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   text-align: center;
 }
@@ -346,9 +346,6 @@
   color: var(--t-text-3);
 }
 
-.hv3-pulse-item.is-gold strong {
-  color: var(--t-gold);
-}
 
 /* Close shift (after 22:00) */
 .hv3-close:not(.is-done) {
