@@ -132,12 +132,12 @@
 }
 
 .sv3-seg button {
-  height: 36px;
+  height: 34px;
   border: 0;
   border-radius: 9px;
   background: transparent;
   color: var(--t-text-2);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -370,7 +370,7 @@
 }
 
 .sv3-cell.is-saved {
-  color: var(--t-up) !important;
+  color: var(--t-text-2) !important;
 }
 
 /* Shift tones: text colour carries the code type; tints only for leave, breakfasts and bar. */

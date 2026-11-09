@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-09T19:20:00Z",
+  "generatedAt": "2026-11-09T21:00:00Z",
   "title": "Design System: Tiflis Staff Portal",
   "extensions": {
     "colorMeta": {
@@ -228,6 +228,81 @@
           "rgba(244,238,226,0.6)",
           "rgba(244,238,226,0.85)"
         ]
+      },
+      "gold-wash": {
+        "role": "primary",
+        "displayName": "Gold Haze",
+        "canonical": "rgba(209, 180, 107, 0.07)",
+        "tonalRamp": [
+          "rgba(209,180,107,0.03)",
+          "rgba(209,180,107,0.05)",
+          "rgba(209,180,107,0.07)",
+          "rgba(209,180,107,0.1)",
+          "rgba(209,180,107,0.14)",
+          "rgba(209,180,107,0.2)",
+          "rgba(209,180,107,0.35)",
+          "rgba(209,180,107,0.6)"
+        ]
+      },
+      "down-tint": {
+        "role": "tertiary",
+        "displayName": "Coral Wash",
+        "canonical": "rgba(229, 139, 128, 0.14)",
+        "tonalRamp": [
+          "rgba(229,139,128,0.03)",
+          "rgba(229,139,128,0.05)",
+          "rgba(229,139,128,0.07)",
+          "rgba(229,139,128,0.1)",
+          "rgba(229,139,128,0.14)",
+          "rgba(229,139,128,0.2)",
+          "rgba(229,139,128,0.35)",
+          "rgba(229,139,128,0.6)"
+        ]
+      },
+      "down-text": {
+        "role": "tertiary",
+        "displayName": "Coral Text",
+        "canonical": "#F2C1BA",
+        "tonalRamp": [
+          "#3A1714",
+          "#5A2420",
+          "#7E3630",
+          "#A44C43",
+          "#C96A5F",
+          "#E58B80",
+          "#F2C1BA",
+          "#F8DCD8"
+        ]
+      },
+      "bar": {
+        "role": "tertiary",
+        "displayName": "Cool Bar",
+        "canonical": "#9FB4E8",
+        "tonalRamp": [
+          "#161E30",
+          "#24314F",
+          "#354872",
+          "#4B6297",
+          "#6B85C0",
+          "#9FB4E8",
+          "#C3D1F1",
+          "#E6ECFA"
+        ]
+      },
+      "bar-tint": {
+        "role": "tertiary",
+        "displayName": "Bar Wash",
+        "canonical": "rgba(159, 180, 232, 0.14)",
+        "tonalRamp": [
+          "rgba(159,180,232,0.03)",
+          "rgba(159,180,232,0.05)",
+          "rgba(159,180,232,0.07)",
+          "rgba(159,180,232,0.1)",
+          "rgba(159,180,232,0.14)",
+          "rgba(159,180,232,0.2)",
+          "rgba(159,180,232,0.35)",
+          "rgba(159,180,232,0.6)"
+        ]
       }
     },
     "typographyMeta": {
@@ -317,6 +392,16 @@
         "name": "reduced-motion",
         "value": "prefers-reduced-motion: reduce disables all animation and transition",
         "purpose": "Accessibility."
+      },
+      {
+        "name": "cell-state",
+        "value": "background 0.12s ease",
+        "purpose": "Schedule cell hover."
+      },
+      {
+        "name": "spinner",
+        "value": "rotate 0.8s linear infinite",
+        "purpose": "Saving indicator inside a schedule cell or code chip."
       }
     ],
     "breakpoints": [
@@ -330,7 +415,7 @@
       },
       {
         "name": "dashboard",
-        "value": "1024px"
+        "value": "1024px (min-width; also: whole-month schedule, half switch hidden)"
       }
     ]
   },
@@ -406,18 +491,51 @@
       "description": "Leaderboard rows: rank, avatar, name and role, movement; viewer highlighted in gold wash, no sums.",
       "html": "<ol class=\"ds-rank\"><li class=\"is-podium\"><span class=\"r\">2</span><span class=\"av\">АШ</span><span class=\"p\"><strong>Андрій Ш.</strong><small>Бармен</small></span><span class=\"mv\">–</span></li><li class=\"is-podium is-focus\"><span class=\"r\">3</span><span class=\"av\">ВП</span><span class=\"p\"><strong>Віктор Приклад<em>Ти</em></strong><small>Офіціант</small></span><span class=\"mv is-up\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m5 12 7-7 7 7M12 19V5\"/></svg>1</span></li><li><span class=\"r\">4</span><span class=\"av\">МД</span><span class=\"p\"><strong>Марко Д.</strong><small>Офіціант</small></span><span class=\"mv\">–</span></li></ol>",
       "css": ".ds-rank{list-style:none;margin:0;padding:0 10px;max-width:380px;font-family:var(--t-font, 'Golos Text', system-ui, sans-serif);color:var(--t-text, #F4F0E8)} .ds-rank li{display:grid;grid-template-columns:24px 36px minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 0} .ds-rank li+li{border-top:1px solid var(--t-line, rgba(244,238,226,0.08))} .ds-rank li.is-focus{margin:0 -10px;padding:10px;border-radius:14px;background:var(--t-gold-tint, rgba(209,180,107,0.12));border-top-color:transparent} .ds-rank li.is-focus+li{border-top-color:transparent} .ds-rank .r{font-size:15px;font-weight:700;color:var(--t-text-3, #A09A90);text-align:center} .ds-rank .is-podium .r{color:var(--t-gold, #D1B46B)} .ds-rank .av{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:var(--t-surface-3, #353432);font-size:13px;font-weight:600;color:var(--t-text-2, #ADA79C)} .ds-rank .p{display:flex;flex-direction:column;gap:2px;min-width:0} .ds-rank strong{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600} .ds-rank em{padding:2px 8px;border-radius:999px;background:var(--t-gold, #D1B46B);color:var(--t-on-gold, #1A1918);font-size:11px;font-style:normal;font-weight:700} .ds-rank small{font-size:12.5px;color:var(--t-text-3, #A09A90)} .ds-rank .mv{display:inline-flex;align-items:center;justify-content:flex-end;gap:2px;min-width:40px;font-size:13px;font-weight:600;color:var(--t-text-3, #A09A90)} .ds-rank .mv.is-up{color:var(--t-up, #7DC593)}"
+    },
+    {
+      "name": "Schedule Table",
+      "kind": "custom",
+      "refersTo": "schedule-table",
+      "description": "People × days table: sticky names, today's column and the viewer's row in gold haze, tinted code cells, on-shift count row.",
+      "html": "<div class=\"ds-sched\"><table class=\"ds-tbl\"><thead><tr><th class=\"n\"></th><th class=\"we\"><small>Сб</small><b>7</b></th><th class=\"we\"><small>Нд</small><b>8</b></th><th class=\"td\"><small>Пн</small><b>9</b></th><th><small>Вт</small><b>10</b></th></tr></thead><tbody><tr><th class=\"n\">Олена К.</th><td class=\"we\"><button class=\"c tone-off\">Х</button></td><td class=\"we\"><button class=\"c tone-off\">Х</button></td><td class=\"td\"><button class=\"c tone-work\">Р</button></td><td><button class=\"c tone-mixed\">Р/Б</button></td></tr><tr class=\"own\"><th class=\"n\">Віктор П.</th><td class=\"we\"><button class=\"c tone-work\">Р</button></td><td class=\"we\"><button class=\"c tone-work\">Р</button></td><td class=\"td\"><button class=\"c tone-breakfast\">СН</button></td><td><button class=\"c tone-leave\">О</button></td></tr><tr><th class=\"n\">Марко Д.</th><td class=\"we\"><button class=\"c tone-work\">Р</button></td><td class=\"we\"><button class=\"c tone-bar\">Б</button></td><td class=\"td\"><button class=\"c tone-work\">Р</button></td><td><button class=\"c tone-work\">Р</button></td></tr></tbody><tfoot><tr><th class=\"n\">На зміні</th><td>2</td><td>3</td><td class=\"td\">3</td><td>2</td></tr></tfoot></table></div>",
+      "css": ".ds-tbl{border-collapse:separate;border-spacing:0;border:1px solid var(--t-line,rgba(244,238,226,.08));border-radius:20px;background:var(--t-surface,#201F1E);color:var(--t-text,#F4F0E8);font-family:var(--t-font, 'Golos Text', system-ui, sans-serif);font-variant-numeric:tabular-nums;overflow:hidden} .ds-tbl th,.ds-tbl td{min-width:31px;height:38px;padding:2px;text-align:center;border-bottom:1px solid var(--t-line,rgba(244,238,226,.08))} .ds-tbl thead th{height:46px;font-weight:500;line-height:1.15} .ds-tbl thead small{display:block;font-size:10.5px;color:var(--t-text-3,#A09A90)} .ds-tbl thead b{display:block;font-size:13px;font-weight:700} .ds-tbl thead th.we small{color:var(--t-text-2,#ADA79C)} .ds-tbl thead th.td small,.ds-tbl thead th.td b{color:var(--t-gold,#D1B46B)} .ds-tbl .td{background:var(--t-gold-wash,rgba(209,180,107,.07))} .ds-tbl td.we{background:rgba(244,238,226,.02)} .ds-tbl .n{width:92px;padding:0 8px 0 12px;border-right:1px solid var(--t-line,rgba(244,238,226,.08));text-align:left;font-size:13px;font-weight:500;white-space:nowrap} .ds-tbl tr.own td,.ds-tbl tr.own .n{background:var(--t-gold-wash,rgba(209,180,107,.07))} .ds-tbl tr.own .n{color:var(--t-gold,#D1B46B);font-weight:600} .ds-tbl tfoot th,.ds-tbl tfoot td{height:32px;border-bottom:0;font-size:12px;font-weight:500;color:var(--t-text-3,#A09A90)} .ds-tbl tfoot td.td{color:var(--t-gold,#D1B46B);font-weight:700} .ds-tbl .c{width:100%;min-width:27px;height:32px;display:grid;place-items:center;padding:0;border:0;border-radius:9px;background:transparent;font:700 12.5px var(--t-font, 'Golos Text', system-ui, sans-serif);cursor:pointer;transition:background .12s ease} .ds-tbl .c:hover{background:var(--t-surface-3,#353432)} .ds-tbl .c:focus-visible{outline:2px solid var(--t-gold,#D1B46B);outline-offset:2px} .ds-sched .tone-work{color:var(--t-text,#F4F0E8)} .ds-sched .tone-off{color:var(--t-text-3,#A09A90);font-weight:500} .ds-sched .tone-neutral{color:var(--t-text-2,#ADA79C)} .ds-sched .tone-leave{color:var(--t-down,#E58B80);background-color:var(--t-down-tint,rgba(229,139,128,.14))} .ds-sched .tone-breakfast{color:var(--t-gold,#D1B46B);background-color:var(--t-gold-tint,rgba(209,180,107,.12))} .ds-sched .tone-bar{color:var(--t-bar,#9FB4E8);background-color:var(--t-bar-tint,rgba(159,180,232,.14))} .ds-sched .tone-mixed{color:var(--t-text,#F4F0E8);background-color:var(--t-bar-tint,rgba(159,180,232,.14))}"
+    },
+    {
+      "name": "Department Chips",
+      "kind": "chip",
+      "refersTo": "chip-department",
+      "description": "Scrollable department filter with head counts; the active chip steps up a surface, no shadow.",
+      "html": "<div class=\"ds-chips\" role=\"tablist\"><button class=\"is-on\" role=\"tab\" aria-selected=\"true\">Офіціанти <span>7</span></button><button role=\"tab\" aria-selected=\"false\">Бар <span>4</span></button><button role=\"tab\" aria-selected=\"false\">Хостес <span>1</span></button><button role=\"tab\" aria-selected=\"false\">Кухня <span>3</span></button></div>",
+      "css": ".ds-chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none} .ds-chips button{flex:none;height:36px;padding:0 12px;border:0;border-radius:10px;background:var(--t-surface-2,#2B2A29);color:var(--t-text-2,#ADA79C);font:500 14px var(--t-font, 'Golos Text', system-ui, sans-serif);cursor:pointer;transition:background .15s ease,color .15s ease} .ds-chips button span{margin-left:4px;color:var(--t-text-3,#A09A90)} .ds-chips button.is-on{background:var(--t-surface-3,#353432);color:var(--t-text,#F4F0E8);font-weight:600} .ds-chips button:focus-visible{outline:2px solid var(--t-gold,#D1B46B);outline-offset:2px}"
+    },
+    {
+      "name": "Brush Palette",
+      "kind": "custom",
+      "refersTo": "brush-palette",
+      "description": "Admin paint tool: every shift code in a five-column grid, gold outline on the selected code, gold «Готово».",
+      "html": "<div class=\"ds-sched\"><div class=\"ds-brush\" role=\"toolbar\"><div class=\"codes\"><button class=\"ds-code tone-neutral\">—</button><button class=\"ds-code tone-work is-sel\">Р</button><button class=\"ds-code tone-off\">Х</button><button class=\"ds-code tone-leave\">О</button><button class=\"ds-code tone-breakfast\">СН</button><button class=\"ds-code tone-bar\">Б</button><button class=\"ds-code tone-neutral\">С</button><button class=\"ds-code tone-mixed\">Р/Б</button><button class=\"ds-code tone-mixed\">СН/Б</button></div><button class=\"done\">Готово</button></div></div>",
+      "css": ".ds-sched .ds-code{min-width:34px;height:26px;display:inline-grid;place-items:center;padding:0 7px;border:0;border-radius:9px;background-color:var(--t-surface-3,#353432);font:700 13px var(--t-font, 'Golos Text', system-ui, sans-serif)} .ds-sched .tone-work{color:var(--t-text,#F4F0E8)} .ds-sched .tone-off{color:var(--t-text-3,#A09A90);font-weight:500} .ds-sched .tone-neutral{color:var(--t-text-2,#ADA79C)} .ds-sched .tone-leave{color:var(--t-down,#E58B80);background-color:var(--t-down-tint,rgba(229,139,128,.14))} .ds-sched .tone-breakfast{color:var(--t-gold,#D1B46B);background-color:var(--t-gold-tint,rgba(209,180,107,.12))} .ds-sched .tone-bar{color:var(--t-bar,#9FB4E8);background-color:var(--t-bar-tint,rgba(159,180,232,.14))} .ds-sched .tone-mixed{color:var(--t-text,#F4F0E8);background-color:var(--t-bar-tint,rgba(159,180,232,.14))} .ds-brush{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;max-width:360px;padding:8px;border:1px solid var(--t-line-strong,rgba(244,238,226,.16));border-radius:14px;background:var(--t-surface-3,#353432);color:var(--t-text,#F4F0E8)} .ds-brush .codes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px} .ds-brush .codes .ds-code{min-width:0;width:100%;height:40px;padding:0 2px;font-size:14px;cursor:pointer} .ds-brush .codes .ds-code.tone-work,.ds-brush .codes .ds-code.tone-off,.ds-brush .codes .ds-code.tone-neutral{background-color:var(--t-surface-2,#2B2A29)} .ds-brush .codes .ds-code.is-sel{outline:2px solid var(--t-gold,#D1B46B);outline-offset:1px} .ds-brush .done{min-width:76px;padding:0 14px;border:0;border-radius:10px;background:var(--t-gold,#D1B46B);color:var(--t-on-gold,#1A1918);font:700 15px var(--t-font, 'Golos Text', system-ui, sans-serif);cursor:pointer} .ds-brush .done:hover{background:#DCC07A} .ds-brush button:focus-visible{outline:2px solid var(--t-gold,#D1B46B);outline-offset:2px}"
+    },
+    {
+      "name": "Shift Picker",
+      "kind": "custom",
+      "refersTo": "picker-option",
+      "description": "Dialog body with a two-column grid of code options; the current code has a gold border and check.",
+      "html": "<div class=\"ds-sched\"><div class=\"ds-picker\" role=\"dialog\" aria-label=\"Віктор Приклад\"><div class=\"head\"><div><h2>Віктор Приклад</h2><p>Вівторок, 10 листопада</p></div></div><div class=\"grid\"><button><span class=\"ds-code tone-neutral\">—</span><span>Не призначено</span></button><button class=\"is-on\"><span class=\"ds-code tone-work\">Р</span><span>Робоча</span><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 6 9 17l-5-5\"/></svg></button><button><span class=\"ds-code tone-off\">Х</span><span>Вихідний</span></button><button><span class=\"ds-code tone-leave\">О</span><span>Відпустка</span></button><button><span class=\"ds-code tone-breakfast\">СН</span><span>Сніданки</span></button><button><span class=\"ds-code tone-bar\">Б</span><span>Бар</span></button></div></div></div>",
+      "css": ".ds-sched .ds-code{min-width:34px;height:26px;display:inline-grid;place-items:center;padding:0 7px;border:0;border-radius:9px;background-color:var(--t-surface-3,#353432);font:700 13px var(--t-font, 'Golos Text', system-ui, sans-serif)} .ds-sched .tone-work{color:var(--t-text,#F4F0E8)} .ds-sched .tone-off{color:var(--t-text-3,#A09A90);font-weight:500} .ds-sched .tone-neutral{color:var(--t-text-2,#ADA79C)} .ds-sched .tone-leave{color:var(--t-down,#E58B80);background-color:var(--t-down-tint,rgba(229,139,128,.14))} .ds-sched .tone-breakfast{color:var(--t-gold,#D1B46B);background-color:var(--t-gold-tint,rgba(209,180,107,.12))} .ds-sched .tone-bar{color:var(--t-bar,#9FB4E8);background-color:var(--t-bar-tint,rgba(159,180,232,.14))} .ds-sched .tone-mixed{color:var(--t-text,#F4F0E8);background-color:var(--t-bar-tint,rgba(159,180,232,.14))} .ds-picker{width:min(100%,420px);padding:18px;border:1px solid var(--t-line-strong,rgba(244,238,226,.16));border-radius:22px;background:var(--t-surface,#201F1E);color:var(--t-text,#F4F0E8);font-family:var(--t-font, 'Golos Text', system-ui, sans-serif)} .ds-picker .head{margin-bottom:14px} .ds-picker h2{margin:0;font-size:19px;font-weight:700} .ds-picker p{margin:2px 0 0;font-size:13.5px;color:var(--t-text-2,#ADA79C)} .ds-picker .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px} .ds-picker .grid button{min-height:52px;display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid transparent;border-radius:12px;background:var(--t-surface-2,#2B2A29);color:var(--t-text,#F4F0E8);font:500 14px var(--t-font, 'Golos Text', system-ui, sans-serif);text-align:left;cursor:pointer} .ds-picker .grid button:hover{background:var(--t-surface-3,#353432)} .ds-picker .grid button.is-on{border-color:var(--t-gold,#D1B46B)} .ds-picker .grid button svg{margin-left:auto;color:var(--t-gold,#D1B46B)} .ds-picker .grid button:focus-visible{outline:2px solid var(--t-gold,#D1B46B);outline-offset:2px}"
     }
   ],
   "narrative": {
     "northStar": "The Night-Shift Ledger",
-    "overview": "Creative North Star: \"The Night-Shift Ledger\"\n\nA category-standard staff dashboard played straight and finished to banking-app craft (the owner's reference is monobank). The worker's money comes first: one large gold figure, its formula spelled out beneath it, one primary action, then data in calm cards. Everything sits on a warm charcoal ground taken from the supplied Tiflis logo, tuned for a phone held in one hand in a dim restaurant hall. The ground is dark only: the owner rejected a light theme for evening use.\n\nThe system carries no themed ornament: no wine, menu, Georgian folklore or other motifs, and no gradients, glows or patterns. Character comes from the brand pair (charcoal and gold), confident tabular numbers in one sans, tonal surface steps, and generous 14–20px radii. Gold is scarce and always means something: your money, your action, your current selection.\n\nMigration state. The cash screen (`src/pages/CashPage.tsx`, `src/components/CashTopList.tsx`, styles in `src/pages/cash-v3.css`) is the first and so far only screen built on this system. The portal tokens (`--t-*`) live in `src/theme/tiflis-theme.css`, which loads last and also rethemes the shared shell (sidebar, top bar, mobile bottom nav, avatars). Every other screen still carries legacy styles: hard-coded greens from the old portal, Prata headings, and older panel patterns. As a bridge, the legacy token names (`--bg`, `--surface`, `--surface-2`, `--surface-3`, `--surface-raised`, `--border`, `--border-strong`, `--text`, `--muted`, `--gold`, `--gold-soft`, `--green`, `--danger`) now resolve to the `--t-*` values, so older screens get the brand ground without being redesigned. The bridge is temporary. When you migrate a screen, use the `--t-*` tokens and the cash-v3 component patterns below, and remove its hard-coded colours and Prata. Don't add new uses of the legacy names.",
+    "overview": "Creative North Star: \"The Night-Shift Ledger\"\n\nA category-standard staff dashboard played straight and finished to banking-app craft (the owner's reference is monobank). The worker's money comes first: one large gold figure, its formula spelled out beneath it, one primary action, then data in calm cards. Everything sits on a warm charcoal ground taken from the supplied Tiflis logo, tuned for a phone held in one hand in a dim restaurant hall. The ground is dark only: the owner rejected a light theme for evening use.\n\nThe system carries no themed ornament: no wine, menu, Georgian folklore or other motifs, and no gradients, glows or patterns. Character comes from the brand pair (charcoal and gold), confident tabular numbers in one sans, tonal surface steps, and generous 14–20px radii. Gold is scarce and always means something: your money, your action, your current selection.\n\nMigration state. The cash screen (`src/pages/CashPage.tsx`, `src/components/CashTopList.tsx`, styles in `src/pages/cash-v3.css`) was the first screen built on this system. The schedule screen (`src/pages/SchedulePage.tsx`, styles in `src/pages/schedule-v3.css`) is the second. The portal tokens (`--t-*`) live in `src/theme/tiflis-theme.css`, which loads last and also rethemes the shared shell (sidebar, top bar, mobile bottom nav, avatars). Every other screen still carries legacy styles: hard-coded greens from the old portal, Prata headings, and older panel patterns. As a bridge, the legacy token names (`--bg`, `--surface`, `--surface-2`, `--surface-3`, `--surface-raised`, `--border`, `--border-strong`, `--text`, `--muted`, `--gold`, `--gold-soft`, `--green`, `--danger`) now resolve to the `--t-*` values, so older screens get the brand ground without being redesigned. The bridge is temporary. When you migrate a screen, use the `--t-*` tokens and the cash-v3 component patterns below, and remove its hard-coded colours and Prata. Don't add new uses of the legacy names.",
     "keyCharacteristics": [
       "Warm charcoal ground with three tonal surface steps; depth comes from tone, not shadow.",
       "Brand gold (#D1B46B) used sparingly, only for meaning.",
       "One self-hosted UI sans (Golos Text, 400–700), tabular figures everywhere money appears.",
       "Summary first, one gold primary action per view, data in rounded cards.",
       "Phone-first single column, which becomes a two-column dashboard at 1024px.",
-      "Green and red only for gain and loss, always paired with an arrow or sign."
+      "Green and red only for gain and loss, always paired with an arrow or sign.",
+      "Dense team data stays a people × days table; today and the viewer are marked in place with a faint gold haze, never reordered."
     ],
     "rules": [
       {
@@ -428,6 +546,11 @@
       {
         "name": "The Green Means Gain Rule",
         "body": "Green and coral appear only for movement and consequence (gain, loss, delete, error) and always with an arrow, sign or word next to them. Green is never a brand or success-decoration colour. This rule retires the old green-era palette.",
+        "section": "colors"
+      },
+      {
+        "name": "The Closed Legend Rule",
+        "body": "Shift-code colours are a closed legend: every coloured code shows its letters, and the screen shows the legend. Inside that legend, gold on gold wash means breakfasts and coral on coral wash means leave; this is the only place gold and coral carry a category instead of the meanings above. Never borrow the code tints, or the cool bar blue, for anything else.",
         "section": "colors"
       },
       {
@@ -454,7 +577,9 @@
       "Do raise elements by stepping up the surface ramp (ground → surface → surface-2 → surface-3) with 1px warm hairlines.",
       "Do pair gain green and loss coral with an arrow, sign or word.",
       "Do use the supplied gold wordmark file as-is in the shell.",
-      "Do keep every dialog on the shared ModalRuntime so dialogs centre consistently on phones."
+      "Do keep every dialog on the shared ModalRuntime so dialogs centre consistently on phones.",
+      "Do mark today and the viewer in tables with the gold haze (gold-wash) in place, keeping the department's order.",
+      "Do show every shift code with its letters and a visible legend (The Closed Legend Rule)."
     ],
     "donts": [
       "Don't add a light theme; the ground is dark only.",
@@ -463,7 +588,8 @@
       "Don't use more than one gold-filled button in a view, or use gold as a section background.",
       "Don't add drop shadows to cards; the segment-thumb shadow is the only one.",
       "Don't show other people's sums in rankings or shared views; show place and movement.",
-      "Don't redraw, re-letter or recolour the Tiflis wordmark beyond the supplied variants."
+      "Don't redraw, re-letter or recolour the Tiflis wordmark beyond the supplied variants.",
+      "Don't use the cool bar blue or the shift-code tints outside shift codes."
     ]
   }
 }
