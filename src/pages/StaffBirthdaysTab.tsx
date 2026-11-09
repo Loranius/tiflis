@@ -1,8 +1,10 @@
 import {
-  Cake, Check, Edit3, Plus, RefreshCw, Search, Trash2, X,
+  Cake, Check, Edit3, Image as ImageIcon, Plus, RefreshCw, Search, Trash2, X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Overlay } from '../components/Overlay';
 import { useKyivDay } from '../hooks/useKyivDay';
+import { photoFileProblem, resizePhotoFile } from '../lib/photo';
 import { secureApi } from '../lib/secureApi';
 import './staff-birthdays.css';
 
@@ -153,6 +155,27 @@ export function StaffBirthdaysTab() {
   const [search, setSearch] = useState('');
   const [positionFilter, setPositionFilter] = useState('all');
   const [editor, setEditor] = useState<BirthdayEditor | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setConfirmDelete(false); }, [editor?.id]);
+
+  async function uploadPhoto(file: File) {
+    const fileProblem = photoFileProblem(file);
+    if (fileProblem) { setError(fileProblem); return; }
+    setUploading(true);
+    setError(null);
+    try {
+      const { dataUrl, contentType } = await resizePhotoFile(file, 900);
+      const response = await secureApi<{ ok: true; avatar: string }>({ action: 'staff_upload_avatar', data: dataUrl, content_type: contentType }, 'tiflis-staff-api');
+      setEditor((current) => (current ? { ...current, avatar: response.avatar } : current));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити фото.');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -210,11 +233,11 @@ export function StaffBirthdaysTab() {
   async function savePerson() {
     if (!editor) return;
     if (!editor.fullName.trim()) {
-      setError('Вкажіть імʼя працівника.');
+      setError('Вкажи імʼя.');
       return;
     }
     if ((editor.birthdayMonth === '') !== (editor.birthdayDay === '')) {
-      setError('Вкажіть і місяць, і день народження — або залиште обидва поля порожніми.');
+      setError('Вкажи і місяць, і день — або залиш обидва порожніми.');
       return;
     }
     setSaving(true);
@@ -286,7 +309,7 @@ export function StaffBirthdaysTab() {
 
       {error ? <div className="birthdays-alert-v1" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}><X size={16} /></button></div> : null}
       {loading ? <div className="birthdays-loading-v1"><RefreshCw size={24} className="is-spinning" /><span>Завантажуємо список…</span></div> : null}
-      {!loading && filtered.length === 0 ? <div className="birthdays-empty-v1"><Cake size={30} /><strong>Нікого не знайдено</strong><span>Змініть пошук або посаду.</span></div> : null}
+      {!loading && filtered.length === 0 ? <div className="birthdays-empty-v1"><Cake size={30} /><strong>Нікого не знайдено</strong><span>Зміни пошук або посаду.</span></div> : null}
 
       {!loading ? (
         <section className="birthdays-grid-v1">
@@ -319,11 +342,12 @@ export function StaffBirthdaysTab() {
       ) : null}
 
       {editor ? (
-        <div className="birthdays-sheet-backdrop-v1" onMouseDown={() => !saving && setEditor(null)}>
-          <section className="birthdays-editor-sheet-v1" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+        <Overlay>
+        <div className="birthdays-sheet-backdrop-v1" onMouseDown={() => !saving && !uploading && setEditor(null)}>
+          <section className="birthdays-editor-sheet-v1" role="dialog" aria-modal="true" aria-labelledby="bd-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="birthdays-editor-heading-v1">
-              <div><span className="eyebrow">{editor.id ? 'Редагування' : 'Новий запис'}</span><h3>{editor.fullName || 'Працівник'}</h3></div>
-              <button type="button" onClick={() => setEditor(null)} disabled={saving}><X size={19} /></button>
+              <h3 id="bd-editor-title">{editor.id ? 'Редагувати запис' : 'Нова людина'}</h3>
+              <button type="button" onClick={() => setEditor(null)} disabled={saving || uploading} aria-label="Закрити"><X size={19} /></button>
             </div>
 
             <div className="birthdays-editor-grid-v1">
@@ -405,15 +429,31 @@ export function StaffBirthdaysTab() {
                 <small>Цій людині не прийде Telegram-нагадування про її власний день народження.</small>
               </label>
 
-              <label className="is-wide"><span>Avatar, HTTPS URL</span><input type="url" value={editor.avatar} maxLength={1000} onChange={(event) => setEditor({ ...editor, avatar: event.target.value })} placeholder="https://…" /></label>
+              <div className="is-wide birthdays-photo-v1">
+                <span>Фото</span>
+                <div>
+                  {editor.avatar ? <img src={editor.avatar} alt="" /> : <span className="birthdays-photo-empty-v1"><ImageIcon size={20} aria-hidden="true" /></span>}
+                  <button type="button" className="is-secondary" onClick={() => fileRef.current?.click()} disabled={uploading || saving}>
+                    {uploading ? <RefreshCw size={15} className="is-spinning" aria-hidden="true" /> : null}
+                    {uploading ? 'Завантаження…' : editor.avatar ? 'Змінити фото' : 'Додати фото'}
+                  </button>
+                  {editor.avatar ? <button type="button" className="is-link" onClick={() => setEditor({ ...editor, avatar: '' })} disabled={uploading || saving}>Прибрати</button> : null}
+                  <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden tabIndex={-1} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadPhoto(file); }} />
+                </div>
+              </div>
             </div>
 
             <div className="birthdays-editor-actions-v1">
-              {editor.id ? <button type="button" className="is-delete" onClick={() => void deletePerson()} disabled={saving}><Trash2 size={17} /> Видалити</button> : <span />}
-              <button type="button" className="is-save" onClick={() => void savePerson()} disabled={saving}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти</button>
+              {editor.id ? (
+                confirmDelete
+                  ? <button type="button" className="is-delete is-confirm" onClick={() => void deletePerson()} disabled={saving}><Trash2 size={17} aria-hidden="true" /> Так, видалити</button>
+                  : <button type="button" className="is-delete" onClick={() => setConfirmDelete(true)} disabled={saving}>Видалити</button>
+              ) : <span />}
+              <button type="button" className="is-save" onClick={() => void savePerson()} disabled={saving || uploading}>{saving ? <RefreshCw size={17} className="is-spinning" /> : <Check size={17} />} Зберегти</button>
             </div>
           </section>
         </div>
+        </Overlay>
       ) : null}
     </div>
   );

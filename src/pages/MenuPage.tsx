@@ -14,7 +14,8 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { Overlay } from '../components/Overlay';
+import { photoFileProblem, resizePhotoFile } from '../lib/photo';
 import { secureApi } from '../lib/secureApi';
 import './menu-v3.css';
 
@@ -148,40 +149,6 @@ function plural(count: number, one: string, few: string, many: string): string {
 /** After «з N»: genitive — «з 1 страви», «з 21 страви», «з 5 страв». */
 const ofDishes = (count: number) => plural(count, 'страви', 'страв', 'страв');
 const normalizeApostrophes = (value: string) => value.replace(/[’ʼ'`]/g, 'ʼ');
-
-/* ---------- photo upload (resize on device, then menu_upload_photo) ---------- */
-
-const PHOTO_MAX_SOURCE_BYTES = 15 * 1024 * 1024;
-const PHOTO_MAX_DIMENSION = 1600;
-const PHOTO_JPEG_QUALITY = 0.82;
-
-async function resizePhotoFile(file: File): Promise<{ dataUrl: string; contentType: string }> {
-  const bitmap = await createImageBitmap(file);
-  try {
-    const scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Браузер не може обробити фото.');
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return { dataUrl: canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY), contentType: 'image/jpeg' };
-  } finally {
-    bitmap.close();
-  }
-}
-
-/* ---------- dialogs: portal + inert page behind, so Tab cannot leave the open sheet ---------- */
-
-function Overlay({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    const shell = document.querySelector<HTMLElement>('.app-shell');
-    if (!shell) return;
-    shell.inert = true;
-    return () => { shell.inert = false; };
-  }, []);
-  return createPortal(children, document.body);
-}
 
 /* ---------- page ---------- */
 
@@ -703,8 +670,8 @@ function Editor({ initial, items, onClose, onSaved }: { initial: EditorState; it
   const sections = [...new Set([...Object.keys(SECTION_META), ...items.map((item) => item.section)])];
 
   async function uploadPhoto(file: File) {
-    if (!file.type.startsWith('image/')) { setProblem('Обери файл зображення.'); return; }
-    if (file.size > PHOTO_MAX_SOURCE_BYTES) { setProblem('Файл завеликий (максимум 15 МБ).'); return; }
+    const fileProblem = photoFileProblem(file);
+    if (fileProblem) { setProblem(fileProblem); return; }
     setBusy('photo');
     setProblem(null);
     try {
