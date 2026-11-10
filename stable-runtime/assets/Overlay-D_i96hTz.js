@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-CbXtAM7H.js";import{at as t}from"./icons-vendor-D9fcIUZr.js";import{p as n}from"./react-vendor-Dd-N2h5J.js";var r=e(t(),1),i=n();function a({children:e}){return(0,r.useEffect)(()=>{let e=document.querySelector(`.app-shell`);if(e)return e.inert=!0,()=>{e.inert=!1}},[]),(0,i.createPortal)(e,document.body)}export{a as t};
