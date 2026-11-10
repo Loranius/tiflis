@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { edgeFunctionUrl, supabase, supabasePublishableKey } from '../lib/supabase';
 import type { LegacyAuthResponse, StaffRole, StaffUser } from '../types';
+import { clearSecureApiMemory } from '../lib/secureApi';
 
 interface AuthContextValue {
   user: StaffUser | null;
@@ -205,6 +206,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (event === 'SIGNED_OUT' || !session?.user) {
         sessionGenerationRef.current += 1;
+        clearSecureApiMemory();
         clearCachedProfile();
         applyUser(null);
         setLoading(false);

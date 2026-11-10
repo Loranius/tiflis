@@ -16,7 +16,7 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Overlay } from '../components/Overlay';
 import { photoFileProblem, resizePhotoFile } from '../lib/photo';
-import { secureApi } from '../lib/secureApi';
+import { peekSecureApi, secureApi } from '../lib/secureApi';
 import { StaffBirthdaysTab } from './StaffBirthdaysTab';
 import './staff-v3.css';
 import { SegThumb } from '../lib/motion';
@@ -172,6 +172,11 @@ function createEditor(member?: StaffMember): Editor {
 
 /* ---------- page ---------- */
 
+/** Warm the team screen's first request. */
+export function prefetch() {
+  return secureApi({ action: 'staff_bootstrap' }, 'tiflis-staff-api');
+}
+
 export function StaffPage() {
   const [tab, setTab] = useState<Tab>('team');
   const [data, setData] = useState<StaffBootstrapResponse | null>(null);
@@ -191,6 +196,9 @@ export function StaffPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // Paint the last known team at once; the request below refreshes it.
+    const known = peekSecureApi<StaffBootstrapResponse>({ action: 'staff_bootstrap' }, 'tiflis-staff-api');
+    if (known) setData(known);
     try {
       setData(await secureApi<StaffBootstrapResponse>({ action: 'staff_bootstrap' }, 'tiflis-staff-api'));
     } catch (reason) {

@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { Overlay } from '../components/Overlay';
 import { useKyivDay } from '../hooks/useKyivDay';
-import { secureApi } from '../lib/secureApi';
+import { peekSecureApi, secureApi } from '../lib/secureApi';
 import { m } from 'motion/react';
 import { CountUp, GoldBurst, SegThumb, spring, useFirstTime } from '../lib/motion';
 import './records-v3.css';
@@ -141,6 +141,14 @@ function initials(name: string): string {
 
 /* ---------- page ---------- */
 
+/** Warm the records screen's first requests (same bodies as load). */
+export function prefetch(userId: string) {
+  return Promise.all([
+    secureApi({ action: 'records_bootstrap', user_id: userId }),
+    secureApi({ action: 'records_leaderboard_get', user_id: userId }),
+  ]);
+}
+
 export function RecordsPage() {
   const { user } = useAuth();
   const today = useKyivDay();
@@ -161,10 +169,19 @@ export function RecordsPage() {
     const id = ++requestId.current;
     setLoading(true);
     setError(null);
+    const personalBody = { action: 'records_bootstrap', user_id: viewUserId };
+    const boardBody = { action: 'records_leaderboard_get', user_id: viewUserId };
+    // Paint the last known records at once; the requests below refresh them.
+    const knownMine = peekSecureApi<Bootstrap>(personalBody);
+    const knownBoard = peekSecureApi<Leaderboard>(boardBody);
+    if (knownMine && knownBoard) {
+      setMine(knownMine);
+      setBoard(knownBoard);
+    }
     try {
       const [personal, leaderboard] = await Promise.all([
-        secureApi<Bootstrap>({ action: 'records_bootstrap', user_id: viewUserId }, 'tiflis-secure-api', { forceRefresh }),
-        secureApi<Leaderboard>({ action: 'records_leaderboard_get', user_id: viewUserId }, 'tiflis-secure-api', { forceRefresh }),
+        secureApi<Bootstrap>(personalBody, 'tiflis-secure-api', { forceRefresh }),
+        secureApi<Leaderboard>(boardBody, 'tiflis-secure-api', { forceRefresh }),
       ]);
       if (requestId.current !== id) return;
       setMine(personal);

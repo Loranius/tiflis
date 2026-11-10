@@ -16,7 +16,7 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Overlay } from '../components/Overlay';
 import { photoFileProblem, resizePhotoFile } from '../lib/photo';
-import { secureApi } from '../lib/secureApi';
+import { peekSecureApi, secureApi } from '../lib/secureApi';
 import './menu-v3.css';
 import { SegThumb } from '../lib/motion';
 
@@ -153,6 +153,11 @@ const normalizeApostrophes = (value: string) => value.replace(/[’ʼ'`]/g, 'ʼ'
 
 /* ---------- page ---------- */
 
+/** Warm the menu screen's first request. */
+export function prefetch() {
+  return secureApi({ action: 'menu_bootstrap' }, 'tiflis-menu-api');
+}
+
 export function MenuPage() {
   const [data, setData] = useState<MenuBootstrapResponse | null>(null);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -168,11 +173,16 @@ export function MenuPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const response = await secureApi<MenuBootstrapResponse>({ action: 'menu_bootstrap' }, 'tiflis-menu-api');
+    const apply = (response: MenuBootstrapResponse) => {
       setData(response);
       setItems([...response.items].sort(byMenuOrder));
       setProgress(new Map((response.progress || []).map((row) => [row.item_id, row.status])));
+    };
+    // Paint the last known menu at once; the request below refreshes it.
+    const known = peekSecureApi<MenuBootstrapResponse>({ action: 'menu_bootstrap' }, 'tiflis-menu-api');
+    if (known) apply(known);
+    try {
+      apply(await secureApi<MenuBootstrapResponse>({ action: 'menu_bootstrap' }, 'tiflis-menu-api'));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити меню.');
     } finally {
