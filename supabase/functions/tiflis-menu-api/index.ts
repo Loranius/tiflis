@@ -150,8 +150,14 @@ function ownedPhotoPath(url: string | null): string | null {
   return OWNED_PHOTO_NAME.test(path) ? path : null;
 }
 
+function createServiceClient() {
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 async function removePhotoIfUnused(
-  client: ReturnType<typeof createClient>,
+  client: ReturnType<typeof createServiceClient>,
   url: string | null,
 ): Promise<void> {
   const path = ownedPhotoPath(url);
@@ -247,9 +253,7 @@ Deno.serve(async (req: Request) => {
   const action = typeof body.action === "string" ? body.action : "";
   if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Невідома дія" }, 400);
 
-  const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const serviceClient = createServiceClient();
 
   try {
     if (action === "menu_bootstrap") {
