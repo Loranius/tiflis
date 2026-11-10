@@ -214,6 +214,26 @@ function parseMenuInput(body: Record<string, unknown>): MenuInput | null {
   };
 }
 
+/* Session check without a round-trip to Auth: the access token is verified
+   locally against the project's signing keys (ES256; the key set is fetched
+   once and cached by this isolate's client). The database then confirms, in
+   the same call that reads the staff profile, that the token's session is
+   still open, so a signed-out or blocked person is refused at once. */
+function createTokenVerifier() {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+let tokenVerifier: ReturnType<typeof createTokenVerifier> | null = null;
+
+async function verifiedUserId(authorization: string): Promise<string> {
+  tokenVerifier ??= createTokenVerifier();
+  const { data, error } = await tokenVerifier.auth.getClaims(authorization.slice(7).trim());
+  const claims = data?.claims;
+  if (error || !claims || claims.role !== "authenticated" || typeof claims.sub !== "string") return "";
+  return claims.sub;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
   if (req.method !== "POST") return json(req, { ok: false, error: "Метод не підтримується" }, 405);
@@ -230,13 +250,13 @@ Deno.serve(async (req: Request) => {
     global: { headers: { Authorization: authorization } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: authData, error: authError } = await userClient.auth.getUser();
-  if (authError || !authData.user) return json(req, { ok: false, error: "Сесія закінчилась, увійди ще раз" }, 401);
+  const authUserId = await verifiedUserId(authorization);
+  if (!authUserId) return json(req, { ok: false, error: "Сесія закінчилась, увійди ще раз" }, 401);
 
   const { data: rawProfile, error: profileError } = await userClient
-    .from("staff_profiles")
-    .select("legacy_user_id,role,role2,active")
-    .eq("user_id", authData.user.id)
+    // The profile comes back only while this token's session is still open
+    // (see migration 20261110120000_session_profile.sql).
+    .rpc("tiflis_session_profile")
     .single();
   const profile = rawProfile as StaffProfile | null;
   if (profileError || !profile || !profile.active || !profile.legacy_user_id) {
@@ -257,20 +277,24 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (action === "menu_bootstrap") {
-      const { data, error } = await serviceClient
-        .from("menu_items")
-        .select(ITEM_COLUMNS)
-        .order("section", { ascending: true })
-        .order("category", { ascending: true })
-        .order("sort_order", { ascending: true })
-        .order("name", { ascending: true });
-      if (error) throw error;
-
-      const { data: progress, error: progressError } = await serviceClient
-        .from("menu_learning")
-        .select("item_id,status")
-        .eq("legacy_user_id", profile.legacy_user_id);
-      if (progressError) throw progressError;
+      // The menu and this person's learning progress are independent reads.
+      const [itemsResult, progressResult] = await Promise.all([
+        serviceClient
+          .from("menu_items")
+          .select(ITEM_COLUMNS)
+          .order("section", { ascending: true })
+          .order("category", { ascending: true })
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true }),
+        serviceClient
+          .from("menu_learning")
+          .select("item_id,status")
+          .eq("legacy_user_id", profile.legacy_user_id),
+      ]);
+      if (itemsResult.error) throw itemsResult.error;
+      if (progressResult.error) throw progressResult.error;
+      const data = itemsResult.data;
+      const progress = progressResult.data;
 
       return json(req, {
         ok: true,
