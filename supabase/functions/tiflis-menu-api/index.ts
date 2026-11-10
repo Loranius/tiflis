@@ -277,20 +277,24 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (action === "menu_bootstrap") {
-      const { data, error } = await serviceClient
-        .from("menu_items")
-        .select(ITEM_COLUMNS)
-        .order("section", { ascending: true })
-        .order("category", { ascending: true })
-        .order("sort_order", { ascending: true })
-        .order("name", { ascending: true });
-      if (error) throw error;
-
-      const { data: progress, error: progressError } = await serviceClient
-        .from("menu_learning")
-        .select("item_id,status")
-        .eq("legacy_user_id", profile.legacy_user_id);
-      if (progressError) throw progressError;
+      // The menu and this person's learning progress are independent reads.
+      const [itemsResult, progressResult] = await Promise.all([
+        serviceClient
+          .from("menu_items")
+          .select(ITEM_COLUMNS)
+          .order("section", { ascending: true })
+          .order("category", { ascending: true })
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true }),
+        serviceClient
+          .from("menu_learning")
+          .select("item_id,status")
+          .eq("legacy_user_id", profile.legacy_user_id),
+      ]);
+      if (itemsResult.error) throw itemsResult.error;
+      if (progressResult.error) throw progressResult.error;
+      const data = itemsResult.data;
+      const progress = progressResult.data;
 
       return json(req, {
         ok: true,
