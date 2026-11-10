@@ -951,7 +951,7 @@ The Дошка слави / Мої рекорди switch wears the Segmented Con
 ### Record Plaque (signature)
 One plaque per record, in hall order: Каса за місяць, Каса за півмісяця, Найбільші чайові, Тарілок за раз, Столиків одночасно, Змін за місяць, Змін за півмісяця. A plaque is an `article` on charcoal surface (20px radius, 16px padding, 12px gap, no border), in this order:
 - the category title, 15px/700 in text-2;
-- the holder row: a 56px avatar (photo, or 18px/700 initials in text-3 on raised charcoal), then the value (a 30px/700 figure, then its unit at 15px in text-2), a 14px gold trophy with the holder's name at 15px/600, and the period at 13px in text-3 («серпень 2026», «1–14 серпня 2026», or the date for a manual record);
+- the holder row: a 56px avatar (photo, or 18px/700 initials in text-3 on raised charcoal), then the value (a 30px/700 figure, then its unit at 15px in text-2), a 14px gold trophy with the holder's name at 15px/600, and the period at 13px in text-3 («серпень 2026», «1–15 серпня 2026», or the date for a manual record);
 - on a tie, every holder of the best value shares the record: one avatar and one value, then the co-holders stacked 4px apart, each with a trophy, their name and their own date;
 - places 2–5 as an ordered list of hairline rows (22px rank column, 9px vertical padding, 14px): the shared rank in text-3 at 700, the name with an ellipsis, and the value at 600 on the right. Ranks are shared on ties (The Shared Place Rule);
 - «Твоє місце N · value», a note on brand charcoal (10px radius, 10px 12px padding, 14px text-2, N in gold at 700), shown only when the viewer has a value but is outside the plaque's list.
@@ -979,7 +979,7 @@ Validation and save errors appear in a coral-wash note (10px radius, 14px coral 
 ### Records Content Rules
 **The Shared Place Rule.** Equal values share a place, in competition ranking: 1, 1, 3. The server numbers rows sequentially (1, 2, 3), so the client recomputes places from the top five: a row's place is one plus the number of rows with a strictly greater value. Everyone on the best value holds the record together (co-holders on the plaque, and the «Рекорд ресторану» badge in Мої рекорди), and nobody on the best value is ever called «2 місце». A value of zero holds nothing.
 
-**The Server Halves Rule.** Half-month records follow the server's record maths in `tiflis-secure-api`: 1–14 and 15–end, labelled «1–14 серпня 2026» and «15–31 серпня 2026», so the dates shown always match the sum. The schedule splits the month 1–15 and 16–end (see Layout). This is a known inconsistency, to be resolved on the server; until then each screen labels its own split and neither borrows the other's.
+**The Server Halves Rule.** Half-month records and the cash top follow one split, computed in `tiflis-secure-api`: 1–15 and 16–end, labelled «1–15 серпня 2026» and «16–31 серпня 2026», the same split as the schedule, so the dates shown always match the sum. Records count the immutable `first_cash`, like the cash top, and tied values share a place (1, 2, 2, 4), with whoever reached the value first listed first. The one exception is payroll: the cash overview pays out cash for 1–14 and the rate and extras for 1–15, and says so in its note.
 
 **The Open Records Rule.** On Рекорди every waiter's record value is visible to every waiter, money included (best month and half-month cash, largest tip), on the plaques and in their top five. This is the owner's exception to the privacy rule, recorded in PRODUCT.md («Owner exception (November 2026): Рекорди»), chosen for the competition. It is scoped to this screen: the live Каса · Топ, and every other ranking or shared view, still shows place and movement only, never other people's sums. The board covers waiters only.
 
@@ -1014,7 +1014,7 @@ Loading uses skeleton blocks shaped like the real layout (segment, hero, row, ch
 - **Do** compute free tables with the same overlap rule as the server (2 h default, seated until now + 15 min, Kyiv time) and change status through `reserve_status` only (The One Overlap Rule, The Status Only Rule).
 - **Do** build pill choices as `aria-pressed` buttons in a labelled group (The Pressed Pill Rule), and give floor state in words in the tile's `aria-label` as well as in colour.
 - **Do** give tied values a shared place (1, 1, 3) and let everyone on the best value hold the record (The Shared Place Rule).
-- **Do** label half-month records with the server's 1–14 / 15–end split until the server and the schedule agree (The Server Halves Rule).
+- **Do** label half-month records and the cash top with the 1–15 / 16–end split; only the payroll overview keeps its own cash 1–14 rule (The Server Halves Rule).
 - **Do** send the live race to Каса · Топ (`/cash?tab=top`) rather than building a second «топ» on Рекорди.
 
 ### Don't:

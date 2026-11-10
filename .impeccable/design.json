@@ -813,7 +813,7 @@
       {
         "name": "The Server Halves Rule",
         "section": "components",
-        "body": "Half-month records follow the server's record maths in `tiflis-secure-api`: 1–14 and 15–end, labelled «1–14 серпня 2026» and «15–31 серпня 2026», so the dates shown always match the sum. The schedule splits the month 1–15 and 16–end. This is a known inconsistency, to be resolved on the server; until then each screen labels its own split and neither borrows the other's."
+        "body": "Half-month records and the cash top follow one split, computed in `tiflis-secure-api`: 1–15 and 16–end, labelled «1–15 серпня 2026» and «16–31 серпня 2026», the same split as the schedule, so the dates shown always match the sum. Records count the immutable `first_cash`, like the cash top, and tied values share a place (1, 2, 2, 4), with whoever reached the value first listed first. The one exception is payroll: the cash overview pays out cash for 1–14 and the rate and extras for 1–15, and says so in its note."
       },
       {
         "name": "The Open Records Rule",
@@ -843,7 +843,7 @@
       "Do compute free tables with the same overlap rule as the server (2 h default, seated until now + 15 min, Kyiv time) and change status through `reserve_status` only (The One Overlap Rule, The Status Only Rule).",
       "Do build pill choices as `aria-pressed` buttons in a labelled group (The Pressed Pill Rule), and give floor state in words in the tile's `aria-label` as well as in colour.",
       "Do give tied values a shared place (1, 1, 3) and let everyone on the best value hold the record (The Shared Place Rule).",
-      "Do label half-month records with the server's 1–14 / 15–end split until the server and the schedule agree (The Server Halves Rule).",
+      "Do label half-month records and the cash top with the 1–15 / 16–end split; only the payroll overview keeps its own cash 1–14 rule (The Server Halves Rule).",
       "Do send the live race to Каса · Топ (`/cash?tab=top`) rather than building a second «топ» on Рекорди."
     ],
     "donts": [
