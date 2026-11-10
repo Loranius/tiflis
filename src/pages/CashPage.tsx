@@ -20,6 +20,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
+import { useSearchParams } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { CashTopList, rankMovement, type CashTopPeriod, type CashTopRow } from '../components/CashTopList';
 import { secureApi } from '../lib/secureApi';
@@ -227,7 +228,9 @@ export function CashPage() {
   const currentMonth = todayKey.slice(0, 7);
   const [month, setMonth] = useState(currentMonth);
   const [viewUserId, setViewUserId] = useState(user?.id || '');
-  const [tab, setTab] = useState<CashTab>('overview');
+  // «/cash?tab=top» (linked from Рекорди) opens the live cash race directly.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<CashTab>(() => (searchParams.get('tab') === 'top' ? 'top' : 'overview'));
   const [period, setPeriod] = useState<CashTopPeriod>(() => defaultPeriod());
   const [data, setData] = useState<CashBootstrapResponse | null>(null);
   const [loading, setLoading] = useState(true);
