@@ -11,7 +11,7 @@ import {
 } from 'react';
 import { edgeFunctionUrl, supabase, supabasePublishableKey } from '../lib/supabase';
 import type { LegacyAuthResponse, StaffRole, StaffUser } from '../types';
-import { clearSecureApiMemory } from '../lib/secureApi';
+import { clearSecureApiMemory, setSecureApiOwner } from '../lib/secureApi';
 
 interface AuthContextValue {
   user: StaffUser | null;
@@ -152,6 +152,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const applyUser = useCallback((next: StaffUser | null, authUserId: string | null = null) => {
     userRef.current = next;
     authUserIdRef.current = authUserId;
+    setSecureApiOwner(next ? authUserId : null);
     setUser(next);
   }, []);
 
@@ -168,6 +169,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       const authUser = data.session.user;
       authUserIdRef.current = authUser.id;
+      setSecureApiOwner(authUser.id);
       const cached = readCachedProfile(authUser.id);
       if (cached) {
         applyUser(cached, authUser.id);
@@ -217,6 +219,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       const generation = ++sessionGenerationRef.current;
       authUserIdRef.current = session.user.id;
+      setSecureApiOwner(session.user.id);
       setLoading(true);
       void loadStaffProfile(session.user)
         .then((profile) => {

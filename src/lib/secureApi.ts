@@ -37,7 +37,11 @@ let accessTokenRequest: Promise<string> | null = null;
    when a token for another user appears, and on sign-out. */
 const LAST_KNOWN_LIMIT = 40;
 const lastKnown = new Map<string, { domain: string; value: SecureApiEnvelope }>();
-let lastKnownOwner = '';
+// The signed-in auth user the store belongs to (set by AuthProvider), and an
+// epoch bumped on every clear: a reply that started before a sign-out or an
+// account switch is dropped instead of landing in the new account's memory.
+let activeOwner = '';
+let memoryEpoch = 0;
 
 function tokenSubject(token: string): string {
   try {
@@ -53,13 +57,8 @@ function lastKnownKey(functionSlug: string, body: Record<string, unknown>): stri
   return `${functionSlug}:${JSON.stringify(body)}`;
 }
 
-function rememberLastKnown(token: string, functionSlug: string, body: Record<string, unknown>, domain: string, value: SecureApiEnvelope) {
-  const owner = tokenSubject(token);
-  if (!owner) return;
-  if (owner !== lastKnownOwner) {
-    lastKnown.clear();
-    lastKnownOwner = owner;
-  }
+function rememberLastKnown(epoch: number, token: string, functionSlug: string, body: Record<string, unknown>, domain: string, value: SecureApiEnvelope) {
+  if (epoch !== memoryEpoch || !activeOwner || tokenSubject(token) !== activeOwner) return;
   const key = lastKnownKey(functionSlug, body);
   lastKnown.delete(key);
   lastKnown.set(key, { domain, value });
@@ -78,14 +77,25 @@ export function peekSecureApi<T extends SecureApiEnvelope>(
 ): T | null {
   const action = typeof body.action === 'string' ? body.action : '';
   const slug = functionSlug === 'tiflis-secure-api' && action === 'cash_bootstrap' ? 'tiflis-cash-anonymous-api' : functionSlug;
+  if (!activeOwner) return null;
   return (lastKnown.get(lastKnownKey(slug, body))?.value as T | undefined) ?? null;
 }
 
 /** Forget every remembered response (sign-out, account switch). */
 export function clearSecureApiMemory() {
+  memoryEpoch += 1;
   lastKnown.clear();
-  lastKnownOwner = '';
+  activeOwner = '';
   responseCache.clear();
+  inFlightRequests.clear();
+}
+
+/** Bind the memory to the signed-in auth user; another user (or none) clears it. */
+export function setSecureApiOwner(authUserId: string | null) {
+  const next = authUserId || '';
+  if (next === activeOwner) return;
+  clearSecureApiMemory();
+  activeOwner = next;
 }
 let refreshTokenRequest: Promise<string> | null = null;
 
@@ -263,6 +273,7 @@ export async function secureApi<T extends SecureApiEnvelope>(
     ? 'tiflis-cash-anonymous-api'
     : functionSlug;
   const domain = cacheDomain(action, resolvedFunctionSlug);
+  const epoch = memoryEpoch;
 
   if (options.invalidateCache ?? !isRead) {
     invalidateResponseCache(domain);
@@ -297,7 +308,7 @@ export async function secureApi<T extends SecureApiEnvelope>(
   if (!shouldDedupe || options.signal) {
     const payload = await executeSecureApi<T>(body, resolvedFunctionSlug, options, token);
     if (shouldCache) rememberResponse(key, payload, cacheTtlMs, domain, generation);
-    if (isRead) rememberLastKnown(token, resolvedFunctionSlug, body, domain, payload);
+    if (isRead) rememberLastKnown(epoch, token, resolvedFunctionSlug, body, domain, payload);
     return payload;
   }
 
@@ -310,7 +321,7 @@ export async function secureApi<T extends SecureApiEnvelope>(
     (payload) => {
       if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
       if (shouldCache) rememberResponse(key, payload, cacheTtlMs, domain, generation);
-      if (isRead) rememberLastKnown(token, resolvedFunctionSlug, body, domain, payload);
+      if (isRead) rememberLastKnown(epoch, token, resolvedFunctionSlug, body, domain, payload);
     },
     () => {
       if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
