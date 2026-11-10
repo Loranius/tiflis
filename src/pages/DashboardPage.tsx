@@ -1,6 +1,7 @@
 import { Cake, Check, ChevronRight, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { m, useReducedMotion, useScroll, useTransform } from 'motion/react';
 import charcoalWordmark from '../assets/brand/tiflis-wordmark-charcoal.png';
 import { useAuth } from '../auth/AuthProvider';
 import { useKyivDay } from '../hooks/useKyivDay';
@@ -12,7 +13,66 @@ import {
 } from '../lib/dutyPlannerClient';
 import { secureApi } from '../lib/secureApi';
 import { addDaysToDateKey, isKyivWeekday } from '../lib/time';
+import { GoldBurst, spring, useFirstTime } from '../lib/motion';
 import './home-v3.css';
+
+const MLink = m.create(Link);
+
+/* ---------- motion ----------
+   Home is opened many times a shift. The first visit of a session plays the
+   full entrance (greeting words, a cascade of cards); later visits only get
+   the shared screen transition. The gold mast drifts slower than the page
+   when scrolling (parallax), which is skipped under «reduce motion». */
+function riseProps(play: boolean, order: number) {
+  if (!play) return {};
+  return {
+    initial: { opacity: 0, y: 14, filter: 'blur(6px)' },
+    animate: { opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } },
+    transition: { ...spring.settle, delay: 0.12 + order * 0.05 },
+  };
+}
+
+function Greeting({ text, play }: { text: string; play: boolean }) {
+  if (!play) return <h2 className="hv3-greeting">{text}</h2>;
+  return (
+    <h2 className="hv3-greeting" aria-label={text}>
+      {text.split(' ').map((word, index) => (
+        <m.span
+          key={`${word}-${index}`}
+          aria-hidden="true"
+          style={{ display: 'inline-block', whiteSpace: 'pre' }}
+          initial={{ opacity: 0, y: 10, filter: 'blur(8px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ ...spring.settle, delay: 0.25 + index * 0.07 }}
+        >
+          {index ? ` ${word}` : word}
+        </m.span>
+      ))}
+    </h2>
+  );
+}
+
+/** Today is someone's birthday: the cake wobbles, light sweeps the card, and
+    gold confetti bursts once per day. */
+function BirthdayToday({ children, order, play, dayKey }: { children: ReactNode; order: number; play: boolean; dayKey: string }) {
+  const burst = useFirstTime(`bday-${dayKey}`, 'day');
+  return (
+    <MLink to="/staff" className="hv3-bday is-today tm-sheen" {...riseProps(play, order)}>
+      <m.span
+        className="hv3-bday-icon"
+        aria-hidden="true"
+        style={{ position: 'relative', overflow: 'visible' }}
+        initial={burst ? { rotate: 0, scale: 0.8 } : false}
+        animate={{ rotate: [0, -14, 11, -7, 4, 0], scale: 1 }}
+        transition={{ duration: 0.9, delay: 0.45, ease: 'easeInOut' }}
+      >
+        <Cake size={20} />
+        {burst ? <GoldBurst /> : null}
+      </m.span>
+      {children}
+    </MLink>
+  );
+}
 
 /* ---------- data shapes (existing APIs, unchanged) ---------- */
 
@@ -181,6 +241,13 @@ function amount(value: number | string | null | undefined): string {
 export function DashboardPage() {
   const { user } = useAuth();
   const todayKey = useKyivDay();
+  const intro = useFirstTime('home-intro');
+  const reduceMotion = useReducedMotion();
+  const { scrollY } = useScroll();
+  const mastY = useTransform(scrollY, [0, 260], [0, 78]);
+  const mastFade = useTransform(scrollY, [0, 220], [1, 0.2]);
+  const mastScale = useTransform(scrollY, [0, 260], [1, 0.94]);
+  const parallax = reduceMotion ? undefined : { y: mastY, opacity: mastFade, scale: mastScale, transformOrigin: '0 0' };
   const tomorrowKey = useMemo(() => addDaysToDateKey(todayKey, 1), [todayKey]);
   const [now, setNow] = useState(() => new Date());
   const clock = kyivClock(now);
@@ -331,14 +398,24 @@ export function DashboardPage() {
   return (
     <div className="hv3">
       <header className="hv3-mast">
-        <div className="hv3-mast-row">
-          <img src={charcoalWordmark} alt="Tiflis restaurant" width={150} height={95} />
-          <p className="hv3-mast-date">{dateLabel}<b>{hhmm(clock.minutes)}</b></p>
-        </div>
-        <h2 className="hv3-greeting">{birthday.mine ? `З днем народження, ${firstName}!` : `${greetingFor(clock.hour)}, ${firstName}`}</h2>
+        <m.div className="hv3-mast-inner" style={parallax}>
+          <div className="hv3-mast-row">
+            <m.img
+              src={charcoalWordmark}
+              alt="Tiflis restaurant"
+              width={150}
+              height={95}
+              initial={intro ? { clipPath: 'inset(0 100% 0 0)', filter: 'blur(4px)' } : false}
+              animate={{ clipPath: 'inset(0 0% 0 0)', filter: 'blur(0px)' }}
+              transition={{ duration: 0.95, ease: [0.77, 0, 0.175, 1], delay: 0.05 }}
+            />
+            <m.p className="hv3-mast-date" {...riseProps(intro, 1)}>{dateLabel}<b>{hhmm(clock.minutes)}</b></m.p>
+          </div>
+          <Greeting play={intro} text={birthday.mine ? `З днем народження, ${firstName}!` : `${greetingFor(clock.hour)}, ${firstName}`} />
+        </m.div>
       </header>
 
-      <section className="hv3-shift">
+      <m.section className="hv3-shift" {...riseProps(intro, 2)}>
         <ShiftSummary
           phase={phase}
           code={myCode}
@@ -368,26 +445,34 @@ export function DashboardPage() {
             <ChevronRight size={18} aria-hidden="true" />
           </Link>
         ) : null}
-      </section>
+      </m.section>
 
-      {birthday.days !== null && birthday.people.length ? (
-        <Link to="/staff" className={`hv3-bday${birthday.days === 0 ? ' is-today' : ''}`}>
+      {birthday.days === 0 && birthday.people.length ? (
+        <BirthdayToday order={3} play={intro} dayKey={todayKey}>
+          <span>
+            <strong>{birthdayWhen(birthday.days, todayKey)} — день народження</strong>
+            <small>{birthday.people.join(', ')}</small>
+          </span>
+          <ChevronRight size={18} aria-hidden="true" />
+        </BirthdayToday>
+      ) : birthday.days !== null && birthday.people.length ? (
+        <MLink to="/staff" className="hv3-bday" {...riseProps(intro, 3)}>
           <span className="hv3-bday-icon" aria-hidden="true"><Cake size={20} /></span>
           <span>
             <strong>{birthdayWhen(birthday.days, todayKey)} — день народження</strong>
             <small>{birthday.people.join(', ')}</small>
           </span>
           <ChevronRight size={18} aria-hidden="true" />
-        </Link>
+        </MLink>
       ) : null}
 
       {working || myTasks.length || reservationList.length ? (
-        <div className="hv3-pulse" role="list">
+        <m.div className="hv3-pulse" role="list" {...riseProps(intro, 4)}>
           {isWaiter ? <Pulse label={reservationWord(reservationList.length)} value={String(reservationList.length)} /> : null}
           {isWaiter ? <Pulse label={guestWord(guests)} value={String(guests)} /> : null}
           <Pulse label="обовʼязки" value={myTasks.length ? `${doneCount}/${myTasks.length}` : '—'} />
           <Pulse label="на зміні" value={String(team.length)} />
-        </div>
+        </m.div>
       ) : null}
 
       {failed.length ? (
@@ -402,7 +487,7 @@ export function DashboardPage() {
       ) : null}
 
       {working ? (
-        <section className="hv3-feed" aria-label="Мій день">
+        <m.section className="hv3-feed" aria-label="Мій день" {...riseProps(intro, 5)}>
           <FeedItem time={hhmm(start)} past={clock.minutes >= start} title={phase === 'before' ? 'Початок зміни · підготовка' : 'Початок зміни'}>
             {myTasks.length ? (
               <div className="hv3-tasks">
@@ -439,17 +524,17 @@ export function DashboardPage() {
           <FeedItem time={hhmm(SHIFT_END)} past={phase === 'after'} title="Кінець зміни" last>
             <small>{canCash ? (phase !== 'after' ? 'Після 22:00 — внесення каси' : todayCash?.entry ? 'Касу внесено' : 'Внеси касу за сьогодні') : 'Гарного вечора'}</small>
           </FeedItem>
-        </section>
+        </m.section>
       ) : null}
 
       {tomorrowPlan?.publication && (tomorrowTasks.length || tomorrowZones.length) ? (
-        <Link to="/duties" className="hv3-tomorrow">
+        <MLink to="/duties" className="hv3-tomorrow" {...riseProps(intro, 6)}>
           <span>
             <strong>Завтра{tomorrowZones.length ? ` · ${tomorrowZones.join(' · ')}` : ''}</strong>
             <small>{tomorrowTasks.length ? `${tomorrowTasks.length} ${taskWord(tomorrowTasks.length)} вже розподілено` : 'Зону вже призначено'}</small>
           </span>
           <ChevronRight size={18} aria-hidden="true" />
-        </Link>
+        </MLink>
       ) : null}
     </div>
   );
@@ -496,11 +581,25 @@ function ShiftSummary({
     <div className="hv3-shift-card">
       <div className="hv3-shift-row"><strong>{headline}</strong>{aside ? <span>{aside}</span> : null}</div>
       <div className="hv3-track" aria-hidden="true">
-        <span className="hv3-track-fill" style={{ width: `${progress * 100}%` }} />
+        <m.span
+          className="hv3-track-fill"
+          style={{ width: `${progress * 100}%`, transformOrigin: '0 50%' }}
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 0.9, ease: [0.23, 1, 0.32, 1], delay: 0.2 }}
+        />
         {marks.filter((mark) => mark >= start && mark <= SHIFT_END).map((mark, index) => (
           <span key={`${mark}-${index}`} className="hv3-track-mark" style={{ left: `${((mark - start) / span) * 100}%` }} />
         ))}
-        {phase === 'during' ? <span className="hv3-track-now" style={{ left: `${progress * 100}%` }} /> : null}
+        {phase === 'during' ? (
+          <m.span
+            className="hv3-track-now"
+            style={{ left: `${progress * 100}%` }}
+            initial={{ opacity: 0, scale: 0.4 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ ...spring.pop, delay: 0.85 }}
+          />
+        ) : null}
       </div>
       <div className="hv3-track-ticks"><span><b className={`hv3-code${code.startsWith('СН') ? ' is-breakfast' : ''}`}>{code}</b> {hhmm(start)}–{hhmm(SHIFT_END)}</span>{zoneText ? <span>{zoneText}</span> : null}</div>
     </div>

@@ -24,6 +24,7 @@ import { useSearchParams } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { CashTopList, rankMovement, type CashTopPeriod, type CashTopRow } from '../components/CashTopList';
 import { secureApi } from '../lib/secureApi';
+import { CountUp, SegThumb, TabLine } from '../lib/motion';
 import { getKyivDateKey } from '../lib/time';
 import './cash-v3.css';
 
@@ -417,8 +418,8 @@ export function CashPage() {
     <div className="cv3" aria-busy={loading}>
       <div className="cv3-bar">
         <div className="cv3-tabs" role="tablist" aria-label="Розділи каси">
-          <button type="button" role="tab" aria-selected={tab === 'overview'} className={tab === 'overview' ? 'is-on' : ''} onClick={() => changeTab('overview')}>Огляд</button>
-          <button type="button" role="tab" aria-selected={tab === 'top'} className={tab === 'top' ? 'is-on' : ''} onClick={() => changeTab('top')}>Топ каси</button>
+          <button type="button" role="tab" aria-selected={tab === 'overview'} className={`tm-tab${tab === 'overview' ? ' is-on' : ''}`} onClick={() => changeTab('overview')}>Огляд{tab === 'overview' ? <TabLine group="cash" /> : null}</button>
+          <button type="button" role="tab" aria-selected={tab === 'top'} className={`tm-tab${tab === 'top' ? ' is-on' : ''}`} onClick={() => changeTab('top')}>Топ каси{tab === 'top' ? <TabLine group="cash" /> : null}</button>
         </div>
         <div className="cv3-month" role="group" aria-label="Місяць">
           <button type="button" className="cv3-icon-btn" onClick={() => setMonth((value) => moveMonth(value, -1))} aria-label="Попередній місяць">
@@ -473,10 +474,11 @@ export function CashPage() {
                 role="radio"
                 aria-checked={overviewPeriod === value}
                 key={value}
-                className={overviewPeriod === value ? 'is-on' : ''}
+                className={`tm-seg${overviewPeriod === value ? ' is-on' : ''}`}
                 onClick={() => setPeriod(value)}
               >
-                {label}
+                {overviewPeriod === value ? <SegThumb group="cash-overview" /> : null}
+                <span>{label}</span>
               </button>
             ))}
           </div>
@@ -488,7 +490,7 @@ export function CashPage() {
                 <span>{rangeLabel}</span>
               </div>
               {!viewingSelf && selectedStaff ? <p className="cv3-viewing">{selectedStaff.name}</p> : null}
-              <p className="cv3-payout-sum">{amount(current.wage)}<span>₴</span></p>
+              <p className="cv3-payout-sum"><CountUp value={current.wage} format={amount} /><span>₴</span></p>
               <dl className="cv3-breakdown">
                 <div><dt>4% каси</dt><dd>{money(current.cash * CASH_PERCENT)}</dd></div>
                 <div><dt>{shiftsLabel(current.rateDays)} × 200</dt><dd>{money(current.rateDays * RATE_PER_DAY)}</dd></div>

@@ -23,6 +23,8 @@ import './mobile-adaptation.css';
 import './theme/tiflis-theme.css';
 // Must stay last: module styles define their own scroll/touch behaviour.
 import './route-transitions.css';
+import './motion.css';
+import { MotionRoot } from './lib/motion';
 
 const BUILD_ID = import.meta.env.VITE_BUILD_ID || 'development';
 const RUNTIME_VERSION_KEY = 'tiflis.runtime.version';
@@ -127,10 +129,12 @@ createRoot(root).render(
   <StrictMode>
     <RootErrorBoundary>
       <ModalRuntime />
-      <AuthProvider>
-        <PortalWarmup />
-        <App />
-      </AuthProvider>
+      <MotionRoot>
+        <AuthProvider>
+          <PortalWarmup />
+          <App />
+        </AuthProvider>
+      </MotionRoot>
     </RootErrorBoundary>
   </StrictMode>,
 );

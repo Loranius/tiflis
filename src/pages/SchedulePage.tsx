@@ -19,6 +19,7 @@ import { canPerform } from '../lib/acl';
 import { secureApi } from '../lib/secureApi';
 import { getKyivDateKey } from '../lib/time';
 import './schedule-v3.css';
+import { TabLine } from '../lib/motion';
 
 type ShiftCode = '' | 'Р' | 'Х' | 'О' | 'СН' | 'Б' | 'С' | 'Р/Б' | 'СН/Б' | 'Д';
 type Scope = 'team' | 'mine';
@@ -339,8 +340,8 @@ export function SchedulePage() {
     <div className={`sv3${brush !== null && scope === 'team' ? ' has-brush' : ''}`}>
       <div className="sv3-bar">
         <div className="sv3-tabs" role="tablist" aria-label="Режим графіка">
-          <button type="button" role="tab" aria-selected={scope === 'team'} className={scope === 'team' ? 'is-on' : ''} onClick={() => setScope('team')}>Команда</button>
-          <button type="button" role="tab" aria-selected={scope === 'mine'} className={scope === 'mine' ? 'is-on' : ''} onClick={() => { setScope('mine'); setBrush(null); }} disabled={!me}>Мій графік</button>
+          <button type="button" role="tab" aria-selected={scope === 'team'} className={`tm-tab${scope === 'team' ? ' is-on' : ''}`} onClick={() => setScope('team')}>Команда{scope === 'team' ? <TabLine group="schedule-scope" /> : null}</button>
+          <button type="button" role="tab" aria-selected={scope === 'mine'} className={`tm-tab${scope === 'mine' ? ' is-on' : ''}`} onClick={() => { setScope('mine'); setBrush(null); }} disabled={!me}>Мій графік{scope === 'mine' ? <TabLine group="schedule-scope" /> : null}</button>
         </div>
         <div className="sv3-month" role="group" aria-label="Місяць">
           <button type="button" className="sv3-icon-btn" onClick={() => changeMonth(moveMonth(month, -1))} aria-label="Попередній місяць"><ChevronLeft size={20} /></button>

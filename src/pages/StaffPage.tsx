@@ -19,6 +19,7 @@ import { photoFileProblem, resizePhotoFile } from '../lib/photo';
 import { secureApi } from '../lib/secureApi';
 import { StaffBirthdaysTab } from './StaffBirthdaysTab';
 import './staff-v3.css';
+import { SegThumb } from '../lib/motion';
 
 /* ---------- data ---------- */
 
@@ -261,8 +262,8 @@ export function StaffPage() {
     <div className="st3">
       <div className="st3-top">
         <div className="st3-seg" role="radiogroup" aria-label="Розділ персоналу">
-          <button type="button" role="radio" aria-checked={tab === 'team'} className={tab === 'team' ? 'is-on' : ''} onClick={() => setTab('team')}>Команда</button>
-          <button type="button" role="radio" aria-checked={tab === 'birthdays'} className={tab === 'birthdays' ? 'is-on' : ''} onClick={() => setTab('birthdays')}>Дні народження</button>
+          <button type="button" role="radio" aria-checked={tab === 'team'} className={`tm-seg${tab === 'team' ? ' is-on' : ''}`} onClick={() => setTab('team')}>{tab === 'team' ? <SegThumb group="staff" /> : null}<span>Команда</span></button>
+          <button type="button" role="radio" aria-checked={tab === 'birthdays'} className={`tm-seg${tab === 'birthdays' ? ' is-on' : ''}`} onClick={() => setTab('birthdays')}>{tab === 'birthdays' ? <SegThumb group="staff" /> : null}<span>Дні народження</span></button>
         </div>
         {tab === 'team' && canManage ? (
           <button type="button" className="st3-primary is-compact" onClick={() => setEditor(createEditor())}><Plus size={17} aria-hidden="true" /> Новий працівник</button>

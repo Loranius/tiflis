@@ -1,4 +1,6 @@
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
+import { m } from 'motion/react';
+import { SegThumb, spring } from '../lib/motion';
 
 export type CashTopPeriod = 'first' | 'second' | 'month' | 'year';
 
@@ -140,10 +142,11 @@ export function CashTopList({
             role="radio"
             aria-checked={period === value}
             key={value}
-            className={period === value ? 'is-on' : ''}
+            className={`tm-seg${period === value ? ' is-on' : ''}`}
             onClick={() => onPeriodChange(value)}
           >
-            {label}
+            {period === value ? <SegThumb group="cash-top" /> : null}
+            <span>{label}</span>
           </button>
         ))}
       </div>
@@ -186,7 +189,7 @@ export function CashTopList({
               {sorted.map((row) => {
                 const isFocus = focus ? row === focus : false;
                 return (
-                  <li key={row.userId || `${displayName(row)}-${row.rank}`} className={`${isFocus ? 'is-focus' : ''}${row.rank <= 3 ? ' is-podium' : ''}`}>
+                  <m.li layout="position" transition={spring.settle} key={row.userId || `${displayName(row)}-${row.rank}`} className={`${isFocus ? 'is-focus' : ''}${row.rank <= 3 ? ' is-podium' : ''}`}>
                     <span className="cv3-rank">{row.rank}</span>
                     <Avatar row={row} />
                     <span className="cv3-person">
@@ -194,7 +197,7 @@ export function CashTopList({
                       <small>{roleLabel(row)}</small>
                     </span>
                     <Movement value={rankMovement(row)} />
-                  </li>
+                  </m.li>
                 );
               })}
             </ol>
