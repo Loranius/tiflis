@@ -377,6 +377,12 @@ function ManualEditor({ category, title, current, userId, today, onClose, onSave
   const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useLayoutEffect(() => { inputRef.current?.setAttribute('autofocus', ''); }, []);
+  const dirty = value !== (current ? String(current.value) : '') || date !== (current?.achievedOn || today);
+  function requestClose() {
+    if (busy) return;
+    if (dirty && !window.confirm('Закрити? Рекорд не буде збережено.')) return;
+    onClose();
+  }
 
   async function save() {
     const number = Number(value.replace(/\s/g, '').replace(',', '.'));
@@ -410,11 +416,11 @@ function ManualEditor({ category, title, current, userId, today, onClose, onSave
   }
 
   return (
-    <div className="rc3-backdrop" onMouseDown={() => !busy && onClose()}>
+    <div className="rc3-backdrop" onMouseDown={requestClose}>
       <section className="rc3-sheet" role="dialog" aria-modal="true" aria-labelledby="rc3-editor-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="rc3-sheet-head">
           <h2 id="rc3-editor-title">{title}</h2>
-          <button type="button" className="rc3-close" onClick={onClose} disabled={Boolean(busy)} aria-label="Закрити"><X size={20} /></button>
+          <button type="button" className="rc3-close" onClick={requestClose} disabled={Boolean(busy)} aria-label="Закрити"><X size={20} /></button>
         </div>
         <p className="rc3-hint">{spec.hint}</p>
         <label className="rc3-field">

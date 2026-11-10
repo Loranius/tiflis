@@ -145,7 +145,7 @@
 .rc3-holder-name svg { flex: none; color: var(--t-gold); }
 
 
-/* The viewer, the same «Ти» pill as Каса · Топ (DESIGN.md). */
+/* The viewer marker on Рекорди: gold on gold tint (Каса · Топ still uses a solid gold pill — not yet reconciled). */
 .rc3-you {
   flex: none;
   white-space: nowrap;
