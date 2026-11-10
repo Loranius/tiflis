@@ -1,4 +1,4 @@
-import { Check, Edit3, Plus, RefreshCw, Trash2, Trophy, X } from 'lucide-react';
+import { Check, ChevronRight, Edit3, Plus, RefreshCw, Trash2, Trophy, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
@@ -67,7 +67,7 @@ const CATEGORIES: Category[] = [
 ];
 
 const MANUAL_INPUT: Record<ManualCategory, { label: string; unit: string; max: number; integer: boolean; hint: string }> = {
-  largest_tip: { label: 'Сума чайових', unit: '₴', max: 1_000_000, integer: false, hint: 'Найбільші чайові за один стіл або подію.' },
+  largest_tip: { label: 'Сума чайових, ₴', unit: '₴', max: 1_000_000, integer: true, hint: 'Найбільші чайові за один стіл або подію.' },
   plates_at_once: { label: 'Скільки тарілок', unit: 'шт.', max: 200, integer: true, hint: 'Найбільше тарілок, винесених за один раз.' },
   tables_at_once: { label: 'Скільки столиків', unit: 'шт.', max: 200, integer: true, hint: 'Найбільше столиків у роботі одночасно.' },
 };
@@ -106,14 +106,31 @@ function halfText(month: string | null | undefined, half: HalfKey | null | undef
   if (!month || !half) return '';
   const [year = '', monthNumber = ''] = month.split('-');
   const days = new Date(Number(year), Number(monthNumber), 0).getDate();
-  // Same split as the server's record maths (tiflis-secure-api): 1–14 and 15–end.
-  return `${half === 'first' ? '1–14' : `15–${days}`} ${MONTH.format(new Date(`${month}-01T12:00:00`)).replace(/\s*р\.$/, '')}`;
+  // Same split as the server's record maths (tiflis-secure-api): 1–14 and 15–end. «1–14 серпня 2026».
+  const endDay = half === 'first' ? 14 : days;
+  const end = new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long' }).format(new Date(Number(year), Number(monthNumber) - 1, endDay, 12));
+  return `${half === 'first' ? '1' : '15'}–${end} ${year}`;
 }
 
 function detailText(category: Category, record: { month?: string | null; half?: HalfKey | null; achievedOn?: string | null }): string {
   if (category.detail === 'date') return record.achievedOn ? DATE.format(new Date(`${record.achievedOn}T12:00:00`)).replace(/\s*р\.$/, '') : '';
   if (category.detail === 'half') return halfText(record.month, record.half);
   return monthText(record.month);
+}
+
+/** Equal values share a place (competition ranking: 1, 1, 3) — the server numbers them 1, 2, 3. */
+function sharedRank(top: Ranked[], value: number): number {
+  return 1 + top.filter((row) => row.value > value).length;
+}
+
+/** Server errors arrive in English; staff read Ukrainian. */
+function humanError(reason: unknown, fallback: string): string {
+  const message = reason instanceof Error ? reason.message : '';
+  if (/Invalid record/i.test(message)) return 'Не вдалося зберегти: перевір значення і дату.';
+  if (/Waiter profile not found|Records access denied/i.test(message)) return 'Рекорди ведуться лише для офіціантів.';
+  if (/Insufficient permissions/i.test(message)) return 'Немає прав змінювати цей рекорд.';
+  if (/^[A-Za-z]/.test(message) || !message) return fallback;
+  return message;
 }
 
 function initials(name: string): string {
@@ -152,7 +169,7 @@ export function RecordsPage() {
       setBoard(leaderboard);
       if (personal.viewUserId !== viewUserId) setViewUserId(personal.viewUserId);
     } catch (reason) {
-      if (requestId.current === id) setError(reason instanceof Error ? reason.message : 'Не вдалося завантажити рекорди.');
+      if (requestId.current === id) setError(humanError(reason, 'Не вдалося завантажити рекорди.'));
     } finally {
       if (requestId.current === id) setLoading(false);
     }
@@ -172,7 +189,7 @@ export function RecordsPage() {
           <button type="button" aria-pressed={view === 'fame'} className={view === 'fame' ? 'is-on' : ''} onClick={() => setView('fame')}>Дошка слави</button>
           <button type="button" aria-pressed={view === 'mine'} className={view === 'mine' ? 'is-on' : ''} onClick={() => setView('mine')}>{mine?.me.canViewAll && !isOwn ? 'Рекорди офіціанта' : 'Мої рекорди'}</button>
         </div>
-        <Link to="/cash?tab=top" className="rc3-race">Хто лідирує цього місяця — у Касі</Link>
+        <Link to="/cash?tab=top" className="rc3-race">Хто лідирує цього місяця — у Касі <ChevronRight size={16} aria-hidden="true" /></Link>
       </div>
 
       {error ? (
@@ -182,11 +199,11 @@ export function RecordsPage() {
         </div>
       ) : null}
 
-      {loading && !board ? <div className="rc3-loading" role="status" aria-label="Збираємо рекорди"><span /><span /><span /></div> : null}
+      {loading ? <div className="rc3-loading" role="status" aria-label="Збираємо рекорди"><span /><span /><span /></div> : null}
 
-      {board && view === 'fame' ? <Fame board={board} myId={myId} /> : null}
+      {board && !loading && view === 'fame' ? <Fame board={board} myId={myId} /> : null}
 
-      {board && mine && view === 'mine' ? (
+      {board && mine && !loading && view === 'mine' ? (
         <section className="rc3-mine" aria-label="Особисті рекорди">
           <div className="rc3-person">
             <Avatar name={viewed?.name || 'Офіціант'} avatar={viewed?.avatar || null} size="lg" />
@@ -227,7 +244,7 @@ export function RecordsPage() {
         <Overlay>
           <ManualEditor
             category={editor}
-            title={CATEGORIES.find((item) => item.manual === editor)!.title}
+            title={`${CATEGORIES.find((item) => item.manual === editor)!.title}${isOwn ? '' : ` · ${viewed?.name || ''}`}`}
             current={mine.manual[editor]}
             userId={mine.viewUserId}
             today={today}
@@ -257,28 +274,37 @@ function Fame({ board, myId }: { board: Leaderboard; myId: string }) {
     <section className="rc3-fame" aria-label="Дошка слави">
       {CATEGORIES.map((category) => {
         const group = board.leaderboards[category.key];
-        const [holder, ...rest] = group.top;
+        const best = group.top[0]?.value ?? 0;
+        // Everyone on the best value holds the record together.
+        const holders = group.top.filter((row) => row.value === best && best > 0);
+        const holder = holders[0];
+        const rest = group.top.filter((row) => !holders.includes(row));
         const mineInTop = group.top.some((row) => row.userId === myId);
         const own = group.comparison && group.comparison.userId === myId && !mineInTop ? group.comparison : null;
         return (
-          <article key={category.key} className="rc3-plaque" aria-labelledby={`rc3-${category.key}`}>
+          <article key={category.key} className={`rc3-plaque${rest.length ? '' : ' is-solo'}`} aria-labelledby={`rc3-${category.key}`}>
             <h2 id={`rc3-${category.key}`}>{category.title}</h2>
             {holder ? (
               <>
-                <div className={`rc3-holder${holder.userId === myId ? ' is-me' : ''}`}>
+                <div className="rc3-holder">
                   <Avatar name={holder.name} avatar={holder.avatar} size="md" />
                   <div>
                     <p className="rc3-holder-value"><b>{valueText(category.kind, holder.value).number}</b> {valueText(category.kind, holder.value).unit}</p>
-                    <p className="rc3-holder-name"><Trophy size={14} aria-hidden="true" /> {holder.name}{holder.userId === myId ? ' · ти' : ''}</p>
-                    {detailText(category, holder) ? <p className="rc3-holder-when">{detailText(category, holder)}</p> : null}
+                    {holders.map((row) => (
+                      <div key={row.userId} className={`rc3-holder-line${row.userId === myId ? ' is-me' : ''}`}>
+                        <p className="rc3-holder-name"><Trophy size={14} aria-hidden="true" /> {row.name}{row.userId === myId ? <span className="rc3-you">Ти</span> : null}</p>
+                        {holders.length > 1 && detailText(category, row) ? <p className="rc3-holder-when">{detailText(category, row)}</p> : null}
+                      </div>
+                    ))}
+                    {holders.length === 1 && detailText(category, holder) ? <p className="rc3-holder-when">{detailText(category, holder)}</p> : null}
                   </div>
                 </div>
                 {rest.length ? (
-                  <ol className="rc3-places" start={2}>
+                  <ol className="rc3-places">
                     {rest.map((row) => (
                       <li key={row.userId} className={row.userId === myId ? 'is-me' : ''}>
-                        <span className="rc3-rank">{row.rank}</span>
-                        <span className="rc3-place-name">{row.name}{row.userId === myId ? <em> · ти</em> : null}</span>
+                        <span className="rc3-rank">{sharedRank(group.top, row.value)}</span>
+                        <span className="rc3-place-name">{row.name}{row.userId === myId ? <span className="rc3-you">Ти</span> : null}</span>
                         <span className="rc3-place-value">{flat(category.kind, row.value)}</span>
                       </li>
                     ))}
@@ -305,8 +331,10 @@ function MineRow({ category, group, userId, own, waiters, manual, canEdit, onEdi
 }) {
   const record = group.comparison && group.comparison.userId === userId ? group.comparison : group.top.find((row) => row.userId === userId) || null;
   const holder = group.top[0] || null;
-  const isHolder = Boolean(record && holder && holder.userId === userId);
+  // A tie with the best value is a shared restaurant record, not «2 місце».
+  const isHolder = Boolean(record && holder && record.value > 0 && record.value === holder.value);
   const gap = record && holder && !isHolder ? holder.value - record.value : 0;
+  const place = record ? (group.top.some((row) => row.userId === record.userId) ? sharedRank(group.top, record.value) : record.rank) : 0;
 
   return (
     <article className={`rc3-row${isHolder ? ' is-holder' : ''}`}>
@@ -323,9 +351,10 @@ function MineRow({ category, group, userId, own, waiters, manual, canEdit, onEdi
         {record && record.value > 0 ? (
           isHolder
             ? <span className="rc3-badge"><Trophy size={14} aria-hidden="true" /> Рекорд ресторану</span>
-            : <span className="rc3-place"><b>{record.rank}</b> місце з {waiters}</span>
+            : <span className="rc3-place"><b>{place}</b> місце з {waiters}</span>
         ) : null}
         {gap > 0 ? <span className="rc3-gap">до рекорду {flat(category.kind, gap)}</span> : null}
+        {!(record && record.value > 0) && holder ? <span className="rc3-gap">рекорд — {flat(category.kind, holder.value)}</span> : null}
         {category.manual && canEdit ? (
           <button type="button" className="rc3-edit" onClick={onEdit}>
             {manual ? <Edit3 size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />} {manual ? 'Оновити' : 'Внести'}
@@ -351,10 +380,11 @@ function ManualEditor({ category, title, current, userId, today, onClose, onSave
 
   async function save() {
     const number = Number(value.replace(/\s/g, '').replace(',', '.'));
-    if (!Number.isFinite(number) || number <= 0 || number > spec.max || (spec.integer && !Number.isInteger(number))) {
-      setProblem(spec.integer ? 'Вкажи цілу кількість, більшу за нуль.' : 'Вкажи суму, більшу за нуль.');
+    if (!Number.isFinite(number) || number <= 0 || (spec.integer && !Number.isInteger(number))) {
+      setProblem(category === 'largest_tip' ? 'Вкажи суму в гривнях, цілим числом.' : 'Вкажи цілу кількість, більшу за нуль.');
       return;
     }
+    if (number > spec.max) { setProblem(`Не більше ${NUMBER.format(spec.max)} ${spec.unit}`); return; }
     if (!date || date > today) { setProblem('Вкажи дату — не пізніше сьогодні.'); return; }
     setBusy('save');
     setProblem(null);
@@ -362,7 +392,7 @@ function ManualEditor({ category, title, current, userId, today, onClose, onSave
       await secureApi({ action: 'records_save_manual', user_id: userId, category, value: number, achieved_on: date });
       await onSaved();
     } catch (reason) {
-      setProblem(reason instanceof Error ? reason.message : 'Не вдалося зберегти рекорд.');
+      setProblem(humanError(reason, 'Не вдалося зберегти рекорд.'));
       setBusy(null);
     }
   }
@@ -374,7 +404,7 @@ function ManualEditor({ category, title, current, userId, today, onClose, onSave
       await secureApi({ action: 'records_delete_manual', user_id: userId, category });
       await onSaved();
     } catch (reason) {
-      setProblem(reason instanceof Error ? reason.message : 'Не вдалося видалити рекорд.');
+      setProblem(humanError(reason, 'Не вдалося видалити рекорд.'));
       setBusy(null);
     }
   }
@@ -390,7 +420,7 @@ function ManualEditor({ category, title, current, userId, today, onClose, onSave
         <label className="rc3-field">
           <span>{spec.label}</span>
           <span className="rc3-money">
-            <input ref={inputRef} inputMode={spec.integer ? 'numeric' : 'decimal'} value={value} onChange={(event) => { setProblem(null); setValue(event.target.value); }} placeholder="0" />
+            <input ref={inputRef} inputMode={spec.integer ? 'numeric' : 'decimal'} value={value} onChange={(event) => { setProblem(null); setValue(event.target.value); }} />
             <b>{spec.unit}</b>
           </span>
         </label>
