@@ -11,7 +11,7 @@ import {
   type DutyAssignment,
   type DutyPlanResponse,
 } from '../lib/dutyPlannerClient';
-import { secureApi } from '../lib/secureApi';
+import { peekSecureApi, secureApi } from '../lib/secureApi';
 import { addDaysToDateKey, isKyivWeekday } from '../lib/time';
 import { GoldBurst, spring, useFirstTime } from '../lib/motion';
 import './home-v3.css';
@@ -261,14 +261,16 @@ export function DashboardPage() {
   const isWaiter = roles.has('waiter');
   const canCash = roles.has('waiter') || roles.has('bar') || roles.has('admin') || roles.has('sysadmin');
 
-  const [schedule, setSchedule] = useState<ScheduleBootstrapResponse | null>(null);
-  const [nextMonthSchedule, setNextMonthSchedule] = useState<ScheduleBootstrapResponse | null>(null);
-  const [birthdays, setBirthdays] = useState<BirthdayPerson[]>([]);
-  const [daily, setDaily] = useState<DutyPlanResponse | null>(null);
+  // Returning to Home paints the last known day at once (see peekSecureApi);
+  // load() below refreshes every piece in the background.
+  const [schedule, setSchedule] = useState<ScheduleBootstrapResponse | null>(() => peekSecureApi({ action: 'schedule_bootstrap', month: todayKey.slice(0, 7) }));
+  const [nextMonthSchedule, setNextMonthSchedule] = useState<ScheduleBootstrapResponse | null>(() => peekSecureApi({ action: 'schedule_bootstrap', month: nextMonthKey(todayKey) }));
+  const [birthdays, setBirthdays] = useState<BirthdayPerson[]>(() => peekSecureApi<{ ok: true; people: BirthdayPerson[] }>({ action: 'birthdays_bootstrap' }, 'tiflis-staff-api')?.people || []);
+  const [daily, setDaily] = useState<DutyPlanResponse | null>(() => peekSecureApi({ action: 'planner_bootstrap', plan_type: 'daily', date: todayKey }, 'tiflis-duty-planner-api'));
   const [handover, setHandover] = useState<DutyPlanResponse | null>(null);
   const [tomorrowPlan, setTomorrowPlan] = useState<DutyPlanResponse | null>(null);
-  const [reservations, setReservations] = useState<TodayReservationsResponse | null>(null);
-  const [todayCash, setTodayCash] = useState<TodayCashResponse | null>(null);
+  const [reservations, setReservations] = useState<TodayReservationsResponse | null>(() => peekSecureApi({ action: 'today_reservations_get' }, 'tiflis-today-reserve-api'));
+  const [todayCash, setTodayCash] = useState<TodayCashResponse | null>(() => peekSecureApi({ action: 'today_cash_get' }, 'tiflis-today-cash-api'));
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState<string[]>([]);
   const [savingTask, setSavingTask] = useState<number | null>(null);

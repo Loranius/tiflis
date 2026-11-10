@@ -16,7 +16,7 @@ import {
 } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { canPerform } from '../lib/acl';
-import { secureApi } from '../lib/secureApi';
+import { peekSecureApi, secureApi } from '../lib/secureApi';
 import { getKyivDateKey } from '../lib/time';
 import './schedule-v3.css';
 import { TabLine } from '../lib/motion';
@@ -154,6 +154,11 @@ function useWideScreen(): boolean {
   return wide;
 }
 
+/** Warm the schedule screen's first request (this month; Home asks for it too). */
+export function prefetch() {
+  return secureApi({ action: 'schedule_bootstrap', month: getKyivDateKey().slice(0, 7) });
+}
+
 export function SchedulePage() {
   const { user } = useAuth();
   const todayKey = getKyivDateKey();
@@ -185,9 +190,8 @@ export function SchedulePage() {
     const id = ++requestId.current;
     setLoading(true);
     setError(null);
-    void secureApi<ScheduleBootstrapResponse>({ action: 'schedule_bootstrap', month })
-      .then((response) => {
-        if (requestId.current !== id) return;
+    const body = { action: 'schedule_bootstrap', month };
+    const apply = (response: ScheduleBootstrapResponse) => {
         const nextEntries: Record<string, ShiftCode> = {};
         response.entries.forEach((entry) => { nextEntries[cellKey(entry.user_id, entry.date)] = entry.shift || ''; });
         setData(response);
@@ -197,6 +201,16 @@ export function SchedulePage() {
           ? [normalizeRole(user.role), normalizeRole(user.role2)].find((role) => roles.includes(role))
           : null;
         setActiveRole((current) => roles.includes(current) ? current : preferred || roles[0] || 'waiter');
+    };
+    // Paint the last known month at once; the request below refreshes it.
+    const known = peekSecureApi<ScheduleBootstrapResponse>(body);
+    if (known) apply(known);
+    // A remembered month refreshes quietly, without dimming the table.
+    if (known) setLoading(false);
+    void secureApi<ScheduleBootstrapResponse>(body)
+      .then((response) => {
+        if (requestId.current !== id) return;
+        apply(response);
       })
       .catch((reason: unknown) => {
         if (requestId.current !== id) return;

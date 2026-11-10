@@ -27,7 +27,7 @@ import { AnimatePresence, m, useReducedMotion, type PanInfo } from 'motion/react
 import { playDialogEnter, spring, useFirstTime } from '../lib/motion';
 import { useAuth } from '../auth/AuthProvider';
 import { accessiblePages, pages, type PageKey } from '../lib/acl';
-import { preloadPage } from '../lib/pageLoaders';
+import { prefetchPage, preloadPage } from '../lib/pageLoaders';
 import tiflisLogo from '../assets/brand/tiflis-wordmark-gold.png';
 
 const icons: Record<PageKey, LucideIcon> = {
@@ -72,7 +72,16 @@ const legacyDesktopOrder: PageKey[] = [
 
 type MobileSlot = 'schedule' | 'role' | 'home' | 'menu';
 
+// Modules whose first screen is worth warming with data, most used first.
+const DATA_WARM_ORDER: PageKey[] = ['schedule', 'cash', 'menu', 'records', 'reserve', 'staff'];
+let warmUserId = '';
+
 function warmPage(page: PageKey) {
+  // A press on a tab starts its data request ~100–300 ms before the tap lands.
+  if (warmUserId && DATA_WARM_ORDER.includes(page)) {
+    void prefetchPage(page, warmUserId).catch(() => undefined);
+    return;
+  }
   void preloadPage(page).catch(() => undefined);
 }
 
@@ -158,6 +167,8 @@ export const AppShell = memo(function AppShell() {
     [location.pathname, navigation],
   );
   const previousActiveRef = useRef<PageKey>(activeKey);
+  const activeKeyRef = useRef<PageKey>(activeKey);
+  activeKeyRef.current = activeKey;
   const previousIndex = navigation.indexOf(previousActiveRef.current);
   const activeIndex = navigation.indexOf(activeKey);
   const transitionDirection = previousIndex >= 0 && activeIndex >= 0 && activeIndex < previousIndex
@@ -188,6 +199,38 @@ export const AppShell = memo(function AppShell() {
   useEffect(() => {
     previousActiveRef.current = activeKey;
   }, [activeKey]);
+
+  // Warm every module the user can open, once Home has had the network to
+  // itself: code chunks first (cheap, same origin), then the first data of the
+  // busiest modules, one request at a time. Skipped on «save data».
+  const userId = user?.id || '';
+  useEffect(() => {
+    warmUserId = userId;
+    if (!userId) return;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (connection?.saveData) return;
+    let cancelled = false;
+    const run = async () => {
+      for (const key of navigation) {
+        if (cancelled) return;
+        await preloadPage(key).catch(() => undefined);
+      }
+      for (const key of DATA_WARM_ORDER) {
+        if (cancelled) return;
+        if (!navigation.includes(key) || key === activeKeyRef.current) continue;
+        await prefetchPage(key, userId).catch(() => undefined);
+      }
+    };
+    const idle = window as Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number };
+    const timer = window.setTimeout(() => {
+      if (idle.requestIdleCallback) idle.requestIdleCallback(() => { void run(); }, { timeout: 2000 });
+      else void run();
+    }, 2500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [navigation, userId]);
 
   useEffect(() => {
     setMoreOpen(false);

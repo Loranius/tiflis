@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router';
 import { useAuth } from './auth/AuthProvider';
 import { AppShell } from './components/AppShell';
@@ -17,17 +17,33 @@ import {
   loadStaffPage,
 } from './lib/pageLoaders';
 
-const LoginPage = lazy(() => loadLoginPage().then((module) => ({ default: module.LoginPage })));
-const DashboardPage = lazy(() => loadDashboardPage().then((module) => ({ default: module.DashboardPage })));
-const SchedulePage = lazy(() => loadSchedulePage().then((module) => ({ default: module.SchedulePage })));
-const CashPage = lazy(() => loadCashPage().then((module) => ({ default: module.CashPage })));
-const RecordsPage = lazy(() => loadRecordsPage().then((module) => ({ default: module.RecordsPage })));
-const MenuPage = lazy(() => loadMenuPage().then((module) => ({ default: module.MenuPage })));
-const ReservePage = lazy(() => loadReservePage().then((module) => ({ default: module.ReservePage })));
-const StaffPage = lazy(() => loadStaffPage().then((module) => ({ default: module.StaffPage })));
-const DutiesPage = lazy(() => loadDutiesPage().then((module) => ({ default: module.DutiesPage })));
-const HandoverPage = lazy(() => loadHandoverPage().then((module) => ({ default: module.HandoverPage })));
-const AdminPage = lazy(() => loadAdminPage().then((module) => ({ default: module.AdminPage })));
+/**
+ * React.lazy, minus the wait for code that is already here. React 19 holds a
+ * suspended screen back for ~300 ms even when its chunk resolves at once, so
+ * when the module has arrived (warmed in AppShell) the page renders directly.
+ */
+function instantLazy<M, K extends keyof M>(
+  loader: (() => Promise<M>) & { loaded: () => M | undefined },
+  name: K,
+): ComponentType {
+  const Lazy = lazy(() => loader().then((module) => ({ default: module[name] as ComponentType })));
+  return function InstantPage() {
+    const Ready = loader.loaded()?.[name] as ComponentType | undefined;
+    return Ready ? <Ready /> : <Lazy />;
+  };
+}
+
+const LoginPage = instantLazy(loadLoginPage, 'LoginPage');
+const DashboardPage = instantLazy(loadDashboardPage, 'DashboardPage');
+const SchedulePage = instantLazy(loadSchedulePage, 'SchedulePage');
+const CashPage = instantLazy(loadCashPage, 'CashPage');
+const RecordsPage = instantLazy(loadRecordsPage, 'RecordsPage');
+const MenuPage = instantLazy(loadMenuPage, 'MenuPage');
+const ReservePage = instantLazy(loadReservePage, 'ReservePage');
+const StaffPage = instantLazy(loadStaffPage, 'StaffPage');
+const DutiesPage = instantLazy(loadDutiesPage, 'DutiesPage');
+const HandoverPage = instantLazy(loadHandoverPage, 'HandoverPage');
+const AdminPage = instantLazy(loadAdminPage, 'AdminPage');
 
 function RouteSkeleton() {
   return (

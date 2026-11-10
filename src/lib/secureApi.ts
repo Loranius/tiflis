@@ -28,6 +28,65 @@ const inFlightRequests = new Map<string, Promise<unknown>>();
 const responseCache = new Map<string, ResponseCacheEntry>();
 const cacheGenerations = new Map<string, number>();
 let accessTokenRequest: Promise<string> | null = null;
+
+/* ---------- last known responses (stale-while-revalidate) ----------
+   Every successful read is remembered in memory, keyed by function and body.
+   A screen opened again paints this copy at once and refreshes it in the
+   background, instead of waiting 0.5–1.3 s for the edge function. The store
+   lives only in this tab's memory and belongs to one account: it is cleared
+   when a token for another user appears, and on sign-out. */
+const LAST_KNOWN_LIMIT = 40;
+const lastKnown = new Map<string, { domain: string; value: SecureApiEnvelope }>();
+let lastKnownOwner = '';
+
+function tokenSubject(token: string): string {
+  try {
+    const payload = token.split('.')[1] || '';
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))) as { sub?: string };
+    return json.sub || '';
+  } catch {
+    return '';
+  }
+}
+
+function lastKnownKey(functionSlug: string, body: Record<string, unknown>): string {
+  return `${functionSlug}:${JSON.stringify(body)}`;
+}
+
+function rememberLastKnown(token: string, functionSlug: string, body: Record<string, unknown>, domain: string, value: SecureApiEnvelope) {
+  const owner = tokenSubject(token);
+  if (!owner) return;
+  if (owner !== lastKnownOwner) {
+    lastKnown.clear();
+    lastKnownOwner = owner;
+  }
+  const key = lastKnownKey(functionSlug, body);
+  lastKnown.delete(key);
+  lastKnown.set(key, { domain, value });
+  while (lastKnown.size > LAST_KNOWN_LIMIT) {
+    const oldest = lastKnown.keys().next().value as string | undefined;
+    if (!oldest) break;
+    lastKnown.delete(oldest);
+  }
+}
+
+/** The last successful response for exactly this request, or null. Synchronous:
+    use it as a screen's initial state, then call secureApi to refresh. */
+export function peekSecureApi<T extends SecureApiEnvelope>(
+  body: Record<string, unknown>,
+  functionSlug = 'tiflis-secure-api',
+): T | null {
+  const action = typeof body.action === 'string' ? body.action : '';
+  const slug = functionSlug === 'tiflis-secure-api' && action === 'cash_bootstrap' ? 'tiflis-cash-anonymous-api' : functionSlug;
+  return (lastKnown.get(lastKnownKey(slug, body))?.value as T | undefined) ?? null;
+}
+
+/** Forget every remembered response (sign-out, account switch). */
+export function clearSecureApiMemory() {
+  lastKnown.clear();
+  lastKnownOwner = '';
+  responseCache.clear();
+}
 let refreshTokenRequest: Promise<string> | null = null;
 
 function cacheDomain(action: string, functionSlug: string): string {
@@ -58,6 +117,10 @@ function requestKey(
 
 function invalidateResponseCache(domain: string) {
   cacheGenerations.set(domain, domainGeneration(domain) + 1);
+  // After a write the remembered copy is wrong; the next visit waits for fresh data.
+  for (const [key, entry] of lastKnown) {
+    if (entry.domain === domain) lastKnown.delete(key);
+  }
   for (const [key, entry] of responseCache) {
     if (entry.domain === domain) responseCache.delete(key);
   }
@@ -234,6 +297,7 @@ export async function secureApi<T extends SecureApiEnvelope>(
   if (!shouldDedupe || options.signal) {
     const payload = await executeSecureApi<T>(body, resolvedFunctionSlug, options, token);
     if (shouldCache) rememberResponse(key, payload, cacheTtlMs, domain, generation);
+    if (isRead) rememberLastKnown(token, resolvedFunctionSlug, body, domain, payload);
     return payload;
   }
 
@@ -246,6 +310,7 @@ export async function secureApi<T extends SecureApiEnvelope>(
     (payload) => {
       if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
       if (shouldCache) rememberResponse(key, payload, cacheTtlMs, domain, generation);
+      if (isRead) rememberLastKnown(token, resolvedFunctionSlug, body, domain, payload);
     },
     () => {
       if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);

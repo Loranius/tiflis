@@ -23,7 +23,7 @@ import {
 import { useSearchParams } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { CashTopList, rankMovement, type CashTopPeriod, type CashTopRow } from '../components/CashTopList';
-import { secureApi } from '../lib/secureApi';
+import { peekSecureApi, secureApi } from '../lib/secureApi';
 import { CountUp, SegThumb, TabLine } from '../lib/motion';
 import { getKyivDateKey } from '../lib/time';
 import './cash-v3.css';
@@ -223,6 +223,12 @@ function summarizeCash(entries: CashEntry[], extras: ExtraWage[], month: string,
   return { first, second, month: monthTotal };
 }
 
+/** Warm the cash screen's first request (same body as load) while the user is elsewhere. */
+export function prefetch(userId: string) {
+  const month = getKyivDateKey().slice(0, 7);
+  return secureApi({ action: 'cash_bootstrap', month, user_id: userId, leaderboard_period: defaultPeriod() });
+}
+
 export function CashPage() {
   const { user } = useAuth();
   const todayKey = getKyivDateKey();
@@ -248,15 +254,14 @@ export function CashPage() {
   const load = useCallback(async () => {
     if (!viewUserId) return;
     const id = ++requestId.current;
-    setLoading(true);
     setError(null);
+    const body = { action: 'cash_bootstrap', month, user_id: viewUserId, leaderboard_period: period };
+    // Paint the last known cash at once and refresh it quietly (no dimming).
+    const known = peekSecureApi<CashBootstrapResponse>(body);
+    if (known) setData(known);
+    setLoading(!known);
     try {
-      const response = await secureApi<CashBootstrapResponse>({
-        action: 'cash_bootstrap',
-        month,
-        user_id: viewUserId,
-        leaderboard_period: period,
-      });
+      const response = await secureApi<CashBootstrapResponse>(body);
       if (requestId.current !== id) return;
       setData(response);
       if (response.viewUserId !== viewUserId) setViewUserId(response.viewUserId);

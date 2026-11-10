@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Overlay } from '../components/Overlay';
-import { secureApi } from '../lib/secureApi';
+import { peekSecureApi, secureApi } from '../lib/secureApi';
 import './reserve-v3.css';
 import { SegThumb } from '../lib/motion';
 
@@ -208,6 +208,11 @@ function newDraft(date: string, hallId: number | null = null, tableId: number | 
 
 /* ---------- page ---------- */
 
+/** Warm the reservations screen's first request (today's day). */
+export function prefetch() {
+  return secureApi({ action: 'reserve_bootstrap', date: kyivToday() }, 'tiflis-reserve-api');
+}
+
 export function ReservePage() {
   const [today, setToday] = useState(kyivToday);
   const [date, setDate] = useState(today);
@@ -235,6 +240,9 @@ export function ReservePage() {
     const id = ++requestId.current;
     setLoading(true);
     setError(null);
+    // Paint the last known day at once; the request below refreshes it.
+    const known = peekSecureApi<Bootstrap>({ action: 'reserve_bootstrap', date: target }, 'tiflis-reserve-api');
+    if (known) setData(known);
     try {
       const response = await secureApi<Bootstrap>({ action: 'reserve_bootstrap', date: target }, 'tiflis-reserve-api');
       if (requestId.current === id) setData(response);
