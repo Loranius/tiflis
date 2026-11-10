@@ -10,6 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Overlay } from '../components/Overlay';
 import { secureApi } from '../lib/secureApi';
 import './reserve-v3.css';
+import { SegThumb } from '../lib/motion';
 
 /* ---------- data ---------- */
 
@@ -340,8 +341,8 @@ export function ReservePage() {
 
       <div className="rv3-tools">
         <div className="rv3-seg" role="group" aria-label="Вигляд">
-          <button type="button" aria-pressed={view === 'list'} className={view === 'list' ? 'is-on' : ''} onClick={() => setView('list')}>Список</button>
-          <button type="button" aria-pressed={view === 'floor'} className={view === 'floor' ? 'is-on' : ''} onClick={() => setView('floor')}>Схема залу</button>
+          <button type="button" aria-pressed={view === 'list'} className={`tm-seg${view === 'list' ? ' is-on' : ''}`} onClick={() => setView('list')}>{view === 'list' ? <SegThumb group="reserve" /> : null}<span>Список</span></button>
+          <button type="button" aria-pressed={view === 'floor'} className={`tm-seg${view === 'floor' ? ' is-on' : ''}`} onClick={() => setView('floor')}>{view === 'floor' ? <SegThumb group="reserve" /> : null}<span>Схема залу</span></button>
         </div>
         {view === 'list' ? (
           <label className="rv3-search">

@@ -18,6 +18,7 @@ import { Overlay } from '../components/Overlay';
 import { photoFileProblem, resizePhotoFile } from '../lib/photo';
 import { secureApi } from '../lib/secureApi';
 import './menu-v3.css';
+import { SegThumb } from '../lib/motion';
 
 /* ---------- data ---------- */
 
@@ -251,7 +252,7 @@ export function MenuPage() {
       <div className="mv3-top">
         <div className="mv3-seg" role="radiogroup" aria-label="Режим меню">
           {([['guide', 'Довідник'], ['train', 'Тренажер'], ['plan', 'План']] as const).map(([key, label]) => (
-            <button key={key} type="button" role="radio" aria-checked={mode === key} className={mode === key ? 'is-on' : ''} onClick={() => setMode(key)}>{label}</button>
+            <button key={key} type="button" role="radio" aria-checked={mode === key} className={`tm-seg${mode === key ? ' is-on' : ''}`} onClick={() => setMode(key)}>{mode === key ? <SegThumb group="menu" /> : null}<span>{label}</span></button>
           ))}
         </div>
         {canEdit ? <button type="button" className="mv3-add" onClick={() => setEditor(createEditor())}><Plus size={17} aria-hidden="true" /> Позиція</button> : null}

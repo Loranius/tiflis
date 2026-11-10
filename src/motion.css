@@ -1,0 +1,112 @@
+/* ─── Tiflis motion layer ───
+ * Styles for the Motion-driven elements (src/lib/motion.tsx). Timing lives in
+ * code; this file only shapes what moves. Every effect has a still fallback
+ * under prefers-reduced-motion (MotionConfig reducedMotion="user" in JS, the
+ * block at the end in CSS).
+ */
+
+.tm-contents { display: contents; }
+
+/* Bottom navigation: one gold wash that glides to the active tab. */
+@media (max-width: 980px) {
+  body .legacy-mobile-nav .mobile-nav-item { position: relative; isolation: isolate; }
+  body .legacy-mobile-nav .mobile-nav-item.is-active { background: transparent !important; }
+  body .legacy-mobile-nav .mobile-nav-item > :not(.tm-nav-pill) { position: relative; z-index: 1; }
+  .tm-nav-pill {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: 15px;
+    background: var(--t-gold-tint);
+    box-shadow: inset 0 0 0 1px rgba(209, 180, 107, 0.16);
+  }
+}
+
+/* «Ще» sheet: a grab strip on top that follows the finger down. */
+.mobile-more-grab {
+  display: grid;
+  place-items: center;
+  margin: -6px -6px 0;
+  padding: 4px 0 10px;
+  touch-action: none;
+  cursor: grab;
+}
+.mobile-more-grip {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--t-line-strong, rgba(244, 238, 226, 0.2));
+}
+@media (min-width: 981px) { .mobile-more-grab { display: none; } }
+
+/* Gold confetti burst (GoldBurst). */
+.tm-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.tm-burst i {
+  position: absolute;
+  left: -3px;
+  top: -5px;
+  width: 6px;
+  height: 10px;
+  border-radius: 1.5px;
+}
+.tm-burst i.is-round { width: 7px; height: 7px; border-radius: 50%; }
+
+/* One sweep of light across a surface (records badge, birthday today). The
+   light moves by background-position, so nothing is clipped and confetti can
+   fly past the card's edge. */
+.tm-sheen { position: relative; isolation: isolate; }
+.tm-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 244, 214, 0.22) 50%, transparent 60%) no-repeat;
+  background-size: 300% 100%;
+  background-position: 120% 0;
+  animation: tm-sheen 1.2s cubic-bezier(0.77, 0, 0.175, 1) 0.35s 1 both;
+  pointer-events: none;
+}
+@keyframes tm-sheen { from { background-position: 120% 0; } to { background-position: -20% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-sheen::after { animation: none; display: none; }
+}
+
+/* Home: the mast content drifts under the shift card while scrolling. */
+.hv3-mast { overflow: clip; }
+.hv3-mast-inner { position: relative; z-index: 0; will-change: transform; }
+.hv3-shift { position: relative; z-index: 1; }
+
+/* Segmented controls: the raised thumb glides between segments (SegThumb). */
+button.tm-seg { position: relative; isolation: isolate; }
+button.tm-seg.is-on { background: transparent !important; box-shadow: none !important; }
+button.tm-seg > span:not(.tm-seg-thumb) { position: relative; z-index: 1; }
+.tm-seg-thumb {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: var(--t-surface-3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* Tab rows: the gold underline glides to the selected tab (TabLine). */
+button.tm-tab.is-on::after { display: none !important; }
+.tm-tab-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--t-gold);
+}

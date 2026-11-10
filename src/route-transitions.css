@@ -5,17 +5,8 @@
 .route-transition {
   min-height: min(720px, calc(100dvh - 150px));
   transform-origin: 50% 0;
-  animation-duration: 110ms;
-  animation-timing-function: cubic-bezier(.2, .8, .2, 1);
 }
-
-.route-transition[data-direction='forward'] {
-  animation-name: route-enter-forward;
-}
-
-.route-transition[data-direction='backward'] {
-  animation-name: route-enter-backward;
-}
+/* The screen entrance itself is driven by Motion in AppShell (see motion.css). */
 
 .topbar-title-transition {
   animation: topbar-title-enter 90ms cubic-bezier(.2, .8, .2, 1) both;

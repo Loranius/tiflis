@@ -5,6 +5,8 @@ import { useAuth } from '../auth/AuthProvider';
 import { Overlay } from '../components/Overlay';
 import { useKyivDay } from '../hooks/useKyivDay';
 import { secureApi } from '../lib/secureApi';
+import { m } from 'motion/react';
+import { CountUp, GoldBurst, SegThumb, spring, useFirstTime } from '../lib/motion';
 import './records-v3.css';
 
 /* ---------- data ---------- */
@@ -186,8 +188,8 @@ export function RecordsPage() {
     <div className="rc3">
       <div className="rc3-top">
         <div className="rc3-seg" role="group" aria-label="Розділ рекордів">
-          <button type="button" aria-pressed={view === 'fame'} className={view === 'fame' ? 'is-on' : ''} onClick={() => setView('fame')}>Дошка слави</button>
-          <button type="button" aria-pressed={view === 'mine'} className={view === 'mine' ? 'is-on' : ''} onClick={() => setView('mine')}>{mine?.me.canViewAll && !isOwn ? 'Рекорди офіціанта' : 'Мої рекорди'}</button>
+          <button type="button" aria-pressed={view === 'fame'} className={`tm-seg${view === 'fame' ? ' is-on' : ''}`} onClick={() => setView('fame')}>{view === 'fame' ? <SegThumb group="records" /> : null}<span>Дошка слави</span></button>
+          <button type="button" aria-pressed={view === 'mine'} className={`tm-seg${view === 'mine' ? ' is-on' : ''}`} onClick={() => setView('mine')}>{view === 'mine' ? <SegThumb group="records" /> : null}<span>{mine?.me.canViewAll && !isOwn ? 'Рекорди офіціанта' : 'Мої рекорди'}</span></button>
         </div>
         <Link to="/cash?tab=top" className="rc3-race">Хто лідирує цього місяця — у Касі <ChevronRight size={16} aria-hidden="true" /></Link>
       </div>
@@ -269,6 +271,34 @@ function Avatar({ name, avatar, size }: { name: string; avatar: string | null; s
 }
 
 /** Дошка слави: one plaque per category — the holder large, places 2–5 beneath, and the viewer's own place if lower. */
+/* Motion: plaques rise into view as the hall scrolls past them (once each);
+   the record value rolls up and the holder's trophy pops. */
+const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+const plaqueReveal = reduceMotion ? {} : {
+  initial: { opacity: 0, y: 18, filter: 'blur(6px)' },
+  whileInView: { opacity: 1, y: 0, filter: 'blur(0px)' },
+  viewport: { once: true, margin: '0px 0px -40px 0px' },
+  transition: spring.settle,
+};
+
+/** Your own restaurant record: light sweeps the badge, confetti once a day. */
+function HolderBadge({ categoryKey, own }: { categoryKey: string; own: boolean }) {
+  const burst = useFirstTime(`record-${categoryKey}`, 'day');
+  const play = own && burst;
+  return (
+    <m.span
+      className="rc3-badge tm-sheen"
+      style={{ position: 'relative', overflow: 'visible' }}
+      initial={play ? { scale: 0.7, opacity: 0 } : false}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ ...spring.pop, delay: 0.2 }}
+    >
+      <Trophy size={14} aria-hidden="true" /> Рекорд ресторану
+      {play ? <GoldBurst count={14} /> : null}
+    </m.span>
+  );
+}
+
 function Fame({ board, myId }: { board: Leaderboard; myId: string }) {
   return (
     <section className="rc3-fame" aria-label="Дошка слави">
@@ -282,17 +312,17 @@ function Fame({ board, myId }: { board: Leaderboard; myId: string }) {
         const mineInTop = group.top.some((row) => row.userId === myId);
         const own = group.comparison && group.comparison.userId === myId && !mineInTop ? group.comparison : null;
         return (
-          <article key={category.key} className={`rc3-plaque${rest.length ? '' : ' is-solo'}`} aria-labelledby={`rc3-${category.key}`}>
+          <m.article key={category.key} className={`rc3-plaque${rest.length ? '' : ' is-solo'}`} aria-labelledby={`rc3-${category.key}`} {...plaqueReveal}>
             <h2 id={`rc3-${category.key}`}>{category.title}</h2>
             {holder ? (
               <>
                 <div className="rc3-holder">
                   <Avatar name={holder.name} avatar={holder.avatar} size="md" />
                   <div>
-                    <p className="rc3-holder-value"><b>{valueText(category.kind, holder.value).number}</b> {valueText(category.kind, holder.value).unit}</p>
+                    <p className="rc3-holder-value"><b><CountUp value={holder.value} format={(value) => valueText(category.kind, value).number} /></b> {valueText(category.kind, holder.value).unit}</p>
                     {holders.map((row) => (
                       <div key={row.userId} className={`rc3-holder-line${row.userId === myId ? ' is-me' : ''}`}>
-                        <p className="rc3-holder-name"><Trophy size={14} aria-hidden="true" /> {row.name}{row.userId === myId ? <span className="rc3-you">Ти</span> : null}</p>
+                        <p className="rc3-holder-name"><m.span style={{ display: 'inline-flex' }} initial={{ scale: 0.4, rotate: -25 }} whileInView={{ scale: 1, rotate: 0 }} viewport={{ once: true }} transition={{ ...spring.pop, delay: 0.25 }}><Trophy size={14} aria-hidden="true" /></m.span> {row.name}{row.userId === myId ? <span className="rc3-you">Ти</span> : null}</p>
                         {holders.length > 1 && detailText(category, row) ? <p className="rc3-holder-when">{detailText(category, row)}</p> : null}
                       </div>
                     ))}
@@ -317,7 +347,7 @@ function Fame({ board, myId }: { board: Leaderboard; myId: string }) {
             ) : (
               <p className="rc3-empty">{category.manual ? 'Рекорд ще ніхто не вніс. Може, ти перший?' : 'Ще немає даних.'}</p>
             )}
-          </article>
+          </m.article>
         );
       })}
     </section>
@@ -337,12 +367,12 @@ function MineRow({ category, group, userId, own, waiters, manual, canEdit, onEdi
   const place = record ? (group.top.some((row) => row.userId === record.userId) ? sharedRank(group.top, record.value) : record.rank) : 0;
 
   return (
-    <article className={`rc3-row${isHolder ? ' is-holder' : ''}`}>
+    <m.article className={`rc3-row${isHolder ? ' is-holder' : ''}`} {...plaqueReveal}>
       <div className="rc3-row-main">
         <h3>{category.title}</h3>
         {record && record.value > 0 ? (
           <>
-            <p className="rc3-row-value"><b>{valueText(category.kind, record.value).number}</b> {valueText(category.kind, record.value).unit}</p>
+            <p className="rc3-row-value"><b><CountUp value={record.value} format={(value) => valueText(category.kind, value).number} /></b> {valueText(category.kind, record.value).unit}</p>
             {detailText(category, record) ? <p className="rc3-row-when">{detailText(category, record)}</p> : null}
           </>
         ) : <p className="rc3-row-when">{category.manual ? (own ? 'Ще не внесено' : 'Не внесено') : 'Ще немає даних'}</p>}
@@ -350,7 +380,7 @@ function MineRow({ category, group, userId, own, waiters, manual, canEdit, onEdi
       <div className="rc3-row-side">
         {record && record.value > 0 ? (
           isHolder
-            ? <span className="rc3-badge"><Trophy size={14} aria-hidden="true" /> Рекорд ресторану</span>
+            ? <HolderBadge categoryKey={category.key} own={own} />
             : <span className="rc3-place"><b>{place}</b> місце з {waiters}</span>
         ) : null}
         {gap > 0 ? <span className="rc3-gap">до рекорду {flat(category.kind, gap)}</span> : null}
@@ -361,7 +391,7 @@ function MineRow({ category, group, userId, own, waiters, manual, canEdit, onEdi
           </button>
         ) : null}
       </div>
-    </article>
+    </m.article>
   );
 }
 

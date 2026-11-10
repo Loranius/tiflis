@@ -23,6 +23,8 @@ import {
   useState,
 } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
+import { AnimatePresence, m, useReducedMotion, type PanInfo } from 'motion/react';
+import { playDialogEnter, spring, useFirstTime } from '../lib/motion';
 import { useAuth } from '../auth/AuthProvider';
 import { accessiblePages, pages, type PageKey } from '../lib/acl';
 import { preloadPage } from '../lib/pageLoaders';
@@ -96,19 +98,47 @@ function MobilePageLink({
         isActive ? 'is-active' : '',
       ].filter(Boolean).join(' ')}
     >
-      {home ? (
-        <div className="mobile-nav-home-icon" aria-hidden="true">
-          <Icon size={23} strokeWidth={2} />
-        </div>
-      ) : (
-        <Icon size={20} strokeWidth={1.9} />
+      {({ isActive }) => (
+        <>
+          {isActive && !home ? <NavPill /> : null}
+          {home ? (
+            <div className="mobile-nav-home-icon" aria-hidden="true">
+              <Icon size={23} strokeWidth={2} />
+            </div>
+          ) : (
+            <Icon size={20} strokeWidth={1.9} />
+          )}
+          <span>{pages[pageKey].shortTitle}</span>
+        </>
       )}
-      <span>{pages[pageKey].shortTitle}</span>
     </NavLink>
   );
 }
 
+/** The gold wash under the active tab. It glides from tab to tab (shared layout). */
+function NavPill() {
+  return <m.span layoutId="tm-nav-pill" className="tm-nav-pill" aria-hidden="true" transition={spring.glide} />;
+}
+
+/** First screen of the session: the wordmark draws in once, then stays still. */
+function BrandMark({ className, width, height }: { className: string; width: number; height: number }) {
+  const intro = useFirstTime(`brand-${className}`);
+  return (
+    <m.img
+      className={className}
+      src={tiflisLogo}
+      alt="Tiflis restaurant"
+      width={width}
+      height={height}
+      initial={intro ? { clipPath: 'inset(0 100% 0 0)', opacity: 0.4, filter: 'blur(4px)' } : false}
+      animate={{ clipPath: 'inset(0 0% 0 0)', opacity: 1, filter: 'blur(0px)' }}
+      transition={{ duration: 0.9, ease: [0.77, 0, 0.175, 1], delay: 0.1 }}
+    />
+  );
+}
+
 export const AppShell = memo(function AppShell() {
+  const reduceMotion = useReducedMotion();
   const { user, logout } = useAuth();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -171,6 +201,7 @@ export const AppShell = memo(function AppShell() {
       : null;
     document.body.style.overflow = 'hidden';
 
+    playDialogEnter(null, moreSheetRef.current);
     const focusFrame = window.requestAnimationFrame(() => {
       const firstControl = moreSheetRef.current?.querySelector<HTMLElement>(
         'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -217,12 +248,29 @@ export const AppShell = memo(function AppShell() {
   if (!user) return null;
 
   const roleLabel = roleNames[user.role] || user.role;
+  const routeOffset = reduceMotion ? 0 : transitionDirection === 'backward' ? -18 : 18;
+  // Swipe the «Ще» sheet down to close. The shared modal CSS pins `transform`,
+  // so the sheet follows the finger through the independent `translate` property.
+  const followSwipe = (_event: PointerEvent, info: PanInfo) => {
+    const sheet = moreSheetRef.current;
+    if (sheet) sheet.style.translate = `0 ${Math.max(0, info.offset.y)}px`;
+  };
+  const closeOnSwipe = (_event: PointerEvent, info: PanInfo) => {
+    const sheet = moreSheetRef.current;
+    if (info.offset.y > 90 || info.velocity.y > 500) {
+      setMoreOpen(false);
+      return;
+    }
+    if (!sheet) return;
+    sheet.animate([{ translate: sheet.style.translate || '0 0' }, { translate: '0 0' }], { duration: 260, easing: 'cubic-bezier(.23,1,.32,1)' });
+    sheet.style.translate = '';
+  };
 
   return (
     <div className="app-shell" data-page={activeKey}>
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-logo" src={tiflisLogo} alt="Tiflis restaurant" width={92} height={59} />
+          <BrandMark className="brand-logo" width={92} height={59} />
         </div>
 
         <nav className="sidebar-nav" aria-label="Основна навігація">
@@ -259,8 +307,15 @@ export const AppShell = memo(function AppShell() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <img className="topbar-logo" src={tiflisLogo} alt="Tiflis restaurant" width={68} height={43} />
-            <h1 key={activeKey} className="topbar-title-transition">{pages[activeKey].title}</h1>
+            <BrandMark className="topbar-logo" width={68} height={43} />
+            <m.h1
+              key={activeKey}
+              initial={reduceMotion ? false : { opacity: 0, y: 6, filter: 'blur(4px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
+              transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+            >
+              {pages[activeKey].title}
+            </m.h1>
           </div>
           <div className="topbar-profile">
             <div className="avatar avatar-small">{user.displayName.slice(0, 1).toUpperCase()}</div>
@@ -271,13 +326,16 @@ export const AppShell = memo(function AppShell() {
           </div>
         </header>
         <section className="page-content">
-          <div
+          <m.div
             key={location.pathname}
             className="route-transition"
             data-direction={transitionDirection}
+            initial={reduceMotion ? false : { opacity: 0, x: routeOffset, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, x: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none', transform: 'none' } }}
+            transition={spring.settle}
           >
             <Outlet />
-          </div>
+          </m.div>
         </section>
       </main>
 
@@ -306,15 +364,25 @@ export const AppShell = memo(function AppShell() {
             aria-haspopup="dialog"
             aria-controls="mobile-more-sheet"
           >
+            {moreContainsActive || moreOpen ? <NavPill /> : null}
             <MoreHorizontal size={21} strokeWidth={1.9} />
             <span>Ще</span>
           </button>
         ) : null}
       </nav>
 
+      <AnimatePresence>
       {moreOpen ? (
-        <div className="mobile-more-backdrop is-open" onMouseDown={() => setMoreOpen(false)}>
-          <section
+        <m.div
+          key="more"
+          className="mobile-more-backdrop is-open"
+          onMouseDown={() => setMoreOpen(false)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: 0.16 } }}
+          transition={{ duration: 0.2 }}
+        >
+          <m.section
             ref={moreSheetRef}
             id="mobile-more-sheet"
             className="mobile-more-sheet"
@@ -323,7 +391,15 @@ export const AppShell = memo(function AppShell() {
             aria-labelledby="mobile-more-title"
             tabIndex={-1}
             onMouseDown={(event) => event.stopPropagation()}
+            exit={{ opacity: 0, transition: { duration: 0.14 } }}
           >
+            <m.div
+              className="mobile-more-grab"
+              onPan={reduceMotion ? undefined : followSwipe}
+              onPanEnd={reduceMotion ? undefined : closeOnSwipe}
+            >
+              <div className="mobile-more-grip" aria-hidden="true" />
+            </m.div>
             <div className="mobile-more-heading">
               <h2 id="mobile-more-title">Ще</h2>
               <button className="mobile-more-close" type="button" onClick={() => setMoreOpen(false)} aria-label="Закрити">
@@ -361,9 +437,10 @@ export const AppShell = memo(function AppShell() {
               <LogOut size={18} />
               Вийти з порталу
             </button>
-          </section>
-        </div>
+          </m.section>
+        </m.div>
       ) : null}
+      </AnimatePresence>
     </div>
   );
 });
