@@ -106,10 +106,10 @@ function halfText(month: string | null | undefined, half: HalfKey | null | undef
   if (!month || !half) return '';
   const [year = '', monthNumber = ''] = month.split('-');
   const days = new Date(Number(year), Number(monthNumber), 0).getDate();
-  // Same split as the server's record maths (tiflis-secure-api): 1–14 and 15–end. «1–14 серпня 2026».
-  const endDay = half === 'first' ? 14 : days;
+  // Same split as the server's record maths (tiflis-secure-api): 1–15 and 16–end. «1–15 серпня 2026».
+  const endDay = half === 'first' ? 15 : days;
   const end = new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long' }).format(new Date(Number(year), Number(monthNumber) - 1, endDay, 12));
-  return `${half === 'first' ? '1' : '15'}–${end} ${year}`;
+  return `${half === 'first' ? '1' : '16'}–${end} ${year}`;
 }
 
 function detailText(category: Category, record: { month?: string | null; half?: HalfKey | null; achievedOn?: string | null }): string {

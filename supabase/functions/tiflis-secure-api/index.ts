@@ -93,6 +93,7 @@ type RecordCashRow = {
   user_id?: string | null;
   date: string;
   cash: number | string | null;
+  first_cash?: number | string | null;
 };
 
 type RecordScheduleRow = {
@@ -232,7 +233,7 @@ function bestPeriod(totals: Map<string, number>, withHalf: boolean): PeriodRecor
   let bestKey: string | null = null;
   let bestValue = 0;
   for (const [key, value] of totals) {
-    if (value > bestValue || (value === bestValue && bestKey !== null && key > bestKey)) {
+    if (value > bestValue || (value === bestValue && bestKey !== null && key < bestKey)) {
       bestKey = key;
       bestValue = value;
     }
@@ -272,11 +273,11 @@ function deriveAutomaticRecords(cashRows: RecordCashRow[], scheduleRows: RecordS
   const monthlyCash = new Map<string, number>();
   const halfCash = new Map<string, number>();
   for (const row of cashRows) {
-    const amount = Math.max(0, numberOf(row.cash));
+    const amount = Math.max(0, numberOf(row.first_cash ?? row.cash));
     if (amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(row.date) || row.date > today) continue;
     const month = row.date.slice(0, 7);
     const day = Number(row.date.slice(8, 10));
-    const half = day <= 14 ? "first" : "second";
+    const half = day <= 15 ? "first" : "second";
     addPeriodTotal(monthlyCash, month, amount);
     addPeriodTotal(halfCash, `${month}:${half}`, amount);
   }
@@ -289,7 +290,7 @@ function deriveAutomaticRecords(cashRows: RecordCashRow[], scheduleRows: RecordS
     if (NON_WORK_SHIFT_CODES.has(shift)) continue;
     const month = row.date.slice(0, 7);
     const day = Number(row.date.slice(8, 10));
-    const half = day <= 14 ? "first" : "second";
+    const half = day <= 15 ? "first" : "second";
     addPeriodTotal(monthlyShifts, month, 1);
     addPeriodTotal(halfShifts, `${month}:${half}`, 1);
   }
@@ -320,16 +321,21 @@ function leaderboardTieKey(candidate: LeaderboardCandidate): string {
 }
 
 function buildRecordLeaderboard(candidates: LeaderboardCandidate[], comparisonUserId: string | null) {
-  const ranked = candidates
+  const sorted = candidates
     .filter((candidate) => candidate.value > 0)
     .sort((left, right) => {
       const valueDifference = right.value - left.value;
       if (valueDifference !== 0) return valueDifference;
-      const periodDifference = leaderboardTieKey(right).localeCompare(leaderboardTieKey(left));
+      // Equal values: whoever reached it first is listed first.
+      const periodDifference = leaderboardTieKey(left).localeCompare(leaderboardTieKey(right));
       if (periodDifference !== 0) return periodDifference;
       return left.name.localeCompare(right.name, "uk");
-    })
-    .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
+    });
+  // Competition ranking: equal values share a place (1, 2, 2, 4).
+  const ranked = sorted.map((candidate) => ({
+    ...candidate,
+    rank: 1 + sorted.filter((other) => other.value > candidate.value).length,
+  }));
 
   return {
     top: ranked.slice(0, 5),
@@ -526,7 +532,7 @@ Deno.serve(async (req: Request) => {
       const [cashRows, scheduleRows, manualResult] = await Promise.all([
         loadAllPages<RecordCashRow>((from, to) => serviceClient
           .from("cash")
-          .select("date,cash")
+          .select("date,cash,first_cash")
           .eq("user_id", viewStaff.id)
           .order("date", { ascending: true })
           .range(from, to)),
@@ -600,7 +606,7 @@ Deno.serve(async (req: Request) => {
       const [cashRows, scheduleRows, manualResult] = await Promise.all([
         loadAllPages<RecordCashRow>((from, to) => serviceClient
           .from("cash")
-          .select("user_id,date,cash")
+          .select("user_id,date,cash,first_cash")
           .in("user_id", waiterIds)
           .order("user_id", { ascending: true })
           .order("date", { ascending: true })
@@ -736,12 +742,12 @@ Deno.serve(async (req: Request) => {
       const leaderboardStart = leaderboardPeriod === "year"
         ? `${selectedYear}-01-01`
         : leaderboardPeriod === "second"
-          ? `${range.month}-15`
+          ? `${range.month}-16`
           : range.start;
       const leaderboardEnd = leaderboardPeriod === "year"
         ? `${selectedYear + 1}-01-01`
         : leaderboardPeriod === "first"
-          ? `${range.month}-15`
+          ? `${range.month}-16`
           : range.end;
 
       const usersResult = await serviceClient

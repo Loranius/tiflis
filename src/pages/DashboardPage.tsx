@@ -160,6 +160,14 @@ function whenLabel(days: number, todayKey: string): string {
   return `${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]}`;
 }
 
+/** «Завтра, 11 листопада» / «У неділю, 15 листопада»; from a week out the date alone already says it. */
+function birthdayWhen(days: number, todayKey: string): string {
+  const when = whenLabel(days, todayKey).replace(/^у /, 'У ');
+  if (days >= 7) return when;
+  const date = new Date(`${addDaysToDateKey(todayKey, days)}T12:00:00`);
+  return `${when}, ${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]}`;
+}
+
 function capitalize(value: string): string {
   return value ? value[0]!.toUpperCase() + value.slice(1) : value;
 }
@@ -366,7 +374,7 @@ export function DashboardPage() {
         <Link to="/staff" className={`hv3-bday${birthday.days === 0 ? ' is-today' : ''}`}>
           <span className="hv3-bday-icon" aria-hidden="true"><Cake size={20} /></span>
           <span>
-            <strong>{whenLabel(birthday.days, todayKey).replace(/^у /, 'У ')} день народження</strong>
+            <strong>{birthdayWhen(birthday.days, todayKey)} — день народження</strong>
             <small>{birthday.people.join(', ')}</small>
           </span>
           <ChevronRight size={18} aria-hidden="true" />

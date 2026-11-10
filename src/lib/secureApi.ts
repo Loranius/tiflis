@@ -201,7 +201,11 @@ export async function secureApi<T extends SecureApiEnvelope>(
     : functionSlug;
   const domain = cacheDomain(action, resolvedFunctionSlug);
 
-  if (options.invalidateCache ?? !isRead) invalidateResponseCache(domain);
+  if (options.invalidateCache ?? !isRead) {
+    invalidateResponseCache(domain);
+    // Records are derived from cash and schedule, so a new entry must show up there at once.
+    if (domain === 'cash' || domain === 'schedule') invalidateResponseCache('records');
+  }
 
   const token = await getAccessToken();
   const generation = domainGeneration(domain);
