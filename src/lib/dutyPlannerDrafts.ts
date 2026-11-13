@@ -13,6 +13,8 @@ export interface StoredBooking {
   menu: boolean;
   /** Banquet advance, ₴, as typed (halls only). */
   advance: string;
+  /** Перерахунок: the whole bill is already paid, no advance (halls only). */
+  paid: boolean;
 }
 export type StoredBookings = Record<string, StoredBooking>;
 
@@ -98,6 +100,7 @@ function normalizeBookings(value: unknown): StoredBookings {
       name: typeof booking.name === 'string' ? booking.name : '',
       menu: booking.menu === true,
       advance: typeof booking.advance === 'string' ? booking.advance : '',
+      paid: booking.paid === true,
     };
   }
   return result;

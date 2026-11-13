@@ -59,6 +59,8 @@ export interface ZoneBooking {
   guest_name: string | null;
   has_menu: boolean;
   advance?: number | null;
+  /** Перерахунок: the whole bill is paid. */
+  fully_paid?: boolean;
 }
 
 export interface DutyPublication {
@@ -92,7 +94,7 @@ export interface DutyPlanResponse {
 export interface DutyPlanDraft {
   assignments: { duty_key: string; assignee_id: string }[];
   zones: { zone_key: string; slot: number; assignee_id: string }[];
-  bookings?: { zone_key: string; slot: number; time: string; guests: number; children: number; guest_name: string | null; has_menu: boolean; advance: number | null }[];
+  bookings?: { zone_key: string; slot: number; time: string; guests: number; children: number; guest_name: string | null; has_menu: boolean; advance: number | null; fully_paid: boolean }[];
 }
 
 export function loadDutyPlan(planType: DutyPlanType, date: string): Promise<DutyPlanResponse> {

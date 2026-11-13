@@ -104,6 +104,8 @@ type ZoneBooking = {
   guest_name: string | null;
   has_menu: boolean;
   advance: number | null;
+  /** Перерахунок: the whole bill is paid (halls only); advance is null then. */
+  fully_paid: boolean;
 };
 type StaffProfile = {
   legacy_user_id: string | null;
@@ -221,7 +223,9 @@ function bookingLine(booking: ZoneBooking): string {
     partyText(booking.guests, Number(booking.children || 0)),
     booking.guest_name || null,
     booking.has_menu ? "з меню" : "без меню",
-    booking.advance !== null && booking.advance !== undefined ? `аванс ${formatMoney(Number(booking.advance))} ₴` : null,
+    booking.fully_paid
+      ? "перерахунок (рахунок оплачено повністю)"
+      : booking.advance !== null && booking.advance !== undefined ? `аванс ${formatMoney(Number(booking.advance))} ₴` : null,
   ].filter(Boolean).join(", ");
 }
 
@@ -346,7 +350,7 @@ async function loadPlan(service: any, type: PlanType, date: string) {
       .maybeSingle(),
     type === "daily"
       ? service.from("ops_zone_bookings")
-        .select("zone_key,slot,booked_time,guests,children,guest_name,has_menu,advance")
+        .select("zone_key,slot,booked_time,guests,children,guest_name,has_menu,advance,fully_paid")
         .eq("work_date", date)
         .order("zone_key")
         .order("slot")
@@ -393,6 +397,7 @@ async function loadPlan(service: any, type: PlanType, date: string) {
       booked_time: String(item.booked_time).slice(0, 5),
       children: Number(item.children || 0),
       advance: item.advance === null || item.advance === undefined ? null : Number(item.advance),
+      fully_paid: item.fully_paid === true,
     })),
   };
 }
@@ -582,7 +587,8 @@ Deno.serve(async (req: Request) => {
         const time = parseBookingTime(item.time);
         const guests = Number(item.guests);
         const children = item.children === undefined || item.children === null || item.children === "" ? 0 : Number(item.children);
-        const advance = rule?.advance ? parseAdvance(item.advance) : null;
+        const fullyPaid = Boolean(rule?.advance) && item.fully_paid === true;
+        const advance = rule?.advance && !fullyPaid ? parseAdvance(item.advance) : null;
         if (!rule || !rule.slots.includes(slot) || !time || !Number.isInteger(guests) || guests < 1 || guests > 300 || seenBookings.has(`${zoneKey}:${slot}`)) {
           return json(req, { ok: false, error: "Перевір бронювання: час, кількість гостей і кабінку." }, 400);
         }
@@ -603,6 +609,7 @@ Deno.serve(async (req: Request) => {
           guest_name: rule.named ? cleanText(item.guest_name, 120) || null : null,
           has_menu: item.has_menu === true,
           advance,
+          fully_paid: fullyPaid,
         });
       }
 

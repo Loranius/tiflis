@@ -127,7 +127,7 @@ const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean; advance: 
 };
 /** A banquet's advance starts at 1000 ₴; the admin changes it when it differs. */
 const DEFAULT_ADVANCE = '1000';
-const EMPTY_BOOKING: StoredBooking = { time: '', guests: '', children: '0', name: '', menu: false, advance: '' };
+const EMPTY_BOOKING: StoredBooking = { time: '', guests: '', children: '0', name: '', menu: false, advance: '', paid: false };
 
 function emptyBooking(zoneKey: string): StoredBooking {
   return { ...EMPTY_BOOKING, advance: BOOKING_ZONES[zoneKey]?.advance ? DEFAULT_ADVANCE : '' };
@@ -158,6 +158,7 @@ function bookingsFromServer(rows: ZoneBooking[] | undefined): StoredBookings {
       name: row.guest_name || '',
       menu: row.has_menu,
       advance: row.advance === null || row.advance === undefined ? '' : String(row.advance),
+      paid: row.fully_paid === true,
     };
   });
   return result;
@@ -195,7 +196,7 @@ function bookingSummary(slot: number, booking: StoredBooking): string {
     guests > 0 ? partyText(guests, typeof children === 'number' ? children : 0) : null,
     booking.name || null,
     booking.menu ? 'з меню' : 'без меню',
-    typeof advance === 'number' ? `аванс ${advance.toLocaleString('uk-UA')} ₴` : null,
+    booking.paid ? 'перерахунок, оплачено повністю' : typeof advance === 'number' ? `аванс ${advance.toLocaleString('uk-UA')} ₴` : null,
   ].filter(Boolean).join(' · ');
 }
 
@@ -456,9 +457,21 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
           </label>
         ) : null}
         {withAdvance ? (
+          <div className="duty-booking-menu-v3 is-wide" role="group" aria-label="Оплата банкету">
+            <span>Оплата</span>
+            <div>
+              <button type="button" aria-pressed={!booking.paid} className={!booking.paid ? 'is-on' : ''} onClick={() => setBooking(zoneKey, slot, { paid: false, advance: booking.advance || DEFAULT_ADVANCE })}>Аванс</button>
+              <button type="button" aria-pressed={booking.paid} className={booking.paid ? 'is-on' : ''} onClick={() => setBooking(zoneKey, slot, { paid: true })}>Перерахунок</button>
+            </div>
+          </div>
+        ) : null}
+        {withAdvance && !booking.paid ? (
           <label htmlFor={`${prefix}-advance`} className="is-wide"><span>Аванс, грн</span>
             <input id={`${prefix}-advance`} type="text" inputMode="decimal" placeholder="1000" value={booking.advance} onChange={(event) => setBooking(zoneKey, slot, { advance: event.target.value })} />
           </label>
+        ) : null}
+        {withAdvance && booking.paid ? (
+          <p className="duty-booking-paid-v3 is-wide">Рахунок оплачено повністю — аванс не потрібен.</p>
         ) : null}
         <div className="duty-booking-menu-v3 is-wide" role="group" aria-label="Передзамовлене меню">
           <span>Меню</span>
@@ -566,7 +579,8 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
           children: (() => { const value = parseChildren(booking.children); return typeof value === 'number' ? value : 0; })(),
           guest_name: rule.named ? booking.name.trim() || null : null,
           has_menu: booking.menu,
-          advance: rule.advance ? (() => { const value = parseAdvance(booking.advance); return typeof value === 'number' ? value : null; })() : null,
+          fully_paid: rule.advance ? booking.paid : false,
+          advance: rule.advance && !booking.paid ? (() => { const value = parseAdvance(booking.advance); return typeof value === 'number' ? value : null; })() : null,
         }];
       })
       : [];
@@ -596,7 +610,7 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
       if (parseChildren(booking.children) === 'invalid') {
         return `${zoneTitle}${slot > 0 ? `, кабінка ${slot}` : ''}: кількість дітей — ціле число, 0 якщо дітей немає.`;
       }
-      if (BOOKING_ZONES[zoneKey]?.advance && parseAdvance(booking.advance) === 'invalid') {
+      if (BOOKING_ZONES[zoneKey]?.advance && !booking.paid && parseAdvance(booking.advance) === 'invalid') {
         return `${zoneTitle}: аванс має бути сумою в гривнях, наприклад 1000.`;
       }
     }

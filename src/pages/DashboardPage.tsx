@@ -544,7 +544,7 @@ export function DashboardPage() {
                 key,
                 node: (
                   <FeedItem key={key} time={booking.booked_time.slice(0, 5)} past={clock.minutes >= at + 120} title={`${place} · ${booking.guests} ${booking.guests % 10 === 1 && booking.guests % 100 !== 11 ? 'дорослий' : 'дорослих'}${booking.children ? ` · ${booking.children} ${childWord(booking.children)}` : ''}`}>
-                    <small>{[booking.guest_name, booking.has_menu ? 'з меню' : 'без меню', typeof booking.advance === 'number' ? `аванс ${booking.advance.toLocaleString('uk-UA')} ₴` : null].filter(Boolean).join(' · ')}</small>
+                    <small>{[booking.guest_name, booking.has_menu ? 'з меню' : 'без меню', booking.fully_paid ? 'перерахунок, оплачено повністю' : typeof booking.advance === 'number' ? `аванс ${booking.advance.toLocaleString('uk-UA')} ₴` : null].filter(Boolean).join(' · ')}</small>
                   </FeedItem>
                 ),
               };
