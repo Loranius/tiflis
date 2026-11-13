@@ -85,11 +85,11 @@ const DAILY_ZONES = [
 /* Bookings the admin attaches to a zone in the daily plan: Кабінки carry one per
    booth (slots 1..5); the fireplace and lower halls carry one per hall
    (slot 0). Every booking carries the guest's name. Stored in ops_zone_bookings. */
-const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean }> = {
-  zone_booths: { slots: [1, 2, 3, 4, 5], named: true },
-  zone_fireplace_hall: { slots: [0], named: true },
-  zone_lower_hall_2: { slots: [0], named: true },
-  zone_lower_hall_3: { slots: [0], named: true },
+const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean; advance: boolean }> = {
+  zone_booths: { slots: [1, 2, 3, 4, 5], named: true, advance: false },
+  zone_fireplace_hall: { slots: [0], named: true, advance: true },
+  zone_lower_hall_2: { slots: [0], named: true, advance: true },
+  zone_lower_hall_3: { slots: [0], named: true, advance: true },
 };
 
 type PlanType = "daily" | "handover";
@@ -97,9 +97,13 @@ type ZoneBooking = {
   zone_key: string;
   slot: number;
   booked_time: string;
+  /** Adults. */
   guests: number;
+  /** Children; 0 means none. */
+  children: number;
   guest_name: string | null;
   has_menu: boolean;
+  advance: number | null;
 };
 type StaffProfile = {
   legacy_user_id: string | null;
@@ -195,23 +199,42 @@ function parseBookingTime(value: unknown): string | null {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : null;
 }
 
-function guestWord(count: number): string {
+function plural(count: number, one: string, few: string, many: string): string {
   const mod10 = count % 10;
   const mod100 = count % 100;
-  if (mod10 === 1 && mod100 !== 11) return "гість";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "гості";
-  return "гостей";
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
 }
 
-/** «Кабінка 2: 19:00, 6 гостей, Іван, з меню» / «Банкет: 18:30, 12 гостей, без меню». */
+/** «6 дорослих» / «6 дорослих, 2 дитини» — no children means none are mentioned. */
+function partyText(adults: number, children: number): string {
+  const grown = `${adults} ${plural(adults, "дорослий", "дорослих", "дорослих")}`;
+  return children > 0 ? `${grown}, ${children} ${plural(children, "дитина", "дитини", "дітей")}` : grown;
+}
+
+/** «Кабінка 2: 19:00, 6 дорослих, 2 дитини, Іван, з меню» / «Банкет: 18:30, 12 дорослих, Петренко, без меню, аванс 1000 ₴». */
 function bookingLine(booking: ZoneBooking): string {
   const label = booking.slot > 0 ? `Кабінка ${booking.slot}` : "Банкет";
   return [
     `${label}: ${booking.booked_time.slice(0, 5)}`,
-    `${booking.guests} ${guestWord(booking.guests)}`,
+    partyText(booking.guests, Number(booking.children || 0)),
     booking.guest_name || null,
     booking.has_menu ? "з меню" : "без меню",
+    booking.advance !== null && booking.advance !== undefined ? `аванс ${formatMoney(Number(booking.advance))} ₴` : null,
   ].filter(Boolean).join(", ");
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 2 }).format(value);
+}
+
+/** Banquet advance in hryvnias: 0..1 000 000, two decimals; an empty value means none. */
+function parseAdvance(value: unknown): number | null | "invalid" {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(typeof value === "string" ? value.replace(",", ".").replace(/\s/g, "") : value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1_000_000) return "invalid";
+  return Math.round(parsed * 100) / 100;
 }
 
 function parsePositiveId(value: unknown): number | null {
@@ -323,7 +346,7 @@ async function loadPlan(service: any, type: PlanType, date: string) {
       .maybeSingle(),
     type === "daily"
       ? service.from("ops_zone_bookings")
-        .select("zone_key,slot,booked_time,guests,guest_name,has_menu")
+        .select("zone_key,slot,booked_time,guests,children,guest_name,has_menu,advance")
         .eq("work_date", date)
         .order("zone_key")
         .order("slot")
@@ -368,6 +391,8 @@ async function loadPlan(service: any, type: PlanType, date: string) {
     bookings: ((bookingsResult.data ?? []) as ZoneBooking[]).map((item) => ({
       ...item,
       booked_time: String(item.booked_time).slice(0, 5),
+      children: Number(item.children || 0),
+      advance: item.advance === null || item.advance === undefined ? null : Number(item.advance),
     })),
   };
 }
@@ -556,8 +581,16 @@ Deno.serve(async (req: Request) => {
         const slot = Number(item.slot);
         const time = parseBookingTime(item.time);
         const guests = Number(item.guests);
+        const children = item.children === undefined || item.children === null || item.children === "" ? 0 : Number(item.children);
+        const advance = rule?.advance ? parseAdvance(item.advance) : null;
         if (!rule || !rule.slots.includes(slot) || !time || !Number.isInteger(guests) || guests < 1 || guests > 300 || seenBookings.has(`${zoneKey}:${slot}`)) {
           return json(req, { ok: false, error: "Перевір бронювання: час, кількість гостей і кабінку." }, 400);
+        }
+        if (!Number.isInteger(children) || children < 0 || children > 300) {
+          return json(req, { ok: false, error: "Перевір кількість дітей: 0, якщо дітей немає." }, 400);
+        }
+        if (advance === "invalid") {
+          return json(req, { ok: false, error: "Перевір аванс: це має бути сума в гривнях." }, 400);
         }
         if (!staffedZones.has(zoneKey)) continue;
         seenBookings.add(`${zoneKey}:${slot}`);
@@ -566,8 +599,10 @@ Deno.serve(async (req: Request) => {
           slot,
           booked_time: time,
           guests,
+          children,
           guest_name: rule.named ? cleanText(item.guest_name, 120) || null : null,
           has_menu: item.has_menu === true,
+          advance,
         });
       }
 

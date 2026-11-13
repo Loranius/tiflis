@@ -74,6 +74,14 @@ function BirthdayToday({ children, order, play, dayKey }: { children: ReactNode;
   );
 }
 
+function childWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'дитина';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'дитини';
+  return 'дітей';
+}
+
 /* ---------- data shapes (existing APIs, unchanged) ---------- */
 
 interface ScheduleStaff {
@@ -535,8 +543,8 @@ export function DashboardPage() {
                 at,
                 key,
                 node: (
-                  <FeedItem key={key} time={booking.booked_time.slice(0, 5)} past={clock.minutes >= at + 120} title={`${place} · ${booking.guests} ${guestWord(booking.guests)}`}>
-                    <small>{[booking.guest_name, booking.has_menu ? 'з меню' : 'без меню'].filter(Boolean).join(' · ')}</small>
+                  <FeedItem key={key} time={booking.booked_time.slice(0, 5)} past={clock.minutes >= at + 120} title={`${place} · ${booking.guests} ${booking.guests % 10 === 1 && booking.guests % 100 !== 11 ? 'дорослий' : 'дорослих'}${booking.children ? ` · ${booking.children} ${childWord(booking.children)}` : ''}`}>
+                    <small>{[booking.guest_name, booking.has_menu ? 'з меню' : 'без меню', typeof booking.advance === 'number' ? `аванс ${booking.advance.toLocaleString('uk-UA')} ₴` : null].filter(Boolean).join(' · ')}</small>
                   </FeedItem>
                 ),
               };

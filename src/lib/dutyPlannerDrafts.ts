@@ -5,9 +5,14 @@ export type StoredZoneSelections = Record<string, string[]>;
 /** Zone bookings as typed in the form, keyed `${zone_key}:${slot}`. */
 export interface StoredBooking {
   time: string;
+  /** Adults, as typed. */
   guests: string;
+  /** Children, as typed; '0' or empty means none. */
+  children: string;
   name: string;
   menu: boolean;
+  /** Banquet advance, ₴, as typed (halls only). */
+  advance: string;
 }
 export type StoredBookings = Record<string, StoredBooking>;
 
@@ -89,8 +94,10 @@ function normalizeBookings(value: unknown): StoredBookings {
     result[key] = {
       time: typeof booking.time === 'string' ? booking.time : '',
       guests: typeof booking.guests === 'string' ? booking.guests : '',
+      children: typeof booking.children === 'string' ? booking.children : '0',
       name: typeof booking.name === 'string' ? booking.name : '',
       menu: booking.menu === true,
+      advance: typeof booking.advance === 'string' ? booking.advance : '',
     };
   }
   return result;
