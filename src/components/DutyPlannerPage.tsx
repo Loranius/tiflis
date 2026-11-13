@@ -23,6 +23,7 @@ import {
   type DutyPlanResponse,
   type DutyPlanType,
   type WorkingWaiter,
+  type ZoneBooking,
 } from '../lib/dutyPlannerClient';
 import {
   clearDutyPlannerDraft,
@@ -30,6 +31,8 @@ import {
   readDutyPlannerDraft,
   rememberDutyPlannerDate,
   rememberDutyPlannerDraft,
+  type StoredBooking,
+  type StoredBookings,
 } from '../lib/dutyPlannerDrafts';
 import { addDays, formatDate, formatMoment, initials, localIso } from '../lib/operationsClient';
 import './duty-planner.css';
@@ -113,6 +116,58 @@ function compactTuesday(value: string): { day: string; date: string } {
   };
 }
 
+/* Zone bookings: Кабінки carry one per booth (slots 1..5, with a name), the
+   fireplace and lower halls one per hall (slot 0, no name). The other zones
+   have none. Mirrors BOOKING_ZONES in tiflis-duty-planner-api. */
+const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean }> = {
+  zone_booths: { slots: [1, 2, 3, 4, 5], named: true },
+  zone_fireplace_hall: { slots: [0], named: false },
+  zone_lower_hall_2: { slots: [0], named: false },
+  zone_lower_hall_3: { slots: [0], named: false },
+};
+const EMPTY_BOOKING: StoredBooking = { time: '', guests: '', name: '', menu: false };
+
+function bookingKey(zoneKey: string, slot: number): string {
+  return `${zoneKey}:${slot}`;
+}
+
+function bookingFilled(booking: StoredBooking | undefined): boolean {
+  return Boolean(booking && (booking.time || booking.guests || booking.name));
+}
+
+function bookingsFromServer(rows: ZoneBooking[] | undefined): StoredBookings {
+  const result: StoredBookings = {};
+  (rows || []).forEach((row) => {
+    result[bookingKey(row.zone_key, row.slot)] = {
+      time: row.booked_time.slice(0, 5),
+      guests: String(row.guests),
+      name: row.guest_name || '',
+      menu: row.has_menu,
+    };
+  });
+  return result;
+}
+
+function guestWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'гість';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'гості';
+  return 'гостей';
+}
+
+/** «Кабінка 2 · 19:00 · 6 гостей · Іван · з меню». */
+function bookingSummary(slot: number, booking: StoredBooking): string {
+  const guests = Number(booking.guests);
+  return [
+    slot > 0 ? `Кабінка ${slot}` : 'Банкет',
+    booking.time || null,
+    guests > 0 ? `${guests} ${guestWord(guests)}` : null,
+    booking.name || null,
+    booking.menu ? 'з меню' : 'без меню',
+  ].filter(Boolean).join(' · ');
+}
+
 function trimZoneValues(values: string[]): string[] {
   const next = [...values];
   while (next.length && !next[next.length - 1]) next.pop();
@@ -128,6 +183,8 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
   const [data, setData] = useState<DutyPlanResponse | null>(null);
   const [duties, setDuties] = useState<DutySelections>({});
   const [zones, setZones] = useState<ZoneSelections>({});
+  const [bookings, setBookings] = useState<StoredBookings>({});
+  const [openBooth, setOpenBooth] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -156,6 +213,7 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
       });
       setDuties(dutyMap);
       setZones(zoneMap);
+      setBookings(restored.bookings ?? bookingsFromServer(response.zoneBookings));
       setDirty(true);
       setNotice('Відновлено останні незбережені зміни.');
       return;
@@ -182,6 +240,7 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
     });
     setDuties(dutyMap);
     setZones(zoneMap);
+    setBookings(bookingsFromServer(response.zoneBookings));
     setDirty(false);
   }, [ownerId]);
 
@@ -210,8 +269,8 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
 
   useEffect(() => {
     if (!dirty || !data?.permissions.canManage) return;
-    rememberDutyPlannerDraft(ownerId, planType, date, { duties, zones });
-  }, [data?.permissions.canManage, date, dirty, duties, ownerId, planType, zones]);
+    rememberDutyPlannerDraft(ownerId, planType, date, { duties, zones, bookings });
+  }, [bookings, data?.permissions.canManage, date, dirty, duties, ownerId, planType, zones]);
 
   const workerMap = useMemo(
     () => new Map((data?.workingWaiters || []).map((worker) => [worker.id, worker])),
@@ -246,7 +305,7 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
       setCalendarOpen(false);
       return;
     }
-    if (dirty) rememberDutyPlannerDraft(ownerId, planType, date, { duties, zones });
+    if (dirty) rememberDutyPlannerDraft(ownerId, planType, date, { duties, zones, bookings });
     setDirty(false);
     setDate(normalized);
     setCalendarMonth(monthKey(normalized));
@@ -326,10 +385,108 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
     setNotice(null);
   }
 
+  function setBooking(zoneKey: string, slot: number, patch: Partial<StoredBooking>) {
+    setBookings((current) => {
+      const key = bookingKey(zoneKey, slot);
+      return { ...current, [key]: { ...EMPTY_BOOKING, ...current[key], ...patch } };
+    });
+    setDirty(true);
+    setNotice(null);
+  }
+
+  function clearBooking(zoneKey: string, slot: number) {
+    setBookings((current) => {
+      const next = { ...current };
+      delete next[bookingKey(zoneKey, slot)];
+      return next;
+    });
+    setDirty(true);
+    setNotice(null);
+  }
+
+  function renderBookingForm(zoneKey: string, slot: number, named: boolean) {
+    const booking = bookings[bookingKey(zoneKey, slot)] || EMPTY_BOOKING;
+    const prefix = `booking-${zoneKey}-${slot}`;
+    return (
+      <div className="duty-booking-form-v3">
+        <label htmlFor={`${prefix}-time`}><span>Час</span>
+          <input id={`${prefix}-time`} type="time" value={booking.time} onChange={(event) => setBooking(zoneKey, slot, { time: event.target.value })} />
+        </label>
+        <label htmlFor={`${prefix}-guests`}><span>Гостей</span>
+          <input id={`${prefix}-guests`} type="number" inputMode="numeric" min="1" max="300" placeholder="0" value={booking.guests} onChange={(event) => setBooking(zoneKey, slot, { guests: event.target.value })} />
+        </label>
+        {named ? (
+          <label htmlFor={`${prefix}-name`} className="is-wide"><span>Імʼя</span>
+            <input id={`${prefix}-name`} type="text" maxLength={120} placeholder="На чиє імʼя" value={booking.name} onChange={(event) => setBooking(zoneKey, slot, { name: event.target.value })} />
+          </label>
+        ) : null}
+        <div className="duty-booking-menu-v3 is-wide" role="group" aria-label="Передзамовлене меню">
+          <span>Меню</span>
+          <div>
+            <button type="button" aria-pressed={booking.menu} className={booking.menu ? 'is-on' : ''} onClick={() => setBooking(zoneKey, slot, { menu: true })}>Є меню</button>
+            <button type="button" aria-pressed={!booking.menu} className={!booking.menu ? 'is-on' : ''} onClick={() => setBooking(zoneKey, slot, { menu: false })}>Без меню</button>
+          </div>
+        </div>
+        {bookingFilled(booking) ? (
+          <button type="button" className="duty-booking-clear-v3 is-wide" onClick={() => clearBooking(zoneKey, slot)}><Trash2 size={15} /> Прибрати бронювання</button>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderZoneBookings(zoneKey: string, staffed: boolean) {
+    const rule = BOOKING_ZONES[zoneKey];
+    if (!rule || !staffed) return null;
+    if (!data?.permissions.canManage) {
+      const lines = rule.slots
+        .map((slot) => ({ slot, booking: bookings[bookingKey(zoneKey, slot)] }))
+        .filter((item): item is { slot: number; booking: StoredBooking } => bookingFilled(item.booking));
+      if (!lines.length) return null;
+      return <ul className="duty-booking-lines-v3">{lines.map(({ slot, booking }) => <li key={slot}>{bookingSummary(slot, booking)}</li>)}</ul>;
+    }
+    if (!rule.named) {
+      return (
+        <div className="duty-booking-v3">
+          <strong className="duty-booking-title-v3">Банкет</strong>
+          {renderBookingForm(zoneKey, 0, false)}
+        </div>
+      );
+    }
+    return (
+      <div className="duty-booking-v3">
+        <div className="duty-booking-tabs-v3" role="group" aria-label="Кабінки">
+          {rule.slots.map((slot) => {
+            const filled = bookingFilled(bookings[bookingKey(zoneKey, slot)]);
+            return (
+              <button
+                type="button"
+                key={slot}
+                aria-pressed={openBooth === slot}
+                className={`${openBooth === slot ? 'is-open' : ''}${filled ? ' is-filled' : ''}`}
+                onClick={() => setOpenBooth((current) => current === slot ? null : slot)}
+              >
+                Кабінка {slot}
+              </button>
+            );
+          })}
+        </div>
+        {openBooth ? renderBookingForm(zoneKey, openBooth, true) : null}
+        {rule.slots.some((slot) => bookingFilled(bookings[bookingKey(zoneKey, slot)])) ? (
+          <ul className="duty-booking-lines-v3">
+            {rule.slots.filter((slot) => bookingFilled(bookings[bookingKey(zoneKey, slot)])).map((slot) => (
+              <li key={slot}>{bookingSummary(slot, bookings[bookingKey(zoneKey, slot)]!)}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  }
+
   function clearPlan() {
     if (!window.confirm('Очистити всі призначення на вибрану дату?')) return;
     setDuties({});
     setZones(Object.fromEntries((data?.zones || []).map((zone) => [zone.key, []])));
+    setBookings({});
     setDirty(true);
     setNotice(null);
   }
@@ -352,8 +509,28 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
       }
     }
 
+    const staffed = new Set(Object.entries(zones).filter(([, values]) => values.some(Boolean)).map(([key]) => key));
+    const bookingRows = planType === 'daily'
+      ? Object.entries(bookings).flatMap(([key, booking]) => {
+        const [zoneKey = '', slotText = ''] = key.split(':');
+        const rule = BOOKING_ZONES[zoneKey];
+        const slot = Number(slotText);
+        const guests = Number(booking.guests);
+        if (!rule || !rule.slots.includes(slot) || !staffed.has(zoneKey) || !booking.time || !(guests > 0)) return [];
+        return [{
+          zone_key: zoneKey,
+          slot,
+          time: booking.time.slice(0, 5),
+          guests: Math.round(guests),
+          guest_name: rule.named ? booking.name.trim() || null : null,
+          has_menu: booking.menu,
+        }];
+      })
+      : [];
+
     return {
       assignments,
+      bookings: bookingRows,
       zones: planType === 'daily'
         ? Object.entries(zones).flatMap(([zoneKey, assignees]) => assignees
           .map((assigneeId, index) => ({ zone_key: zoneKey, slot: index + 1, assignee_id: assigneeId }))
@@ -362,8 +539,28 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
     };
   }
 
+  /** A started booking without a time or guest count would be dropped on save; say so instead. */
+  function incompleteBooking(): string | null {
+    for (const [key, booking] of Object.entries(bookings)) {
+      if (!bookingFilled(booking)) continue;
+      const [zoneKey = '', slotText = ''] = key.split(':');
+      if (!(zones[zoneKey] || []).some(Boolean)) continue;
+      if (!booking.time || !(Number(booking.guests) > 0)) {
+        const zoneTitle = data?.zones.find((zone) => zone.key === zoneKey)?.title || zoneKey;
+        const slot = Number(slotText);
+        return `${zoneTitle}${slot > 0 ? `, кабінка ${slot}` : ''}: вкажи час і кількість гостей або прибери бронювання.`;
+      }
+    }
+    return null;
+  }
+
   async function save() {
     if (!data?.permissions.canManage) return;
+    const incomplete = incompleteBooking();
+    if (incomplete) {
+      setError(incomplete);
+      return;
+    }
     setSaving(true);
     setError(null);
     setNotice(null);
@@ -398,6 +595,11 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
 
   async function saveAndPublish() {
     if (!data?.permissions.canManage || !hasPlan) return;
+    const incomplete = incompleteBooking();
+    if (incomplete) {
+      setError(incomplete);
+      return;
+    }
     setSaving(true);
     setPublishing(true);
     setError(null);
@@ -608,6 +810,7 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
                             return <span className={`duty-planner-person-v1 ${!worker ? 'is-stale' : ''}`} key={`${id}-${index}`}>{worker?.name || saved?.assignee_name || id}<small>{worker?.shift || saved?.assignee_shift || 'не в графіку'}</small></span>;
                           })}</div>
                         ) : <span className="duty-planner-free-zone-v1">Вільна зона</span>}
+                        {renderZoneBookings(zone.key, storedValues.some(Boolean))}
                       </article>
                     );
                   })}

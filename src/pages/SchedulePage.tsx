@@ -21,7 +21,13 @@ import { getKyivDateKey } from '../lib/time';
 import './schedule-v3.css';
 import { TabLine } from '../lib/motion';
 
-type ShiftCode = '' | 'Р' | 'Х' | 'О' | 'СН' | 'Б' | 'С' | 'Р/Б' | 'СН/Б' | 'Д';
+type ShiftCode = '' | 'Р' | 'Х' | 'О' | 'СН' | 'Б' | 'С' | 'Р/Б' | 'СН/Б' | 'С/Р' | 'С/Б' | 'Д';
+
+/* Bar and sommelier codes belong only to a waiter whose second role is the
+   bar (today: one person). Everyone else in the waiter palette gets Р · СН ·
+   Х · О. Old entries stay visible as they are. tiflis-secure-api enforces the
+   same rule on save. */
+const BAR_ONLY_CODES = new Set<ShiftCode>(['Б', 'С', 'Р/Б', 'СН/Б', 'С/Р', 'С/Б']);
 type Scope = 'team' | 'mine';
 type Half = 'first' | 'second';
 type ShiftTone = 'work' | 'off' | 'leave' | 'breakfast' | 'bar' | 'mixed' | 'neutral';
@@ -114,6 +120,15 @@ function staffRoles(staff: ScheduleStaff): string[] {
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] || role;
+}
+
+function canUseBarCodes(staff: ScheduleStaff): boolean {
+  return staffRoles(staff).includes('bar');
+}
+
+/** The codes this person can be given: bar-only codes are dropped for everyone without the bar role. */
+function definitionsFor(staff: ScheduleStaff, definitions: ShiftDefinition[]): ShiftDefinition[] {
+  return canUseBarCodes(staff) ? definitions : definitions.filter((item) => !BAR_ONLY_CODES.has(item.code));
 }
 
 function isWorkingShift(code: ShiftCode | null | undefined): boolean {
@@ -340,6 +355,10 @@ export function SchedulePage() {
   function onCell(staff: ScheduleStaff, date: string) {
     if (!canEditStaff(staff)) return;
     if (brush !== null && canEditAll) {
+      if (BAR_ONLY_CODES.has(brush) && !canUseBarCodes(staff)) {
+        setError(`Позначка «${brush}» — лише для офіціанта з роллю бармена.`);
+        return;
+      }
       void applyShift(staff, date, brush);
       return;
     }
@@ -540,7 +559,7 @@ export function SchedulePage() {
       {picker ? (
         <ShiftPicker
           picker={picker}
-          definitions={shiftDefinitions}
+          definitions={definitionsFor(picker.staff, shiftDefinitions)}
           onPick={(code) => {
             const current = picker;
             setPicker(null);

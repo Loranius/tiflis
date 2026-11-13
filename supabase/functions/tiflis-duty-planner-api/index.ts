@@ -20,7 +20,7 @@ const ACTIONS = new Set([
 ]);
 const ADMIN_ROLES = new Set(["admin", "sysadmin"]);
 const PLAN_TYPES = new Set(["daily", "handover"]);
-const OFF_WAITER_SHIFTS = new Set(["Х", "О", "С"]);
+const OFF_WAITER_SHIFTS = new Set(["Х", "О", "С", "С/Б"]);
 const DAILY_SETS_VISIBLE_KEY = "daily_sets";
 const DAILY_SETS_ALL_KEY = "daily_sets_all";
 const DAILY_SETS_HALL_KEY = "daily_sets_hall";
@@ -82,7 +82,25 @@ const DAILY_ZONES = [
   { key: "zone_summer_terrace", title: "Літня тераса" },
 ] as const;
 
+/* Bookings the admin attaches to a zone in the daily plan: Кабінки carry one per
+   booth (slots 1..5, with the guest's name); the fireplace and lower halls carry
+   one per hall (slot 0, no name). Stored in ops_zone_bookings. */
+const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean }> = {
+  zone_booths: { slots: [1, 2, 3, 4, 5], named: true },
+  zone_fireplace_hall: { slots: [0], named: false },
+  zone_lower_hall_2: { slots: [0], named: false },
+  zone_lower_hall_3: { slots: [0], named: false },
+};
+
 type PlanType = "daily" | "handover";
+type ZoneBooking = {
+  zone_key: string;
+  slot: number;
+  booked_time: string;
+  guests: number;
+  guest_name: string | null;
+  has_menu: boolean;
+};
 type StaffProfile = {
   legacy_user_id: string | null;
   role: string;
@@ -172,6 +190,30 @@ function parsePlanType(value: unknown): PlanType | null {
   return PLAN_TYPES.has(type) ? type as PlanType : null;
 }
 
+function parseBookingTime(value: unknown): string | null {
+  const text = cleanText(value, 8);
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : null;
+}
+
+function guestWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return "гість";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "гості";
+  return "гостей";
+}
+
+/** «Кабінка 2: 19:00, 6 гостей, Іван, з меню» / «Банкет: 18:30, 12 гостей, без меню». */
+function bookingLine(booking: ZoneBooking): string {
+  const label = booking.slot > 0 ? `Кабінка ${booking.slot}` : "Банкет";
+  return [
+    `${label}: ${booking.booked_time.slice(0, 5)}`,
+    `${booking.guests} ${guestWord(booking.guests)}`,
+    booking.guest_name || null,
+    booking.has_menu ? "з меню" : "без меню",
+  ].filter(Boolean).join(", ");
+}
+
 function parsePositiveId(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
@@ -258,7 +300,7 @@ async function writeAudit(
 }
 
 async function loadPlan(service: any, type: PlanType, date: string) {
-  const [usersResult, scheduleResult, dutiesResult, zonesResult, publicationResult] = await Promise.all([
+  const [usersResult, scheduleResult, dutiesResult, zonesResult, publicationResult, bookingsResult] = await Promise.all([
     service.from("users")
       .select("id,login,display_name,role,role2,avatar,tg_id,chat_id,fired")
       .or("fired.is.null,fired.eq.false"),
@@ -279,9 +321,17 @@ async function loadPlan(service: any, type: PlanType, date: string) {
       .eq("plan_type", type)
       .eq("work_date", date)
       .maybeSingle(),
+    type === "daily"
+      ? service.from("ops_zone_bookings")
+        .select("zone_key,slot,booked_time,guests,guest_name,has_menu")
+        .eq("work_date", date)
+        .order("zone_key")
+        .order("slot")
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (usersResult.error) throw usersResult.error;
+  if (bookingsResult.error) throw bookingsResult.error;
   if (scheduleResult.error) throw scheduleResult.error;
   if (dutiesResult.error) throw dutiesResult.error;
   if (zonesResult.error) throw zonesResult.error;
@@ -315,6 +365,10 @@ async function loadPlan(service: any, type: PlanType, date: string) {
       ...enrichAssignee(item.assignee_id),
     })),
     publication: publicationResult.data || null,
+    bookings: ((bookingsResult.data ?? []) as ZoneBooking[]).map((item) => ({
+      ...item,
+      booked_time: String(item.booked_time).slice(0, 5),
+    })),
   };
 }
 
@@ -406,6 +460,7 @@ Deno.serve(async (req: Request) => {
         workingWaiters: plan.waiters,
         assignments: plan.assignments,
         zoneAssignments: plan.zones,
+        zoneBookings: plan.bookings,
         publication: plan.publication,
         me: {
           id: actor.id,
@@ -488,6 +543,34 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // Bookings only travel with a zone that has a waiter in this plan.
+      const staffedZones = new Set(zones.map((item) => item.zone_key));
+      const rawBookings = type === "daily" && Array.isArray(body.bookings) ? body.bookings : [];
+      const bookings: ZoneBooking[] = [];
+      const seenBookings = new Set<string>();
+      for (const raw of rawBookings) {
+        if (!raw || typeof raw !== "object") continue;
+        const item = raw as Record<string, unknown>;
+        const zoneKey = cleanText(item.zone_key, 80);
+        const rule = BOOKING_ZONES[zoneKey];
+        const slot = Number(item.slot);
+        const time = parseBookingTime(item.time);
+        const guests = Number(item.guests);
+        if (!rule || !rule.slots.includes(slot) || !time || !Number.isInteger(guests) || guests < 1 || guests > 300 || seenBookings.has(`${zoneKey}:${slot}`)) {
+          return json(req, { ok: false, error: "Перевір бронювання: час, кількість гостей і кабінку." }, 400);
+        }
+        if (!staffedZones.has(zoneKey)) continue;
+        seenBookings.add(`${zoneKey}:${slot}`);
+        bookings.push({
+          zone_key: zoneKey,
+          slot,
+          booked_time: time,
+          guests,
+          guest_name: rule.named ? cleanText(item.guest_name, 120) || null : null,
+          has_menu: item.has_menu === true,
+        });
+      }
+
       const { data, error } = await service.rpc("replace_ops_duty_plan", {
         p_plan_type: type,
         p_work_date: date,
@@ -496,11 +579,22 @@ Deno.serve(async (req: Request) => {
         p_actor: actor.display_name || actor.login,
       });
       if (error) throw error;
+      if (type === "daily") {
+        const { error: clearError } = await service.from("ops_zone_bookings").delete().eq("work_date", date);
+        if (clearError) throw clearError;
+        if (bookings.length) {
+          const author = actor.display_name || actor.login;
+          const { error: bookingsError } = await service.from("ops_zone_bookings").insert(
+            bookings.map((booking) => ({ ...booking, work_date: date, updated_by: author })),
+          );
+          if (bookingsError) throw bookingsError;
+        }
+      }
       await writeAudit(
         service,
         actor,
         "duty_plan_saved",
-        `${type === "daily" ? "Щоденні обов’язки" : "Здачу зміни"} збережено: ${assignments.length} обов’язків, ${zones.length} призначень зон.`,
+        `${type === "daily" ? "Щоденні обов’язки" : "Здачу зміни"} збережено: ${assignments.length} обов’язків, ${zones.length} призначень зон, ${bookings.length} бронювань.`,
         `${type}:${date}`,
       );
       return json(req, { ok: true, result: data?.[0] || { duty_count: assignments.length, zone_count: zones.length } });
@@ -516,9 +610,9 @@ Deno.serve(async (req: Request) => {
       const workingIds = new Set(plan.waiters.map((waiter) => waiter.id));
       const dutyMap = new Map<string, string>(dutyDefinitions(type).map((item) => [item.key, item.title]));
       const zoneMap = new Map<string, string>(DAILY_ZONES.map((item) => [item.key, item.title]));
-      const byUser = new Map<string, { duties: string[]; zones: string[] }>();
+      const byUser = new Map<string, { duties: string[]; zones: string[]; zoneKeys: string[] }>();
       const ensure = (id: string) => {
-        const current = byUser.get(id) || { duties: [], zones: [] };
+        const current = byUser.get(id) || { duties: [], zones: [], zoneKeys: [] };
         byUser.set(id, current);
         return current;
       };
@@ -532,7 +626,11 @@ Deno.serve(async (req: Request) => {
         for (const zone of plan.zones) {
           if (!workingIds.has(zone.assignee_id)) continue;
           const title = zoneMap.get(zone.zone_key);
-          if (title) ensure(zone.assignee_id).zones.push(title);
+          if (title) {
+            const personal = ensure(zone.assignee_id);
+            personal.zones.push(title);
+            personal.zoneKeys.push(zone.zone_key);
+          }
         }
       }
 
@@ -560,7 +658,12 @@ Deno.serve(async (req: Request) => {
         }
         if (type === "daily" && personal.zones.length) {
           lines.push("\n📍 <b>Твоя зона роботи:</b>");
-          personal.zones.forEach((title) => lines.push(`• ${escapeHtml(title)}`));
+          personal.zones.forEach((title, index) => {
+            lines.push(`• ${escapeHtml(title)}`);
+            plan.bookings
+              .filter((booking) => booking.zone_key === personal.zoneKeys[index])
+              .forEach((booking) => lines.push(`   ▫️ ${escapeHtml(bookingLine(booking))}`));
+          });
         }
         lines.push(`\n— ${escapeHtml(actor.display_name || actor.login)}`);
 

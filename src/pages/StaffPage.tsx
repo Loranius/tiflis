@@ -121,7 +121,7 @@ function birthdayLabel(value: string | null): string | null {
 
 /** What a schedule code means for a colleague; codes the reader would not know stay out of the profile. */
 /** Labels as the schedule API names the codes (tiflis-secure-api WAITER_SHIFT_TYPES). */
-const SHIFT_NAMES: Record<string, string> = { 'Р': 'робоча', 'СН': 'сніданки', 'Б': 'бар', 'Р/Б': 'робоча + бар', 'СН/Б': 'сніданки + бар' };
+const SHIFT_NAMES: Record<string, string> = { 'Р': 'робоча', 'СН': 'сніданки', 'Б': 'бар', 'С': 'сомельє', 'Р/Б': 'робоча + бар', 'СН/Б': 'сніданки + бар', 'С/Р': 'сомельє + робоча', 'С/Б': 'сомельє + бар' };
 
 function shiftLabel(value: StaffShift | null): string | null {
   if (!value) return null;

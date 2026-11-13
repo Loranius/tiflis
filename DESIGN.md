@@ -807,6 +807,12 @@ The paper schedule kept as a people × days table inside a 20px charcoal card wi
 ### Day List
 The «Мій графік» view: a 20px card of hairline-separated rows (8px 14px padding) with the day number (16px/700) over the weekday (11.5px, text-3), the shift label (15px), and a code chip on the right. Today's row is washed in gold haze with a gold day number and a «Сьогодні ·» prefix. Rows step to brand charcoal on hover.
 
+### Bar-Only Shift Codes
+Waiters get Р · СН · Х · О. The bar and sommelier codes (Б, С «Сомельє», Р/Б, СН/Б, С/Р «Сомельє + робоча», С/Б «Сомельє + бар») belong only to a waiter whose second role is the bar: the shift picker offers them only on that person's row, the brush refuses them on anyone else with a plain sentence, and `tiflis-secure-api` rejects them on save. Old entries stay visible as they are.
+
+### Zone Bookings (Обов'язки)
+Under a staffed zone the admin can attach bookings. Кабінки shows five 44px tabs «Кабінка 1» … «Кабінка 5» (three per row at 420px and narrower); a filled tab carries a 6px gold dot and gold text, the open one the gold wash. The form: «Час» and «Гостей» side by side, «Імʼя» full width (booths only), the «Є меню» / «Без меню» pair and «Прибрати бронювання» in the danger tone; filled bookings are summarised under the tabs as one-line chips («Кабінка 2 · 19:00 · 6 гостей · Іван · з меню»). Камінний зал and Нижній зал №2/№3 show the same form once, titled «Банкет», without the name. Загальний зал and Літня тераса have none. A started booking without time or guests blocks the save with a sentence naming the zone. Published bookings reach the zone's waiter in the Telegram message under the zone and on Home as day-feed events at their time.
+
 ### Brush Palette
 The admin paint tool. A floating bar on raised charcoal with a strong hairline and 14px radius, holding every code at once in a five-column grid of 40px chips on brand charcoal (tinted for leave, breakfasts and bar), with nothing hidden behind scrolling. The selected code takes a 2px gold outline. A gold «Готово» button (10px radius, 700) closes it; it is the view's gold action while the brush is open.
 
