@@ -47,6 +47,16 @@ export interface ZoneAssignment {
   assignee_working: boolean;
 }
 
+/** A booking attached to a zone: booths 1..5 (slot), halls slot 0. */
+export interface ZoneBooking {
+  zone_key: string;
+  slot: number;
+  booked_time: string;
+  guests: number;
+  guest_name: string | null;
+  has_menu: boolean;
+}
+
 export interface DutyPublication {
   plan_type: DutyPlanType;
   work_date: string;
@@ -65,6 +75,7 @@ export interface DutyPlanResponse {
   workingWaiters: WorkingWaiter[];
   assignments: DutyAssignment[];
   zoneAssignments: ZoneAssignment[];
+  zoneBookings?: ZoneBooking[];
   publication: DutyPublication | null;
   me: {
     id: string;
@@ -77,6 +88,7 @@ export interface DutyPlanResponse {
 export interface DutyPlanDraft {
   assignments: { duty_key: string; assignee_id: string }[];
   zones: { zone_key: string; slot: number; assignee_id: string }[];
+  bookings?: { zone_key: string; slot: number; time: string; guests: number; guest_name: string | null; has_menu: boolean }[];
 }
 
 export function loadDutyPlan(planType: DutyPlanType, date: string): Promise<DutyPlanResponse> {
@@ -98,6 +110,7 @@ export function saveDutyPlan(
     date,
     assignments: draft.assignments,
     zones: draft.zones,
+    bookings: draft.bookings ?? [],
   }, 'tiflis-duty-planner-api');
 }
 

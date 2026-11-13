@@ -363,6 +363,13 @@ export function DashboardPage() {
       .filter((item) => item.assignee_id === daily.me.id)
       .map((item) => daily.zones.find((zone) => zone.key === item.zone_key)?.title || item.zone_key)
     : [];
+  // Bookings the admin attached to my zones (Кабінки 1–5, банкети в залах).
+  const myZoneKeys = new Set(daily?.publication
+    ? daily.zoneAssignments.filter((item) => item.assignee_id === daily.me.id).map((item) => item.zone_key)
+    : []);
+  const zoneBookings = daily?.publication
+    ? (daily.zoneBookings || []).filter((booking) => myZoneKeys.has(booking.zone_key))
+    : [];
   const tomorrowTasks = tomorrowPlan?.publication ? tomorrowPlan.assignments.filter((item) => item.assignee_id === tomorrowPlan.me.id) : [];
   const tomorrowZones = tomorrowPlan?.publication
     ? tomorrowPlan.zoneAssignments.filter((item) => item.assignee_id === tomorrowPlan.me.id)
@@ -516,6 +523,20 @@ export function DashboardPage() {
                   <FeedItem key={`r-${item.id}`} time={item.time.slice(0, 5)} past={clock.minutes >= at + item.durationMinutes} title={`${tables.length > 1 ? 'Столи' : 'Стіл'} ${tables.join(' + ')} · ${item.guests} ${guestWord(item.guests)}`}>
                     {item.note || item.menuNote ? <small>{[item.note, item.menuNote].filter(Boolean).join(' · ')}</small> : null}
                     {item.status === 'occupied' ? <span className="hv3-tag">гості вже за столом</span> : null}
+                  </FeedItem>
+                ),
+              };
+            }),
+            ...zoneBookings.map((booking) => {
+              const at = timeToMinutes(booking.booked_time);
+              const place = booking.slot > 0 ? `Кабінка ${booking.slot}` : daily?.zones.find((zone) => zone.key === booking.zone_key)?.title || 'Банкет';
+              const key = `b-${booking.zone_key}-${booking.slot}`;
+              return {
+                at,
+                key,
+                node: (
+                  <FeedItem key={key} time={booking.booked_time.slice(0, 5)} past={clock.minutes >= at + 120} title={`${place} · ${booking.guests} ${guestWord(booking.guests)}`}>
+                    <small>{[booking.guest_name, booking.has_menu ? 'з меню' : 'без меню'].filter(Boolean).join(' · ')}</small>
                   </FeedItem>
                 ),
               };

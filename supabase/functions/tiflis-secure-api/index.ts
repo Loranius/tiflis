@@ -11,7 +11,9 @@ const TELEGRAM_ACTIONS = new Set(["send_personal", "broadcast"]);
 const SCHEDULE_ACTIONS = new Set(["schedule_bootstrap", "schedule_upsert"]);
 const CASH_ACTIONS = new Set(["cash_bootstrap", "cash_save_day", "cash_delete_day", "rating_update"]);
 const RECORDS_ACTIONS = new Set(["records_bootstrap", "records_leaderboard_get", "records_save_manual", "records_delete_manual"]);
-const ALLOWED_SHIFT_CODES = new Set(["", "Р", "Х", "О", "СН", "Б", "С", "Р/Б", "СН/Б", "Д"]);
+const ALLOWED_SHIFT_CODES = new Set(["", "Р", "Х", "О", "СН", "Б", "С", "Р/Б", "СН/Б", "С/Р", "С/Б", "Д"]);
+// Bar and sommelier codes: only for a waiter whose second role is the bar.
+const BAR_ONLY_SHIFT_CODES = new Set(["Б", "С", "Р/Б", "СН/Б", "С/Р", "С/Б"]);
 const OWN_SCHEDULE_ROLES = new Set(["waiter", "bar", "barman", "bartender", "cook", "chef", "hostess"]);
 const CASH_ROLES = new Set(["waiter", "bar", "barman", "bartender"]);
 const RATING_ROLES = new Set(["waiter", "bar", "barman", "bartender", "hostess"]);
@@ -27,9 +29,11 @@ const WAITER_SHIFT_TYPES = [
   { code: "О", label: "Відпустка", tone: "leave" },
   { code: "СН", label: "Сніданки", tone: "breakfast" },
   { code: "Б", label: "Бар", tone: "bar" },
-  { code: "С", label: "Позначка С", tone: "neutral" },
+  { code: "С", label: "Сомельє", tone: "neutral" },
   { code: "Р/Б", label: "Робоча + бар", tone: "mixed" },
   { code: "СН/Б", label: "Сніданки + бар", tone: "mixed" },
+  { code: "С/Р", label: "Сомельє + робоча", tone: "mixed" },
+  { code: "С/Б", label: "Сомельє + бар", tone: "mixed" },
 ];
 const DEFAULT_SHIFT_TYPES = [
   { code: "", label: "Не призначено", tone: "neutral" },
@@ -514,8 +518,11 @@ Deno.serve(async (req: Request) => {
       const ownRow = targetUserId === profile.legacy_user_id;
       if (!isAdmin(profile) && !(ownRow && canEditOwnSchedule(profile))) return json(req, { ok: false, error: "Insufficient permissions" }, 403);
 
-      const { data: target, error: targetError } = await serviceClient.from("users").select("id,fired").eq("id", targetUserId).single();
+      const { data: target, error: targetError } = await serviceClient.from("users").select("id,role,role2,fired").eq("id", targetUserId).single();
       if (targetError || !target || target.fired === true) return json(req, { ok: false, error: "Staff member not found" }, 404);
+      if (BAR_ONLY_SHIFT_CODES.has(shift) && !staffRoles(target as LegacyStaff).includes("bar")) {
+        return json(req, { ok: false, error: "Ця позначка лише для офіціанта з роллю бармена" }, 400);
+      }
 
       if (!shift) {
         const { error } = await serviceClient.from("schedule").delete().eq("user_id", targetUserId).eq("date", date);

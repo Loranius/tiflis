@@ -2,10 +2,19 @@ import type { DutyPlanType } from './dutyPlannerClient';
 
 export type StoredDutySelections = Record<string, string>;
 export type StoredZoneSelections = Record<string, string[]>;
+/** Zone bookings as typed in the form, keyed `${zone_key}:${slot}`. */
+export interface StoredBooking {
+  time: string;
+  guests: string;
+  name: string;
+  menu: boolean;
+}
+export type StoredBookings = Record<string, StoredBooking>;
 
 export interface DutyPlannerDraftSnapshot {
   duties: StoredDutySelections;
   zones: StoredZoneSelections;
+  bookings?: StoredBookings;
 }
 
 interface StoredDraft extends DutyPlannerDraftSnapshot {
@@ -72,6 +81,21 @@ function normalizeZones(value: unknown): StoredZoneSelections | null {
   return result;
 }
 
+function normalizeBookings(value: unknown): StoredBookings {
+  if (!isObject(value)) return {};
+  const result: StoredBookings = {};
+  for (const [key, booking] of Object.entries(value)) {
+    if (!isObject(booking)) continue;
+    result[key] = {
+      time: typeof booking.time === 'string' ? booking.time : '',
+      guests: typeof booking.guests === 'string' ? booking.guests : '',
+      name: typeof booking.name === 'string' ? booking.name : '',
+      menu: booking.menu === true,
+    };
+  }
+  return result;
+}
+
 export function readDutyPlannerDate(
   ownerId: string,
   planType: DutyPlanType,
@@ -114,7 +138,7 @@ export function readDutyPlannerDraft(
       removeValue(key);
       return null;
     }
-    return { duties, zones };
+    return { duties, zones, bookings: normalizeBookings(parsed.bookings) };
   } catch {
     removeValue(key);
     return null;
@@ -130,6 +154,7 @@ export function rememberDutyPlannerDraft(
   const stored: StoredDraft = {
     duties: snapshot.duties,
     zones: snapshot.zones,
+    bookings: snapshot.bookings ?? {},
     updatedAt: Date.now(),
   };
   writeValue(storageKey(ownerId, planType, `draft:${date}`), JSON.stringify(stored));
