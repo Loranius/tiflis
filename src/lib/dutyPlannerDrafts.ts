@@ -8,6 +8,8 @@ export interface StoredBooking {
   guests: string;
   name: string;
   menu: boolean;
+  /** Banquet advance, ₴, as typed (halls only). */
+  advance: string;
 }
 export type StoredBookings = Record<string, StoredBooking>;
 
@@ -91,6 +93,7 @@ function normalizeBookings(value: unknown): StoredBookings {
       guests: typeof booking.guests === 'string' ? booking.guests : '',
       name: typeof booking.name === 'string' ? booking.name : '',
       menu: booking.menu === true,
+      advance: typeof booking.advance === 'string' ? booking.advance : '',
     };
   }
   return result;

@@ -55,6 +55,7 @@ export interface ZoneBooking {
   guests: number;
   guest_name: string | null;
   has_menu: boolean;
+  advance?: number | null;
 }
 
 export interface DutyPublication {
@@ -88,7 +89,7 @@ export interface DutyPlanResponse {
 export interface DutyPlanDraft {
   assignments: { duty_key: string; assignee_id: string }[];
   zones: { zone_key: string; slot: number; assignee_id: string }[];
-  bookings?: { zone_key: string; slot: number; time: string; guests: number; guest_name: string | null; has_menu: boolean }[];
+  bookings?: { zone_key: string; slot: number; time: string; guests: number; guest_name: string | null; has_menu: boolean; advance: number | null }[];
 }
 
 export function loadDutyPlan(planType: DutyPlanType, date: string): Promise<DutyPlanResponse> {

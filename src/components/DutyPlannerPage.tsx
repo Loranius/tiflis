@@ -119,13 +119,26 @@ function compactTuesday(value: string): { day: string; date: string } {
 /* Zone bookings: Кабінки carry one per booth (slots 1..5), the fireplace and
    lower halls one per hall (slot 0); every booking has a name. The other zones
    have none. Mirrors BOOKING_ZONES in tiflis-duty-planner-api. */
-const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean }> = {
-  zone_booths: { slots: [1, 2, 3, 4, 5], named: true },
-  zone_fireplace_hall: { slots: [0], named: true },
-  zone_lower_hall_2: { slots: [0], named: true },
-  zone_lower_hall_3: { slots: [0], named: true },
+const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean; advance: boolean }> = {
+  zone_booths: { slots: [1, 2, 3, 4, 5], named: true, advance: false },
+  zone_fireplace_hall: { slots: [0], named: true, advance: true },
+  zone_lower_hall_2: { slots: [0], named: true, advance: true },
+  zone_lower_hall_3: { slots: [0], named: true, advance: true },
 };
-const EMPTY_BOOKING: StoredBooking = { time: '', guests: '', name: '', menu: false };
+/** A banquet's advance starts at 1000 ₴; the admin changes it when it differs. */
+const DEFAULT_ADVANCE = '1000';
+const EMPTY_BOOKING: StoredBooking = { time: '', guests: '', name: '', menu: false, advance: '' };
+
+function emptyBooking(zoneKey: string): StoredBooking {
+  return { ...EMPTY_BOOKING, advance: BOOKING_ZONES[zoneKey]?.advance ? DEFAULT_ADVANCE : '' };
+}
+
+function parseAdvance(value: string): number | null | 'invalid' {
+  const text = value.replace(',', '.').replace(/\s/g, '');
+  if (!text) return null;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1_000_000 ? Math.round(parsed * 100) / 100 : 'invalid';
+}
 
 function bookingKey(zoneKey: string, slot: number): string {
   return `${zoneKey}:${slot}`;
@@ -143,6 +156,7 @@ function bookingsFromServer(rows: ZoneBooking[] | undefined): StoredBookings {
       guests: String(row.guests),
       name: row.guest_name || '',
       menu: row.has_menu,
+      advance: row.advance === null || row.advance === undefined ? '' : String(row.advance),
     };
   });
   return result;
@@ -156,15 +170,17 @@ function guestWord(count: number): string {
   return 'гостей';
 }
 
-/** «Кабінка 2 · 19:00 · 6 гостей · Іван · з меню». */
+/** «Кабінка 2 · 19:00 · 6 гостей · Іван · з меню» (+ «аванс 1000 ₴» for a banquet). */
 function bookingSummary(slot: number, booking: StoredBooking): string {
   const guests = Number(booking.guests);
+  const advance = parseAdvance(booking.advance);
   return [
     slot > 0 ? `Кабінка ${slot}` : 'Банкет',
     booking.time || null,
     guests > 0 ? `${guests} ${guestWord(guests)}` : null,
     booking.name || null,
     booking.menu ? 'з меню' : 'без меню',
+    typeof advance === 'number' ? `аванс ${advance.toLocaleString('uk-UA')} ₴` : null,
   ].filter(Boolean).join(' · ');
 }
 
@@ -388,7 +404,7 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
   function setBooking(zoneKey: string, slot: number, patch: Partial<StoredBooking>) {
     setBookings((current) => {
       const key = bookingKey(zoneKey, slot);
-      return { ...current, [key]: { ...EMPTY_BOOKING, ...current[key], ...patch } };
+      return { ...current, [key]: { ...emptyBooking(zoneKey), ...current[key], ...patch } };
     });
     setDirty(true);
     setNotice(null);
@@ -405,7 +421,8 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
   }
 
   function renderBookingForm(zoneKey: string, slot: number, named: boolean) {
-    const booking = bookings[bookingKey(zoneKey, slot)] || EMPTY_BOOKING;
+    const booking = bookings[bookingKey(zoneKey, slot)] || emptyBooking(zoneKey);
+    const withAdvance = Boolean(BOOKING_ZONES[zoneKey]?.advance);
     const prefix = `booking-${zoneKey}-${slot}`;
     return (
       <div className="duty-booking-form-v3">
@@ -418,6 +435,11 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
         {named ? (
           <label htmlFor={`${prefix}-name`} className="is-wide"><span>Імʼя</span>
             <input id={`${prefix}-name`} type="text" maxLength={120} placeholder="На чиє імʼя" value={booking.name} onChange={(event) => setBooking(zoneKey, slot, { name: event.target.value })} />
+          </label>
+        ) : null}
+        {withAdvance ? (
+          <label htmlFor={`${prefix}-advance`} className="is-wide"><span>Аванс, грн</span>
+            <input id={`${prefix}-advance`} type="text" inputMode="decimal" placeholder="1000" value={booking.advance} onChange={(event) => setBooking(zoneKey, slot, { advance: event.target.value })} />
           </label>
         ) : null}
         <div className="duty-booking-menu-v3 is-wide" role="group" aria-label="Передзамовлене меню">
@@ -525,6 +547,7 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
           guests: Math.round(guests),
           guest_name: rule.named ? booking.name.trim() || null : null,
           has_menu: booking.menu,
+          advance: rule.advance ? (() => { const value = parseAdvance(booking.advance); return typeof value === 'number' ? value : null; })() : null,
         }];
       })
       : [];
@@ -546,10 +569,13 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
       if (!bookingFilled(booking)) continue;
       const [zoneKey = '', slotText = ''] = key.split(':');
       if (!(zones[zoneKey] || []).some(Boolean)) continue;
+      const zoneTitle = data?.zones.find((zone) => zone.key === zoneKey)?.title || zoneKey;
+      const slot = Number(slotText);
       if (!booking.time || !(Number(booking.guests) > 0)) {
-        const zoneTitle = data?.zones.find((zone) => zone.key === zoneKey)?.title || zoneKey;
-        const slot = Number(slotText);
         return `${zoneTitle}${slot > 0 ? `, кабінка ${slot}` : ''}: вкажи час і кількість гостей або прибери бронювання.`;
+      }
+      if (BOOKING_ZONES[zoneKey]?.advance && parseAdvance(booking.advance) === 'invalid') {
+        return `${zoneTitle}: аванс має бути сумою в гривнях, наприклад 1000.`;
       }
     }
     return null;

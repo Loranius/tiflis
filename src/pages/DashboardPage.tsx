@@ -536,7 +536,7 @@ export function DashboardPage() {
                 key,
                 node: (
                   <FeedItem key={key} time={booking.booked_time.slice(0, 5)} past={clock.minutes >= at + 120} title={`${place} · ${booking.guests} ${guestWord(booking.guests)}`}>
-                    <small>{[booking.guest_name, booking.has_menu ? 'з меню' : 'без меню'].filter(Boolean).join(' · ')}</small>
+                    <small>{[booking.guest_name, booking.has_menu ? 'з меню' : 'без меню', typeof booking.advance === 'number' ? `аванс ${booking.advance.toLocaleString('uk-UA')} ₴` : null].filter(Boolean).join(' · ')}</small>
                   </FeedItem>
                 ),
               };
