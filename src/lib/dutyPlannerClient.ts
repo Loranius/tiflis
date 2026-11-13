@@ -52,7 +52,10 @@ export interface ZoneBooking {
   zone_key: string;
   slot: number;
   booked_time: string;
+  /** Adults. */
   guests: number;
+  /** Children; 0 means none. */
+  children?: number;
   guest_name: string | null;
   has_menu: boolean;
   advance?: number | null;
@@ -89,7 +92,7 @@ export interface DutyPlanResponse {
 export interface DutyPlanDraft {
   assignments: { duty_key: string; assignee_id: string }[];
   zones: { zone_key: string; slot: number; assignee_id: string }[];
-  bookings?: { zone_key: string; slot: number; time: string; guests: number; guest_name: string | null; has_menu: boolean; advance: number | null }[];
+  bookings?: { zone_key: string; slot: number; time: string; guests: number; children: number; guest_name: string | null; has_menu: boolean; advance: number | null }[];
 }
 
 export function loadDutyPlan(planType: DutyPlanType, date: string): Promise<DutyPlanResponse> {

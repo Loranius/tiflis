@@ -127,7 +127,7 @@ const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean; advance: 
 };
 /** A banquet's advance starts at 1000 ₴; the admin changes it when it differs. */
 const DEFAULT_ADVANCE = '1000';
-const EMPTY_BOOKING: StoredBooking = { time: '', guests: '', name: '', menu: false, advance: '' };
+const EMPTY_BOOKING: StoredBooking = { time: '', guests: '', children: '0', name: '', menu: false, advance: '' };
 
 function emptyBooking(zoneKey: string): StoredBooking {
   return { ...EMPTY_BOOKING, advance: BOOKING_ZONES[zoneKey]?.advance ? DEFAULT_ADVANCE : '' };
@@ -154,6 +154,7 @@ function bookingsFromServer(rows: ZoneBooking[] | undefined): StoredBookings {
     result[bookingKey(row.zone_key, row.slot)] = {
       time: row.booked_time.slice(0, 5),
       guests: String(row.guests),
+      children: String(row.children ?? 0),
       name: row.guest_name || '',
       menu: row.has_menu,
       advance: row.advance === null || row.advance === undefined ? '' : String(row.advance),
@@ -162,22 +163,36 @@ function bookingsFromServer(rows: ZoneBooking[] | undefined): StoredBookings {
   return result;
 }
 
-function guestWord(count: number): string {
+function plural(count: number, one: string, few: string, many: string): string {
   const mod10 = count % 10;
   const mod100 = count % 100;
-  if (mod10 === 1 && mod100 !== 11) return 'гість';
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'гості';
-  return 'гостей';
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
 }
 
-/** «Кабінка 2 · 19:00 · 6 гостей · Іван · з меню» (+ «аванс 1000 ₴» for a banquet). */
+/** «6 дорослих» / «6 дорослих · 2 дитини»: zero children are not mentioned. */
+function partyText(adults: number, children: number, separator = ' · '): string {
+  const grown = `${adults} ${plural(adults, 'дорослий', 'дорослих', 'дорослих')}`;
+  return children > 0 ? `${grown}${separator}${children} ${plural(children, 'дитина', 'дитини', 'дітей')}` : grown;
+}
+
+function parseChildren(value: string): number | 'invalid' {
+  const text = value.trim();
+  if (!text) return 0;
+  const parsed = Number(text);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 300 ? parsed : 'invalid';
+}
+
+/** «Кабінка 2 · 19:00 · 6 дорослих · 2 дитини · Іван · з меню» (+ «аванс 1000 ₴» for a banquet). */
 function bookingSummary(slot: number, booking: StoredBooking): string {
   const guests = Number(booking.guests);
+  const children = parseChildren(booking.children);
   const advance = parseAdvance(booking.advance);
   return [
     slot > 0 ? `Кабінка ${slot}` : 'Банкет',
     booking.time || null,
-    guests > 0 ? `${guests} ${guestWord(guests)}` : null,
+    guests > 0 ? partyText(guests, typeof children === 'number' ? children : 0) : null,
     booking.name || null,
     booking.menu ? 'з меню' : 'без меню',
     typeof advance === 'number' ? `аванс ${advance.toLocaleString('uk-UA')} ₴` : null,
@@ -426,11 +441,14 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
     const prefix = `booking-${zoneKey}-${slot}`;
     return (
       <div className="duty-booking-form-v3">
-        <label htmlFor={`${prefix}-time`}><span>Час</span>
+        <label htmlFor={`${prefix}-time`} className="is-wide"><span>Час</span>
           <input id={`${prefix}-time`} type="time" value={booking.time} onChange={(event) => setBooking(zoneKey, slot, { time: event.target.value })} />
         </label>
-        <label htmlFor={`${prefix}-guests`}><span>Гостей</span>
+        <label htmlFor={`${prefix}-guests`}><span>Дорослі</span>
           <input id={`${prefix}-guests`} type="number" inputMode="numeric" min="1" max="300" placeholder="0" value={booking.guests} onChange={(event) => setBooking(zoneKey, slot, { guests: event.target.value })} />
+        </label>
+        <label htmlFor={`${prefix}-children`}><span>Діти</span>
+          <input id={`${prefix}-children`} type="number" inputMode="numeric" min="0" max="300" placeholder="0" value={booking.children} onChange={(event) => setBooking(zoneKey, slot, { children: event.target.value })} />
         </label>
         {named ? (
           <label htmlFor={`${prefix}-name`} className="is-wide"><span>Імʼя</span>
@@ -545,6 +563,7 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
           slot,
           time: booking.time.slice(0, 5),
           guests: Math.round(guests),
+          children: (() => { const value = parseChildren(booking.children); return typeof value === 'number' ? value : 0; })(),
           guest_name: rule.named ? booking.name.trim() || null : null,
           has_menu: booking.menu,
           advance: rule.advance ? (() => { const value = parseAdvance(booking.advance); return typeof value === 'number' ? value : null; })() : null,
@@ -572,7 +591,10 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
       const zoneTitle = data?.zones.find((zone) => zone.key === zoneKey)?.title || zoneKey;
       const slot = Number(slotText);
       if (!booking.time || !(Number(booking.guests) > 0)) {
-        return `${zoneTitle}${slot > 0 ? `, кабінка ${slot}` : ''}: вкажи час і кількість гостей або прибери бронювання.`;
+        return `${zoneTitle}${slot > 0 ? `, кабінка ${slot}` : ''}: вкажи час і кількість дорослих або прибери бронювання.`;
+      }
+      if (parseChildren(booking.children) === 'invalid') {
+        return `${zoneTitle}${slot > 0 ? `, кабінка ${slot}` : ''}: кількість дітей — ціле число, 0 якщо дітей немає.`;
       }
       if (BOOKING_ZONES[zoneKey]?.advance && parseAdvance(booking.advance) === 'invalid') {
         return `${zoneTitle}: аванс має бути сумою в гривнях, наприклад 1000.`;

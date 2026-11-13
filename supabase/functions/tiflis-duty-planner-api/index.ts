@@ -97,7 +97,10 @@ type ZoneBooking = {
   zone_key: string;
   slot: number;
   booked_time: string;
+  /** Adults. */
   guests: number;
+  /** Children; 0 means none. */
+  children: number;
   guest_name: string | null;
   has_menu: boolean;
   advance: number | null;
@@ -196,20 +199,26 @@ function parseBookingTime(value: unknown): string | null {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : null;
 }
 
-function guestWord(count: number): string {
+function plural(count: number, one: string, few: string, many: string): string {
   const mod10 = count % 10;
   const mod100 = count % 100;
-  if (mod10 === 1 && mod100 !== 11) return "гість";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "гості";
-  return "гостей";
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
 }
 
-/** «Кабінка 2: 19:00, 6 гостей, Іван, з меню» / «Банкет: 18:30, 12 гостей, без меню». */
+/** «6 дорослих» / «6 дорослих, 2 дитини» — no children means none are mentioned. */
+function partyText(adults: number, children: number): string {
+  const grown = `${adults} ${plural(adults, "дорослий", "дорослих", "дорослих")}`;
+  return children > 0 ? `${grown}, ${children} ${plural(children, "дитина", "дитини", "дітей")}` : grown;
+}
+
+/** «Кабінка 2: 19:00, 6 дорослих, 2 дитини, Іван, з меню» / «Банкет: 18:30, 12 дорослих, Петренко, без меню, аванс 1000 ₴». */
 function bookingLine(booking: ZoneBooking): string {
   const label = booking.slot > 0 ? `Кабінка ${booking.slot}` : "Банкет";
   return [
     `${label}: ${booking.booked_time.slice(0, 5)}`,
-    `${booking.guests} ${guestWord(booking.guests)}`,
+    partyText(booking.guests, Number(booking.children || 0)),
     booking.guest_name || null,
     booking.has_menu ? "з меню" : "без меню",
     booking.advance !== null && booking.advance !== undefined ? `аванс ${formatMoney(Number(booking.advance))} ₴` : null,
@@ -337,7 +346,7 @@ async function loadPlan(service: any, type: PlanType, date: string) {
       .maybeSingle(),
     type === "daily"
       ? service.from("ops_zone_bookings")
-        .select("zone_key,slot,booked_time,guests,guest_name,has_menu,advance")
+        .select("zone_key,slot,booked_time,guests,children,guest_name,has_menu,advance")
         .eq("work_date", date)
         .order("zone_key")
         .order("slot")
@@ -382,6 +391,7 @@ async function loadPlan(service: any, type: PlanType, date: string) {
     bookings: ((bookingsResult.data ?? []) as ZoneBooking[]).map((item) => ({
       ...item,
       booked_time: String(item.booked_time).slice(0, 5),
+      children: Number(item.children || 0),
       advance: item.advance === null || item.advance === undefined ? null : Number(item.advance),
     })),
   };
@@ -571,9 +581,13 @@ Deno.serve(async (req: Request) => {
         const slot = Number(item.slot);
         const time = parseBookingTime(item.time);
         const guests = Number(item.guests);
+        const children = item.children === undefined || item.children === null || item.children === "" ? 0 : Number(item.children);
         const advance = rule?.advance ? parseAdvance(item.advance) : null;
         if (!rule || !rule.slots.includes(slot) || !time || !Number.isInteger(guests) || guests < 1 || guests > 300 || seenBookings.has(`${zoneKey}:${slot}`)) {
           return json(req, { ok: false, error: "Перевір бронювання: час, кількість гостей і кабінку." }, 400);
+        }
+        if (!Number.isInteger(children) || children < 0 || children > 300) {
+          return json(req, { ok: false, error: "Перевір кількість дітей: 0, якщо дітей немає." }, 400);
         }
         if (advance === "invalid") {
           return json(req, { ok: false, error: "Перевір аванс: це має бути сума в гривнях." }, 400);
@@ -585,6 +599,7 @@ Deno.serve(async (req: Request) => {
           slot,
           booked_time: time,
           guests,
+          children,
           guest_name: rule.named ? cleanText(item.guest_name, 120) || null : null,
           has_menu: item.has_menu === true,
           advance,
