@@ -83,13 +83,13 @@ const DAILY_ZONES = [
 ] as const;
 
 /* Bookings the admin attaches to a zone in the daily plan: Кабінки carry one per
-   booth (slots 1..5, with the guest's name); the fireplace and lower halls carry
-   one per hall (slot 0, no name). Stored in ops_zone_bookings. */
+   booth (slots 1..5); the fireplace and lower halls carry one per hall
+   (slot 0). Every booking carries the guest's name. Stored in ops_zone_bookings. */
 const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean }> = {
   zone_booths: { slots: [1, 2, 3, 4, 5], named: true },
-  zone_fireplace_hall: { slots: [0], named: false },
-  zone_lower_hall_2: { slots: [0], named: false },
-  zone_lower_hall_3: { slots: [0], named: false },
+  zone_fireplace_hall: { slots: [0], named: true },
+  zone_lower_hall_2: { slots: [0], named: true },
+  zone_lower_hall_3: { slots: [0], named: true },
 };
 
 type PlanType = "daily" | "handover";

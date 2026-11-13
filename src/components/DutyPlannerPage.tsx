@@ -116,14 +116,14 @@ function compactTuesday(value: string): { day: string; date: string } {
   };
 }
 
-/* Zone bookings: Кабінки carry one per booth (slots 1..5, with a name), the
-   fireplace and lower halls one per hall (slot 0, no name). The other zones
+/* Zone bookings: Кабінки carry one per booth (slots 1..5), the fireplace and
+   lower halls one per hall (slot 0); every booking has a name. The other zones
    have none. Mirrors BOOKING_ZONES in tiflis-duty-planner-api. */
 const BOOKING_ZONES: Record<string, { slots: number[]; named: boolean }> = {
   zone_booths: { slots: [1, 2, 3, 4, 5], named: true },
-  zone_fireplace_hall: { slots: [0], named: false },
-  zone_lower_hall_2: { slots: [0], named: false },
-  zone_lower_hall_3: { slots: [0], named: false },
+  zone_fireplace_hall: { slots: [0], named: true },
+  zone_lower_hall_2: { slots: [0], named: true },
+  zone_lower_hall_3: { slots: [0], named: true },
 };
 const EMPTY_BOOKING: StoredBooking = { time: '', guests: '', name: '', menu: false };
 
@@ -444,11 +444,12 @@ export function DutyPlannerPage({ planType }: DutyPlannerPageProps) {
       if (!lines.length) return null;
       return <ul className="duty-booking-lines-v3">{lines.map(({ slot, booking }) => <li key={slot}>{bookingSummary(slot, booking)}</li>)}</ul>;
     }
-    if (!rule.named) {
+    // One banquet per hall; Кабінки get a tab per booth.
+    if (rule.slots.length === 1) {
       return (
         <div className="duty-booking-v3">
           <strong className="duty-booking-title-v3">Банкет</strong>
-          {renderBookingForm(zoneKey, 0, false)}
+          {renderBookingForm(zoneKey, 0, true)}
         </div>
       );
     }
