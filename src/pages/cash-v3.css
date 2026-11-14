@@ -1037,3 +1037,118 @@
     transition: none !important;
   }
 }
+
+/* ─── Каса по днях: chart ⇄ calendar carousel ─── */
+.cv3-card-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cv3-card-title span { text-align: left; }
+.cv3-chart-card .cv3-card-head { align-items: center; }
+
+.cv3-view-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--t-line-strong);
+  border-radius: 999px;
+  background: var(--t-surface-2);
+  color: var(--t-text);
+  font: 600 13px var(--t-font);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+.cv3-view-toggle svg { color: var(--t-gold); }
+.cv3-view-toggle:hover { background: var(--t-surface-3); }
+.cv3-view-toggle:active { transform: scale(0.97); }
+
+.cv3-carousel {
+  display: flex;
+  align-items: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  transition: height 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  margin: 0 -2px;
+}
+.cv3-carousel::-webkit-scrollbar { display: none; }
+.cv3-carousel-pane {
+  flex: 0 0 100%;
+  min-width: 0;
+  padding: 0 2px;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* Month calendar: day number on top, the day's cash under it. */
+.cv3-cal {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.cv3-cal-dow {
+  padding-bottom: 2px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t-text-3);
+}
+.cv3-cal-dow.is-weekend { color: var(--t-text-2); }
+.cv3-cal-day {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  justify-items: center;
+  align-items: end;
+  gap: 2px;
+  min-height: 50px;
+  padding: 6px 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--t-surface-2);
+  color: var(--t-text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.cv3-cal-num {
+  align-self: start;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+.cv3-cal-sum {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--t-text-3);
+  white-space: nowrap;
+}
+.cv3-cal-day.has-cash { background: rgba(110, 168, 120, 0.14); }
+.cv3-cal-day.has-cash .cv3-cal-sum { color: #9CCB9F; }
+.cv3-cal-day.is-best { background: var(--t-gold-tint, rgba(209, 180, 107, 0.16)); border-color: rgba(209, 180, 107, 0.45); }
+.cv3-cal-day.is-best .cv3-cal-sum { color: var(--t-gold); }
+.cv3-cal-day.is-today { border-color: var(--t-gold); }
+.cv3-cal-day.is-out { opacity: 0.38; }
+.cv3-cal-day:disabled { cursor: default; }
+.cv3-cal-day:disabled:not(.has-cash) { background: transparent; }
+.cv3-cal-day:not(:disabled):hover { background: var(--t-surface-3); }
+.cv3-cal-day.has-cash:not(:disabled):hover { background: rgba(110, 168, 120, 0.22); }
+
+@media (min-width: 640px) {
+  .cv3-cal-day { min-height: 58px; }
+  .cv3-cal-sum { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv3-carousel { transition: none; scroll-behavior: auto; }
+}

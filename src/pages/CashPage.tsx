@@ -1,6 +1,8 @@
 import {
   ArrowDown,
   ArrowUp,
+  BarChart3,
+  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -19,6 +21,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
@@ -29,6 +32,7 @@ import { getKyivDateKey } from '../lib/time';
 import './cash-v3.css';
 
 type CashTab = 'overview' | 'top';
+type DayView = 'chart' | 'calendar';
 type OverviewPeriod = 'first' | 'second' | 'month';
 type NumericValue = number | string | null;
 
@@ -102,6 +106,8 @@ const MONTHS_GENITIVE = [
   'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
   'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня',
 ];
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+const DAY_VIEW_KEY = 'tiflis.cash.day-view';
 const RATE_PER_DAY = 200;
 const CASH_PERCENT = 0.04;
 
@@ -151,6 +157,22 @@ function formatListDay(value: string): string {
 
 function inDayRange(value: string, month: string, fromDay: number, toDay: number): boolean {
   return value >= dateForDay(month, fromDay) && value <= dateForDay(month, toDay);
+}
+
+function readDayView(): DayView {
+  try {
+    return localStorage.getItem(DAY_VIEW_KEY) === 'calendar' ? 'calendar' : 'chart';
+  } catch {
+    return 'chart';
+  }
+}
+
+function rememberDayView(view: DayView) {
+  try {
+    localStorage.setItem(DAY_VIEW_KEY, view);
+  } catch {
+    /* private mode: the view simply resets next time */
+  }
 }
 
 function defaultPeriod(): OverviewPeriod {
@@ -245,6 +267,7 @@ export function CashPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editor, setEditor] = useState<DayEditorState | null>(null);
+  const [dayView, setDayView] = useState<DayView>(() => readDayView());
   const requestId = useRef(0);
 
   useEffect(() => {
@@ -323,6 +346,24 @@ export function CashPage() {
     }
     return list;
   }, [entryByDate, month, range.from, range.to, todayKey]);
+
+  /* The calendar always shows the whole month; days outside the chosen half
+     are dimmed, so the grid keeps its weekday shape. */
+  const calendar = useMemo(() => {
+    const offset = (new Date(monthDate.getFullYear(), monthIndex, 1).getDay() + 6) % 7;
+    const cells: { date: string; day: number; cash: number; future: boolean; inRange: boolean }[] = [];
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = dateForDay(month, day);
+      cells.push({
+        date,
+        day,
+        cash: asNumber(entryByDate.get(date)?.cash),
+        future: date > todayKey,
+        inRange: day >= range.from && day <= range.to,
+      });
+    }
+    return { offset, cells };
+  }, [daysInMonth, entryByDate, month, monthDate, monthIndex, range.from, range.to, todayKey]);
 
   const records = useMemo(() => {
     const dates = new Set<string>();
@@ -535,9 +576,21 @@ export function CashPage() {
 
             <section className="cv3-card cv3-chart-card" aria-labelledby="cv3-chart-title">
               <div className="cv3-card-head">
-                <h3 id="cv3-chart-title">Каса по днях</h3>
-                {current.bestDate ? <span>Найкращий день: {money(current.bestCash)}</span> : null}
+                <div className="cv3-card-title">
+                  <h3 id="cv3-chart-title">Каса по днях</h3>
+                  {current.bestDate ? <span>Найкращий день: {money(current.bestCash)}</span> : null}
+                </div>
+                <button
+                  type="button"
+                  className="cv3-view-toggle"
+                  aria-controls="cv3-day-carousel"
+                  onClick={() => setDayView(dayView === 'chart' ? 'calendar' : 'chart')}
+                >
+                  {dayView === 'chart' ? <CalendarDays size={16} aria-hidden="true" /> : <BarChart3 size={16} aria-hidden="true" />}
+                  {dayView === 'chart' ? 'Календар' : 'Графік'}
+                </button>
               </div>
+              <DayCarousel id="cv3-day-carousel" view={dayView} onViewChange={setDayView}>
               <div className="cv3-chart" style={{ '--avg': averageShare } as CSSProperties}>
                 {current.averageCash > 0 ? <span className="cv3-avg" aria-hidden="true"><em>сер. {amount(current.averageCash)}</em></span> : null}
                 {current.cashDays === 0 ? <p className="cv3-chart-empty">Каси за цей період ще немає</p> : null}
@@ -561,6 +614,31 @@ export function CashPage() {
                   );
                 })}
               </div>
+              <div className="cv3-cal" role="grid" aria-label={`Календар каси, ${(MONTHS[monthIndex] || "").toLowerCase()}`}>
+                {WEEKDAYS.map((name, index) => (
+                  <span className={`cv3-cal-dow${index > 4 ? ' is-weekend' : ''}`} key={name} role="columnheader">{name}</span>
+                ))}
+                {Array.from({ length: calendar.offset }, (_, index) => <span className="cv3-cal-gap" key={`gap-${index}`} aria-hidden="true" />)}
+                {calendar.cells.map((cell) => {
+                  const isBest = cell.cash > 0 && cell.date === current.bestDate;
+                  const isToday = cell.date === todayKey;
+                  return (
+                    <button
+                      type="button"
+                      role="gridcell"
+                      key={cell.date}
+                      className={`cv3-cal-day${cell.cash > 0 ? ' has-cash' : ''}${isBest ? ' is-best' : ''}${isToday ? ' is-today' : ''}${cell.inRange ? '' : ' is-out'}`}
+                      disabled={!canEdit || cell.future}
+                      onClick={() => openDay(cell.date)}
+                      aria-label={`${formatDay(cell.date)}: ${cell.cash > 0 ? money(cell.cash) : 'без каси'}`}
+                    >
+                      <span className="cv3-cal-num">{cell.day}</span>
+                      <span className="cv3-cal-sum">{cell.cash > 0 ? amount(cell.cash) : cell.future ? '' : '—'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              </DayCarousel>
             </section>
 
             <section className="cv3-card cv3-records" aria-labelledby="cv3-records-title">
@@ -628,6 +706,86 @@ export function CashPage() {
           onDelete={async (date) => { if (await deleteDay(date)) setEditor(null); }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Two panes side by side — the day chart and the month calendar — in one
+ * horizontal scroller with snap points. The header button scrolls to the other
+ * pane; a swipe does the same, and the scroll position reports back which pane
+ * is showing. The scroller takes the height of the pane in view, so the short
+ * chart does not leave the calendar's empty space under it.
+ */
+function DayCarousel({ id, view, onViewChange, children }: {
+  id: string;
+  view: DayView;
+  onViewChange: (view: DayView) => void;
+  children: ReactNode;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  const viewRef = useRef(view);
+  const settled = useRef(false);
+
+  // Follow the button: scroll to the requested pane (instantly on first paint).
+  useLayoutEffect(() => {
+    viewRef.current = view;
+    rememberDayView(view);
+    const node = scroller.current;
+    if (!node) return;
+    const left = view === 'calendar' ? node.clientWidth : 0;
+    if (Math.abs(node.scrollLeft - left) < 2) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    node.scrollTo({ left, behavior: settled.current && !reduce ? 'smooth' : 'auto' });
+    settled.current = true;
+  }, [view]);
+
+  // Height follows the pane in view, and any change of its content.
+  useLayoutEffect(() => {
+    const node = scroller.current;
+    if (!node) return;
+    const measure = () => {
+      const pane = node.children[view === 'calendar' ? 1 : 0] as HTMLElement | undefined;
+      if (pane) setHeight(pane.offsetHeight);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    [...node.children].forEach((child) => observer.observe(child));
+    return () => observer.disconnect();
+  }, [view]);
+
+  // Follow the finger: once a swipe settles on a pane, tell the header.
+  useEffect(() => {
+    const node = scroller.current;
+    if (!node) return;
+    let timer = 0;
+    const onScroll = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const next: DayView = node.scrollLeft > node.clientWidth / 2 ? 'calendar' : 'chart';
+        if (next !== viewRef.current) onViewChange(next);
+      }, 90);
+    };
+    node.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      node.removeEventListener('scroll', onScroll);
+    };
+  }, [onViewChange]);
+
+  return (
+    <div
+      id={id}
+      ref={scroller}
+      className="cv3-carousel"
+      style={height ? { height } : undefined}
+    >
+      {Array.isArray(children)
+        ? children.map((child, index) => (
+          <div className="cv3-carousel-pane" key={index} aria-hidden={(index === 1) !== (view === 'calendar')} inert={(index === 1) !== (view === 'calendar') ? true : undefined}>{child}</div>
+        ))
+        : children}
     </div>
   );
 }
