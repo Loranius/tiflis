@@ -29,6 +29,8 @@ interface CashTopListProps {
   monthLabel: string;
   year: number;
   focusUserId: string;
+  /** Name of the person an admin is looking at; empty when it is the viewer. */
+  focusName?: string | null;
   refreshing: boolean;
   onPeriodChange: (period: CashTopPeriod) => void;
 }
@@ -114,6 +116,7 @@ export function CashTopList({
   monthLabel,
   year,
   focusUserId,
+  focusName,
   refreshing,
   onPeriodChange,
 }: CashTopListProps) {
@@ -170,10 +173,14 @@ export function CashTopList({
         ) : (
           <section className="cv3-place">
             <div className="cv3-payout-head">
-              <h2>Твоє місце</h2>
+              <h2>{focusName ? `Місце: ${focusName}` : 'Твоє місце'}</h2>
               <span>{periodText}</span>
             </div>
-            <p className="cv3-empty">У цьому періоді ще немає твоєї каси. Внеси касу після зміни, і з’явишся в топі.</p>
+            <p className="cv3-empty">
+              {focusName
+                ? 'У цьому періоді в цього працівника ще немає каси, тому місця в топі немає.'
+                : 'У цьому періоді ще немає твоєї каси. Внеси касу після зміни, і з’явишся в топі.'}
+            </p>
           </section>
         )}
 

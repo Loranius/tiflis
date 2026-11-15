@@ -175,9 +175,18 @@ function rememberDayView(view: DayView) {
   }
 }
 
-function defaultPeriod(): OverviewPeriod {
+/* The two tabs split the month differently (DESIGN.md, The Server Halves
+   Rule): the payout overview counts cash for 1–14, so the 15th already opens
+   the second half there; the cash top ranks 1–15, so on the 15th it must
+   still open on «1–15», not on the empty «16–end». */
+function defaultOverviewPeriod(): OverviewPeriod {
   const day = Number(getKyivDateKey().slice(8, 10));
-  return day >= 1 && day <= 14 ? 'first' : 'second';
+  return day <= 14 ? 'first' : 'second';
+}
+
+function defaultTopPeriod(): CashTopPeriod {
+  const day = Number(getKyivDateKey().slice(8, 10));
+  return day <= 15 ? 'first' : 'second';
 }
 
 function shiftsLabel(count: number): string {
@@ -248,7 +257,7 @@ function summarizeCash(entries: CashEntry[], extras: ExtraWage[], month: string,
 /** Warm the cash screen's first request (same body as load) while the user is elsewhere. */
 export function prefetch(userId: string) {
   const month = getKyivDateKey().slice(0, 7);
-  return secureApi({ action: 'cash_bootstrap', month, user_id: userId, leaderboard_period: defaultPeriod() });
+  return secureApi({ action: 'cash_bootstrap', month, user_id: userId, leaderboard_period: defaultTopPeriod() });
 }
 
 export function CashPage() {
@@ -260,7 +269,8 @@ export function CashPage() {
   // «/cash?tab=top» (linked from Рекорди) opens the live cash race directly.
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<CashTab>(() => (searchParams.get('tab') === 'top' ? 'top' : 'overview'));
-  const [period, setPeriod] = useState<CashTopPeriod>(() => defaultPeriod());
+  const [period, setPeriod] = useState<CashTopPeriod>(() => defaultTopPeriod());
+  const [overviewPeriod, setOverviewPeriod] = useState<OverviewPeriod>(() => defaultOverviewPeriod());
   const [data, setData] = useState<CashBootstrapResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -313,7 +323,6 @@ export function CashPage() {
     [daysInMonth, entries, extras, month],
   );
 
-  const overviewPeriod: OverviewPeriod = period === 'year' ? 'month' : period;
   const current = summary[overviewPeriod];
   const range = overviewPeriod === 'first'
     ? { from: 1, to: 14 }
@@ -452,7 +461,6 @@ export function CashPage() {
   }
 
   function changeTab(next: CashTab) {
-    if (next === 'overview' && period === 'year') setPeriod('month');
     setTab(next);
   }
 
@@ -521,7 +529,7 @@ export function CashPage() {
                 aria-checked={overviewPeriod === value}
                 key={value}
                 className={`tm-seg${overviewPeriod === value ? ' is-on' : ''}`}
-                onClick={() => setPeriod(value)}
+                onClick={() => setOverviewPeriod(value)}
               >
                 {overviewPeriod === value ? <SegThumb group="cash-overview" /> : null}
                 <span>{label}</span>
@@ -685,6 +693,7 @@ export function CashPage() {
           monthLabel={`${MONTHS[monthIndex]} ${monthDate.getFullYear()}`}
           year={monthDate.getFullYear()}
           focusUserId={data.viewUserId}
+          focusName={viewingSelf ? null : selectedStaff?.name || null}
           refreshing={loading}
           onPeriodChange={setPeriod}
         />
