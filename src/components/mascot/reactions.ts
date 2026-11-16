@@ -5,7 +5,6 @@ import { getKyivDateKey } from '../../lib/time';
 import {
   breakfastLine,
   cashLine,
-  countWorkDays,
   dishLine,
   greetingLine,
   isBreakfastShift,
@@ -14,13 +13,12 @@ import {
   roastLine,
   shiftLine,
   shiftVerdict,
+  summarizeShifts,
   tomorrowKey,
   type Line,
 } from './lines';
 
-/** Fired by the cash screen after the viewer saved their own day. */
-export const CASH_SAVED_EVENT = 'tiflis:cash-saved';
-export interface CashSavedDetail { amount: number; average: number | null }
+import { CASH_SAVED_EVENT, type CashSavedDetail } from './events';
 
 interface ScheduleResponse {
   ok: true;
@@ -35,6 +33,15 @@ interface MenuResponse {
 const UNPROMPTED_EVERY_MS = 4 * 60_000;
 const IDLE_BEFORE_MS = 20_000;
 const GREETING_KEY = 'tiflis.mascot.greeted';
+
+/** Already said today for `key` (no record is made). */
+function saidToday(key: string): boolean {
+  try {
+    return localStorage.getItem(`tiflis.mascot.day.${key}`) === getKyivDateKey();
+  } catch {
+    return false;
+  }
+}
 
 /** True once per Kyiv day for `key` (and records it); true again if storage is blocked. */
 function onceToday(key: string): boolean {
@@ -109,7 +116,7 @@ export function useMascotReactions(say: (line: Line) => void, active: boolean, i
 
   // Breakfast tomorrow, once a day.
   useEffect(() => {
-    if (!active) return;
+    if (!active || saidToday('breakfast')) return; // no schedule request once it is said
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       const tomorrow = tomorrowKey(getKyivDateKey());
@@ -123,17 +130,16 @@ export function useMascotReactions(say: (line: Line) => void, active: boolean, i
 
   // Shift count, once a day, on the schedule page.
   useEffect(() => {
-    if (!active || pathname !== '/schedule') return;
+    if (!active || pathname !== '/schedule' || saidToday('shifts')) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       const month = getKyivDateKey().slice(0, 7);
       const schedule = await loadSchedule(month);
       if (cancelled || !schedule) return;
       const mine = schedule.entries.filter((entry) => entry.user_id === schedule.me.legacyUserId && entry.date.startsWith(month));
-      if (!mine.length) return; // no schedule yet: nothing to judge
-      const work = countWorkDays(mine.map((entry) => entry.shift));
-      if (!onceToday('shifts')) return;
-      sayRef.current(shiftLine(shiftVerdict(work), work, daysInMonth(month) - work, Math.random));
+      const summary = summarizeShifts(mine.map((entry) => entry.shift), daysInMonth(month));
+      if (!summary || !onceToday('shifts')) return; // a half-published month is not judged
+      sayRef.current(shiftLine(shiftVerdict(summary.work), summary.work, summary.off, Math.random));
     }, 1500);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [active, pathname]);

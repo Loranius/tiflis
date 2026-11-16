@@ -35,6 +35,18 @@ export function countWorkDays(shifts: Array<string | null | undefined>): number 
   }).length;
 }
 
+/**
+ * Work and off days from the viewer's published shifts this month, or null
+ * when under 80% of the month is published (a half-filled month would read as
+ * «ледацюга»). Off counts only published days off.
+ */
+export function summarizeShifts(shifts: Array<string | null | undefined>, daysInMonth: number): { work: number; off: number } | null {
+  const published = shifts.filter((code) => Boolean((code || '').trim())).length;
+  if (!daysInMonth || published < daysInMonth * 0.8) return null;
+  const work = countWorkDays(shifts);
+  return { work, off: published - work };
+}
+
 export function shiftVerdict(workDays: number): ShiftVerdict {
   if (workDays <= 8) return 'lazy';
   if (workDays >= 18) return 'hard';
@@ -247,6 +259,33 @@ const GREETING = [
   'Вітаю на зміні. Не підведи мене.',
   'А, це ти. Добре, я буду поруч. Завжди.',
 ];
+
+const PICKUP = [
+  'Ай! За хвостик не тягнуть!',
+  'Обережно, я з бульйоном!',
+  'Куди мене? Я тут тільки влаштувався.',
+  'Ой-ой, не трусіть, розплескаюсь!',
+  'Тримай рівно, я не маятник! Хоча…',
+  'Знову переїзд? Без грошей за таксі?',
+  'Акуратно з тістом, воно ручної ліпки!',
+];
+
+const DROP = [
+  'Тут? Ну добре, тут так тут.',
+  'Новий кабінет. Вид непоганий.',
+  'Ох, голова паморочиться. Але місце годиться.',
+  'Залишаюсь тут. Звідси краще видно твою касу.',
+  'Добре, стою тут. Хвостик більше не чіпати.',
+  'Нарешті тверда земля. Тобто екран.',
+];
+
+export function pickupLine(rnd: Rnd): Line {
+  return say(PICKUP, 'sad', rnd);
+}
+
+export function dropLine(rnd: Rnd): Line {
+  return say(DROP, 'neutral', rnd);
+}
 
 function percentDelta(amount: number, average: number | null): number {
   if (!average) return 0;

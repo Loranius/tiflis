@@ -155,3 +155,26 @@
   cursor: pointer;
 }
 .mk-restore span { font-size: 17px; line-height: 1; }
+
+/* Dragging: he hangs by the knot; the swing rotates about it (set per frame in JS). */
+.mk-hit { touch-action: none; }
+.mk-swing { transform-origin: 50% 8.3%; will-change: transform; }
+.mk-layer.is-dragging { z-index: 31; }
+.mk-layer.is-dragging .mk-hit { cursor: grabbing; }
+.mk-layer.is-dragging .mk-hit .mk { filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.45)); }
+.mk-layer.is-dragging .mk-leg-l { transform: rotate(10deg); }
+.mk-layer.is-dragging .mk-leg-r { transform: rotate(-10deg); }
+
+/* Bubble and menu open toward the roomy side when he stands far left or near the top. */
+.mk-bubble.is-left, .mk-menu.is-left { right: auto; left: 0; }
+.mk-bubble.is-left::after { right: auto; left: 22px; }
+.mk-bubble.is-below, .mk-menu.is-below { bottom: auto; top: calc(100% + 8px); }
+.mk-bubble.is-below::after {
+  bottom: auto;
+  top: -6px;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 1px solid var(--t-line-strong);
+  border-top: 1px solid var(--t-line-strong);
+}
+.mk-menu { display: grid; gap: 2px; }
