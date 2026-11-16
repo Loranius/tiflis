@@ -8,14 +8,8 @@
 .mk-turn, .mk-body, .mk-leg, .mk-arm, .mk-eyes { transform-box: fill-box; }
 .mk-turn { transform-origin: center; }
 
-.mk-dough { fill: #F1E6CC; stroke: #CDB98F; stroke-width: 1.2; }
-.mk-pleats path { fill: none; stroke: #D3BF94; stroke-width: 1.3; stroke-linecap: round; }
-.mk-knot { fill: #EADBB8; stroke: #CDB98F; stroke-width: 1.1; stroke-linejoin: round; }
-.mk-cheek { fill: rgba(209, 180, 107, 0.45); }
-.mk-eyes circle { fill: #2B2A29; }
-.mk-brows path, .mk-mouth { fill: none; stroke: #2B2A29; stroke-width: 1.6; stroke-linecap: round; }
-.mk-arm path { fill: none; stroke: #E4D3AE; stroke-width: 3.4; stroke-linecap: round; }
-.mk-leg rect { fill: #E4D3AE; stroke: #CDB98F; stroke-width: 1; }
+/* Colours live on the drawing (Khinkali.tsx); only the line work is styled here. */
+.mk-brows path, path.mk-mouth { fill: none; stroke: #2B2A29; stroke-width: 1.6; stroke-linecap: round; }
 
 .mk-body { transform-origin: 50% 100%; }
 .mk-eyes { transform-origin: center; }
@@ -32,6 +26,13 @@
   .mk.is-walking:not(.is-still) .mk-arm-l { animation: mk-swing 0.36s ease-in-out infinite; }
   .mk.is-walking:not(.is-still) .mk-arm-r { animation: mk-swing 0.36s ease-in-out infinite reverse; }
   .mk.is-happy:not(.is-still):not(.is-walking) .mk-arm-r { animation: mk-wave 0.9s ease-in-out 2; }
+  .mk-steam path { animation: mk-steam 1.8s ease-out infinite; opacity: 0; }
+  .mk-steam path + path { animation-delay: 0.6s; }
+}
+@keyframes mk-steam {
+  0% { opacity: 0; transform: translateY(4px); }
+  30% { opacity: 0.7; }
+  100% { opacity: 0; transform: translateY(-4px); }
 }
 
 @keyframes mk-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.975) scaleX(1.012); } }
@@ -158,7 +159,7 @@
 
 /* Dragging: he hangs by the knot; the swing rotates about it (set per frame in JS). */
 .mk-hit { touch-action: none; }
-.mk-swing { transform-origin: 50% 8.3%; will-change: transform; }
+.mk-swing { transform-origin: 50% 6.7%; will-change: transform; }
 .mk-layer.is-dragging { z-index: 31; }
 .mk-layer.is-dragging .mk-hit { cursor: grabbing; }
 .mk-layer.is-dragging .mk-hit .mk { filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.45)); }
