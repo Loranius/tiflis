@@ -77,10 +77,14 @@ async function loadSchedule(month: string): Promise<ScheduleResponse | null> {
  * shift count (on the schedule page), and now and then a dish or a roast.
  * Everything reads only the viewer's own data; failures are silent.
  */
-export function useMascotReactions(say: (line: Line) => void, active: boolean): void {
+export function useMascotReactions(say: (line: Line) => void, active: boolean, isBusy: () => boolean): void {
   const { pathname } = useLocation();
   const sayRef = useRef(say);
   sayRef.current = say;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const busyRef = useRef(isBusy);
+  busyRef.current = isBusy;
   const lastInput = useRef(Date.now());
   const lastUnprompted = useRef(Date.now());
   const menu = useRef<MenuResponse['items'] | null>(null);
@@ -96,7 +100,7 @@ export function useMascotReactions(say: (line: Line) => void, active: boolean): 
   useEffect(() => {
     const onSaved = (event: Event) => {
       const detail = (event as CustomEvent<CashSavedDetail>).detail;
-      if (!detail || !(detail.amount > 0)) return;
+      if (!activeRef.current || !detail || !(detail.amount > 0)) return;
       sayRef.current(cashLine(judgeCash(detail.amount, detail.average), detail.amount, detail.average, Math.random));
     };
     window.addEventListener(CASH_SAVED_EVENT, onSaved);
@@ -143,7 +147,7 @@ export function useMascotReactions(say: (line: Line) => void, active: boolean): 
     window.addEventListener('scroll', touch, { passive: true });
     const timer = window.setInterval(async () => {
       const now = Date.now();
-      if (document.hidden || now - lastUnprompted.current < UNPROMPTED_EVERY_MS || now - lastInput.current < IDLE_BEFORE_MS) return;
+      if (document.hidden || busyRef.current() || now - lastUnprompted.current < UNPROMPTED_EVERY_MS || now - lastInput.current < IDLE_BEFORE_MS) return;
       lastUnprompted.current = now;
       if (Math.random() < 0.5) {
         if (!menu.current) {

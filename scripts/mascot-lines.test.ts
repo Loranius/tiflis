@@ -80,11 +80,41 @@ test('shift numbers agree with their nouns', () => {
   for (let i = 0; i < 80; i += 1) {
     const r = Math.random;
     const hard = shiftLine('hard', 22, 8, r).text;
-    assert.doesNotMatch(hard, /22 (робочих|змін\b)/);
+    assert.doesNotMatch(hard, /22 (робочих|змін(?![а-яіїєґ]))/);
     const lazy = shiftLine('lazy', 1, 29, r).text;
-    assert.doesNotMatch(lazy, /\b1 (змін|робочих|зміни)\b/);
-    assert.doesNotMatch(lazy, /29 вихідні\b/);
+    assert.doesNotMatch(lazy, /(?<!\d)1 (змін|робочих|зміни)(?![а-яіїєґ])/);
+    assert.doesNotMatch(lazy, /29 вихідні(?![а-яіїєґ])/);
     const normal = shiftLine('normal', 12, 18, r).text;
-    assert.doesNotMatch(normal, /12 (зміни|робочі)\b/);
+    assert.doesNotMatch(normal, /12 (зміни|робочі)(?![а-яіїєґ])/);
+  }
+});
+
+/* Every line, by brute force over the pools (each pool has < 30 lines). */
+function everyLine(): string[] {
+  const seen = new Set<string>();
+  for (let i = 0; i < 600; i += 1) {
+    const r = Math.random;
+    [
+      cashLine('high', 9000, 6000, r), cashLine('normal', 6000, 6000, r), cashLine('low', 3000, 6000, r), cashLine('first', 5000, null, r),
+      shiftLine('lazy', 6, 24, r), shiftLine('normal', 12, 18, r), shiftLine('hard', 30, 0, r),
+      breakfastLine('СН', r), roastLine(r), tapLine(r), greetingLine(r),
+    ].forEach((line) => seen.add(line.text));
+  }
+  return [...seen];
+}
+
+test('lines address the viewer without assuming gender', () => {
+  const masculine = /(ти прийшов|продавав|продав усе|загіпнотизував|працював|Не підвів|не здивував|Середнячок|пропонував|обслуговував|Сам себе|обігнав|архітекторе|сертифікований|хто ти такий|Ні ледар, ні герой|— герой|героє|пробував|порахував|не зробив|допродав|сам бачиш|здатен)/;
+  for (const text of everyLine()) assert.doesNotMatch(text, masculine, text);
+});
+
+test('teasing stays about work', () => {
+  const offLimits = /(синці|Спини|в житті|посмішка|серіал)/;
+  for (const text of everyLine()) assert.doesNotMatch(text, offLimits, text);
+});
+
+test('grammar fixes', () => {
+  for (const text of everyLine()) {
+    assert.doesNotMatch(text, /Оце я розумію каса|Лише 0|Я їм не дамся/, text);
   }
 });

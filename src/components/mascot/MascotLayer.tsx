@@ -56,6 +56,9 @@ export function useMascotHidden(): boolean {
 /* ─── The layer ─── */
 
 const BUBBLE_MS = 6000;
+/** Lines older than this are dropped instead of played late; at most this many wait. */
+const STALE_MS = 60_000;
+const QUEUE_MAX = 2;
 const LONG_PRESS_MS = 550;
 const FIELD = 'input, textarea, select, [contenteditable="true"]';
 
@@ -69,9 +72,14 @@ function walkRange(): number {
   return width >= 981 ? 260 : Math.max(0, width / 2 - 80);
 }
 
-/** A modal dialog is open or a form field has focus: step out of the way. */
+/**
+ * Step out of the way: a visible modal dialog is open (ModalRuntime marks
+ * <body data-dialog-open>, visibility-checked), the schedule brush bar is up
+ * (it sits where he stands), or a form field has focus.
+ */
 function shouldStepAway(): boolean {
-  if (document.querySelector('[role="dialog"][aria-modal="true"]')) return true;
+  if (document.body.hasAttribute('data-dialog-open')) return true;
+  if (document.querySelector('.sv3-brush')) return true;
   const active = document.activeElement;
   return Boolean(active && active instanceof HTMLElement && active.matches(FIELD));
 }
@@ -92,18 +100,23 @@ export function MascotLayer() {
   const [bubble, setBubble] = useState<{ line: Line; id: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [queueTick, setQueueTick] = useState(0);
-  const queue = useRef<Line[]>([]);
+  const queue = useRef<{ line: Line; at: number }[]>([]);
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
+  const busyRef = useRef(false);
   const lineId = useRef(0);
   const pressTimer = useRef(0);
   const pressedLong = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  useMascotReactions(say, !hidden);
+  useMascotReactions(say, !hidden, () => busyRef.current);
 
   // Lines from anywhere join the queue.
   useEffect(() => {
     const listener = (line: Line) => {
-      queue.current.push(line);
+      if (hiddenRef.current) return; // hidden: nothing is saved up for later
+      queue.current.push({ line, at: Date.now() });
+      if (queue.current.length > QUEUE_MAX) queue.current.splice(0, queue.current.length - QUEUE_MAX);
       setQueueTick((tick) => tick + 1);
     };
     listeners.add(listener);
@@ -112,10 +125,13 @@ export function MascotLayer() {
 
   // Show the next line when nothing is being said and he is on screen.
   useEffect(() => {
-    if (bubble || away || hidden || !queue.current.length) return;
-    const line = queue.current.shift() as Line;
+    if (bubble || away || hidden) return;
+    const now = Date.now();
+    queue.current = queue.current.filter((item) => now - item.at < STALE_MS);
+    const next = queue.current.shift();
+    if (!next) return;
     lineId.current += 1;
-    setBubble({ line, id: lineId.current });
+    setBubble({ line: next.line, id: lineId.current });
   }, [bubble, away, hidden, queueTick]);
 
   useEffect(() => {
@@ -132,7 +148,7 @@ export function MascotLayer() {
       frame = window.requestAnimationFrame(() => setAway(shouldStepAway()));
     };
     const observer = new MutationObserver(check);
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-dialog-open'] });
     document.addEventListener('focusin', check);
     document.addEventListener('focusout', check);
     check();
@@ -147,7 +163,7 @@ export function MascotLayer() {
   // A line that was showing when he stepped away waits for his return.
   useEffect(() => {
     if (away && bubble) {
-      queue.current.unshift(bubble.line);
+      queue.current.unshift({ line: bubble.line, at: Date.now() });
       setBubble(null);
     }
   }, [away, bubble]);
@@ -216,6 +232,8 @@ export function MascotLayer() {
     }
     say(tapLine(Math.random));
   }, [bubble]);
+
+  busyRef.current = away || Boolean(bubble) || queue.current.length > 0;
 
   if (hidden) return null;
 
