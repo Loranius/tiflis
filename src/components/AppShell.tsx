@@ -15,6 +15,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { MascotLayer, setMascotHidden, useMascotHidden } from './mascot/MascotLayer';
 import {
   memo,
   useEffect,
@@ -149,6 +150,7 @@ function BrandMark({ className, width, height }: { className: string; width: num
 export const AppShell = memo(function AppShell() {
   const reduceMotion = useReducedMotion();
   const { user, logout } = useAuth();
+  const mascotHidden = useMascotHidden();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreTriggerRef = useRef<HTMLButtonElement>(null);
@@ -341,6 +343,11 @@ export const AppShell = memo(function AppShell() {
             <strong>{user.displayName}</strong>
             <span>{roleLabel}</span>
           </div>
+          {mascotHidden ? (
+            <button className="icon-button mk-restore" type="button" onClick={() => setMascotHidden(false)} aria-label="Показати хінкалика" title="Показати хінкалика">
+              <span aria-hidden="true">🥟</span>
+            </button>
+          ) : null}
           <button className="icon-button" type="button" onClick={() => void logout()} aria-label="Вийти">
             <LogOut size={18} />
           </button>
@@ -476,6 +483,11 @@ export const AppShell = memo(function AppShell() {
               })}
             </nav>
 
+            <button className="mobile-more-mascot" type="button" onClick={() => setMascotHidden(!mascotHidden)}>
+              <span aria-hidden="true">🥟</span>
+              {mascotHidden ? 'Показати хінкалика' : 'Сховати хінкалика'}
+            </button>
+
             <button className="mobile-more-logout" type="button" onClick={() => void logout()}>
               <LogOut size={18} />
               Вийти з порталу
@@ -484,6 +496,8 @@ export const AppShell = memo(function AppShell() {
         </m.div>
       ) : null}
       </AnimatePresence>
+
+      <MascotLayer />
     </div>
   );
 });

@@ -40,3 +40,118 @@
 @keyframes mk-step { 0%, 100% { transform: rotate(16deg); } 50% { transform: rotate(-16deg); } }
 @keyframes mk-swing { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg); } }
 @keyframes mk-wave { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-38deg); } }
+
+/* ─── The layer: bottom-right, just above the mobile bottom bar ─── */
+.mk-layer {
+  position: fixed;
+  right: 12px;
+  /* the bottom bar: 8px gap + 68px bar (mobile-adaptation.css), then 8px air */
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 30;
+  pointer-events: none;
+}
+@media (min-width: 981px) {
+  .mk-layer { right: 24px; bottom: 20px; }
+}
+.mk-walker { position: relative; display: flex; flex-direction: column; align-items: flex-end; }
+.mk-hit {
+  pointer-events: auto;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.mk-hit:focus-visible { outline: 2px solid var(--t-gold); outline-offset: 2px; border-radius: 16px; }
+.mk-hit .mk { filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35)); }
+
+.mk-bubble {
+  pointer-events: auto;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(240px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--t-line-strong);
+  border-radius: 14px;
+  background: var(--t-surface);
+  color: var(--t-text);
+  font: 500 14px/1.4 var(--t-font);
+  text-align: left;
+  cursor: pointer;
+  animation: mk-bubble-in 180ms var(--t-ease-out);
+}
+.mk-bubble::after {
+  content: '';
+  position: absolute;
+  right: 22px;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid var(--t-line-strong);
+  border-bottom: 1px solid var(--t-line-strong);
+  background: var(--t-surface);
+  transform: rotate(45deg);
+}
+.mk-bubble.is-happy { border-color: rgba(209, 180, 107, 0.55); }
+.mk-bubble.is-happy::after { border-color: rgba(209, 180, 107, 0.55); }
+@keyframes mk-bubble-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .mk-bubble { animation: mk-bubble-fade 120ms linear; }
+  @keyframes mk-bubble-fade { from { opacity: 0; } }
+}
+
+.mk-menu {
+  pointer-events: auto;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  padding: 6px;
+  border: 1px solid var(--t-line-strong);
+  border-radius: 14px;
+  background: var(--t-surface);
+}
+.mk-menu button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--t-text);
+  font: 600 14px var(--t-font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mk-menu button:hover, .mk-menu button:focus-visible { background: var(--t-surface-2); }
+
+.mk-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* «Ще» sheet row and the desktop sidebar button that bring him back. */
+.mobile-more-mascot {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-bottom: 8px;
+  border: 1px solid var(--t-line-strong);
+  border-radius: 15px;
+  background: var(--t-surface-2);
+  color: var(--t-text);
+  font: 600 15px var(--t-font);
+  cursor: pointer;
+}
+.mk-restore span { font-size: 17px; line-height: 1; }
