@@ -1,5 +1,5 @@
-// Generated from verified build 00778a136f0787e5657f0048d88a8850f46e4b0b. Do not edit manually.
-const styles=["assets/index-BgqTQDUB.css"];
+// Generated from verified build 7186af22f5987e91edf0ad438c5d4ca3e51254ea. Do not edit manually.
+const styles=["assets/index-C8-Kmd65.css"];
 for(const asset of styles){const href=new URL(asset,import.meta.url).href;if(!document.querySelector('link[data-tiflis-stable="'+href+'"]')){const link=document.createElement('link');link.rel='stylesheet';link.href=href;link.dataset.tiflisStable=href;document.head.append(link);}}
-window.__TIFLIS_STABLE_RUNTIME__="00778a136f0787e5657f0048d88a8850f46e4b0b";
-import(new URL("assets/index-BMdULlw0.js",import.meta.url).href).catch((error)=>{console.error('[Tiflis] Stable runtime failed',error);const recovery=document.getElementById('boot-recovery');if(recovery){recovery.dataset.state='error';const title=recovery.querySelector('strong');const message=recovery.querySelector('.boot-message');if(title)title.textContent='Стабільна версія не завантажилась';if(message)message.textContent='Оновіть сторінку. Якщо проблема повториться, повідомте адміністратора.';}throw error;});
+window.__TIFLIS_STABLE_RUNTIME__="7186af22f5987e91edf0ad438c5d4ca3e51254ea";
+import(new URL("assets/index-DpHjFp2Q.js",import.meta.url).href).catch((error)=>{console.error('[Tiflis] Stable runtime failed',error);const recovery=document.getElementById('boot-recovery');if(recovery){recovery.dataset.state='error';const title=recovery.querySelector('strong');const message=recovery.querySelector('.boot-message');if(title)title.textContent='Стабільна версія не завантажилась';if(message)message.textContent='Оновіть сторінку. Якщо проблема повториться, повідомте адміністратора.';}throw error;});
