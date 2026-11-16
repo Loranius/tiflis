@@ -15,3 +15,4 @@ dist/
 .github/skills/impeccable/scripts/bin/
 .claude/skills/impeccable/scripts/bin/
 .claude/settings.local.json
+.superpowers/
