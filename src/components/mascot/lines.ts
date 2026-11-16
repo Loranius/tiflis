@@ -12,19 +12,23 @@ export type Mood = 'happy' | 'neutral' | 'sad' | 'smug';
 export interface Line { text: string; mood: Mood }
 export type Rnd = () => number;
 
-export type CashVerdict = 'high' | 'normal' | 'low' | 'first';
+export type CashVerdict = 'weak' | 'meh' | 'okay' | 'great' | 'epic';
 export type ShiftVerdict = 'lazy' | 'normal' | 'hard';
 
 const OFF_SHIFTS = new Set(['Х', 'О']);
 const BREAKFAST_SHIFTS = new Set(['СН', 'СН/Б']);
 
-/** ≥ +25% over the month average is high, ≤ −25% is low; no average yet is «first». */
-export function judgeCash(amount: number, monthAverage: number | null): CashVerdict {
-  if (!monthAverage || monthAverage <= 0) return 'first';
-  const ratio = amount / monthAverage;
-  if (ratio >= 1.25) return 'high';
-  if (ratio <= 0.75) return 'low';
-  return 'normal';
+/**
+ * The day's cash in hryvnias (owner, November 2026): under 10 000 is weak,
+ * 10–25 000 so-so, 25–35 000 fine, 35–50 000 great, 50 000 and up epic.
+ * Each boundary belongs to the higher tier.
+ */
+export function judgeCash(amount: number): CashVerdict {
+  if (amount >= 50_000) return 'epic';
+  if (amount >= 35_000) return 'great';
+  if (amount >= 25_000) return 'okay';
+  if (amount >= 10_000) return 'meh';
+  return 'weak';
 }
 
 /** A working day is any non-empty shift code except Х (вихідний) and О (відпустка). */
@@ -95,63 +99,72 @@ function say(pool: readonly string[], mood: Mood, rnd: Rnd, values: Record<strin
   return { text: fill(item, values), mood };
 }
 
-const CASH_HIGH = [
-  '{amount}! Оце я розумію — каса. Гості сьогодні плакали, але платили.',
-  '{amount} — на {percent}% більше, ніж зазвичай. Хто ти і куди поділося ледащо, що тут працювало?',
-  'Ого, {amount}. Я аж тісто розправив від гордості.',
-  '{amount}. Сьогодні продажі такі, ніби в тебе кредит на хінкалі.',
-  'Чесно? Не чекав. {amount} при середній {average}. Записую в легенди.',
-  '{amount}! Тримай темп, бо завтра я знову чекатиму дива.',
-  'Каса {amount}. Шеф уже думає, чи не підняти тобі ставку. Жартую, не думає.',
-  'Ну нарешті! {amount} — ось так виглядає робота, а не прогулянка між столами.',
-  '{amount}. Якщо так і далі, я почну тебе поважати. Трохи.',
-  'Плюс {percent}% до твоєї середньої. Сьогодні ти — хінкалі з подвійним бульйоном.',
-  '{amount}. Або в залі скінчилося вино, або гості під гіпнозом. Обидва варіанти схвалюю.',
-  'Оце виторг! {amount}. Іди похвалися, поки не почалася наступна зміна.',
-  '{amount}? Красиво. Я б потиснув тобі руку, але в мене ручки маленькі.',
-  '{amount} — найкращий аргумент, що ти тут не випадково.',
-  'Рекорди тремтять. {amount} при твоїх звичайних {average}.',
-];
-
-const CASH_NORMAL = [
-  '{amount}. Стабільно, як бульйон у хінкалі. Але бульйон хоч гарячий.',
-  '{amount} — рівно твій рівень. Ні соромно, ні гордо.',
-  'Каса {amount}. Нормально. Слово «нормально» тут ключове.',
-  '{amount}. Без провалу і без сюрпризу. Класика.',
-  'Записав {amount}. Золота середина — теж нагорода.',
-  '{amount}. Можна краще, але й гірше ми вже бачили.',
-  '{amount}. Сірий будній день у цифрах.',
-  'Окей, {amount}. Завтра спробуй продати бодай один десерт понад план.',
-  '{amount}. Ти як стабільний інтернет: ніхто не хвалить, але без тебе погано.',
-  'Каса як каса: {amount}. Я позіхнув, але по-доброму.',
-  '{amount}. Твоя середня — {average}. Ти буквально в ній живеш.',
-  '{amount}. Не катастрофа. І не тріумф. Просто вівторок, навіть якщо не вівторок.',
-];
-
-const CASH_LOW = [
+/* Cash lines by tier; {amount} is the day's cash, formatted. */
+const CASH_WEAK = [
   '{amount}? Це каса чи чайові за каву?',
-  '{amount}. Твоя середня {average}. Сьогодні, схоже, увімкнено режим енергозбереження.',
-  'Ох. {amount}. Я навіть тісто стиснув від розчарування.',
-  '{amount}. Гості, мабуть, тебе не помітили. Або ти їх.',
-  'На {percent}% менше за твоє звичайне. Гостям що, пропонували лише воду з-під крана?',
+  '{amount}. Я розчарований. Тісто аж обвисло.',
+  'Ох. {amount}. Гості сьогодні тебе не помітили. Або ти їх.',
   '{amount}. Я бачив хінкалі, що заробляли більше, просто лежачи на тарілці.',
   'Каса {amount}. Давай вдамо, що цього не було, і завтра зробимо нормально.',
   '{amount}… Столи сьогодні обслуговували чи охороняли?',
   '{amount}. Слабенько. Навіть бульйон із мене витік би від сорому.',
   'Сьогодні {amount}. Хочеш, я завтра сам піду до гостей? Гірше точно не буде.',
   '{amount}. Десерти, вино, допродаж — тобі ці слова щось кажуть?',
-  '{amount}. Мінус {percent}% від твоєї ж норми. Рекорд, тільки в інший бік.',
-  'Ну таке. {amount}. Я в тебе вірив. Учора.',
   '{amount}. Якщо це був план, то план був дивний.',
+  'До десяти тисяч не дотягнули: {amount}. Завтра — реванш.',
+  '{amount}. Гостям що, пропонували лише воду з-під крана?',
 ];
 
-const CASH_FIRST = [
-  'Перша каса місяця — {amount}. Почнемо рахувати, хто ти є насправді.',
-  '{amount} для старту. Подивимось, чи це розгін, чи стеля.',
-  'Відкрили місяць на {amount}. Я вже стежу.',
-  '{amount}. Порівнювати ще нема з чим, тож поки що без знущань. Поки що.',
-  'Записав {amount}. Перший млинець, тобто хінкалі, нормальний.',
-  '{amount} — перша цеглинка місяця. Будуй далі.',
+const CASH_MEH = [
+  '{amount}. Ну, туди-сюди. Можна краще, але й не провал.',
+  '{amount} — непогано, але ти можеш більше, я знаю.',
+  'Каса {amount}. Можна постаратися. Але загалом — живемо.',
+  '{amount}. Не соромно. І не гордо. Середнячковий день.',
+  '{amount}. Ще трохи вина й десертів — і було б гарно.',
+  'Записав {amount}. Так собі, але жити можна.',
+  '{amount}. Нормальний старт, а де фініш?',
+  '{amount}. Я б поставив «задовільно». З плюсиком. Маленьким.',
+  '{amount}. Не біда, але й не свято. Завтра піднажмемо.',
+  '{amount}. Ти розминаєшся чи це вже вся сила?',
+];
+
+const CASH_OKAY = [
+  '{amount}! О, нормально. Піде.',
+  '{amount}. Добре! Отак уже можна працювати.',
+  'Каса {amount}. Хороший день, без питань.',
+  '{amount}. Пойде, пойде. Навіть я задоволений.',
+  '{amount}. Отак тримати, впевнено й рівно.',
+  'О, {amount}! Це вже не «туди-сюди», це нормальна каса.',
+  '{amount}. Добротно. Шеф кивнув би.',
+  '{amount}. Хороша робота. Ще трошки — і буде супер.',
+  '{amount}. Гості задоволені, каса задоволена, я задоволений.',
+  '{amount}. Солідно. Записую в хороші дні.',
+];
+
+const CASH_GREAT = [
+  '{amount}! О, це вже супер!',
+  '{amount}. Оце я розумію — каса! Гості плакали, але платили.',
+  'Ого, {amount}. Я аж тісто розправив від гордості.',
+  '{amount}. Сьогодні продажі такі, ніби в тебе кредит на хінкалі.',
+  '{amount}! Ти сьогодні в ударі. Хороша робота!',
+  'Супер-день: {amount}. Тримай темп!',
+  '{amount}. Або в залі скінчилося вино, або гості під гіпнозом. Схвалюю.',
+  '{amount}! Шеф уже думає, чи не підняти тобі ставку. Жартую. Мабуть.',
+  '{amount} — найкращий аргумент, що ти тут не випадково.',
+  '{amount}. Красиво! Я б потиснув тобі руку, але в мене ручки маленькі.',
+];
+
+const CASH_EPIC = [
+  '{amount}!!! Це просто захват! Потужно!',
+  '{amount}! Я в шоці. Аплодую стоячи. Я завжди стою, але зараз — особливо.',
+  'ПОТУЖНО! {amount}! Рекорди тремтять!',
+  '{amount}. Увесь ресторан продано разом із меблями? Неймовірно!',
+  '{amount}! Легенда. Записую в історію Тифлісу золотими літерами.',
+  '{amount}! Бульйон кипить від захвату!',
+  'Це не каса, це феєрверк: {amount}!',
+  '{amount}! Я стрибаю від щастя. Буквально, дивись.',
+  '{amount}. Слів нема, самі оплески!',
+  '{amount}! Гості пішли щасливі, а каса — ще щасливіша. Потужно!',
 ];
 
 /* {days} is «N змін/зміни/зміна» and {off} «N вихідних/вихідні/вихідний», already agreed. */
@@ -287,21 +300,13 @@ export function dropLine(rnd: Rnd): Line {
   return say(DROP, 'neutral', rnd);
 }
 
-function percentDelta(amount: number, average: number | null): number {
-  if (!average) return 0;
-  return Math.round(Math.abs(amount / average - 1) * 100);
-}
-
-export function cashLine(verdict: CashVerdict, amount: number, average: number | null, rnd: Rnd): Line {
-  const values = {
-    amount: formatHryvnia(amount),
-    average: average ? formatHryvnia(average) : '—',
-    percent: percentDelta(amount, average),
-  };
-  if (verdict === 'high') return say(CASH_HIGH, 'happy', rnd, values);
-  if (verdict === 'low') return say(CASH_LOW, 'sad', rnd, values);
-  if (verdict === 'first') return say(CASH_FIRST, 'neutral', rnd, values);
-  return say(CASH_NORMAL, 'neutral', rnd, values);
+export function cashLine(verdict: CashVerdict, amount: number, rnd: Rnd): Line {
+  const values = { amount: formatHryvnia(amount) };
+  if (verdict === 'epic') return say(CASH_EPIC, 'happy', rnd, values);
+  if (verdict === 'great') return say(CASH_GREAT, 'happy', rnd, values);
+  if (verdict === 'okay') return say(CASH_OKAY, 'neutral', rnd, values);
+  if (verdict === 'meh') return say(CASH_MEH, 'neutral', rnd, values);
+  return say(CASH_WEAK, 'sad', rnd, values);
 }
 
 export function shiftLine(verdict: ShiftVerdict, workDays: number, offDays: number, rnd: Rnd): Line {

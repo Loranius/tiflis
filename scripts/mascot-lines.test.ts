@@ -17,13 +17,17 @@ import {
   tomorrowKey,
 } from '../src/components/mascot/lines.ts';
 
-test('judgeCash thresholds', () => {
-  assert.equal(judgeCash(7500, 6000), 'high');
-  assert.equal(judgeCash(7499, 6000), 'normal');
-  assert.equal(judgeCash(4500, 6000), 'low');
-  assert.equal(judgeCash(4501, 6000), 'normal');
-  assert.equal(judgeCash(5000, null), 'first');
-  assert.equal(judgeCash(5000, 0), 'first');
+test('judgeCash tiers in hryvnias (owner, November 2026)', () => {
+  assert.equal(judgeCash(0), 'weak');
+  assert.equal(judgeCash(9999), 'weak');
+  assert.equal(judgeCash(10000), 'meh');
+  assert.equal(judgeCash(24999), 'meh');
+  assert.equal(judgeCash(25000), 'okay');
+  assert.equal(judgeCash(34999), 'okay');
+  assert.equal(judgeCash(35000), 'great');
+  assert.equal(judgeCash(49999), 'great');
+  assert.equal(judgeCash(50000), 'epic');
+  assert.equal(judgeCash(180000), 'epic');
 });
 
 test('shift counting', () => {
@@ -48,9 +52,12 @@ test('pick avoids the previous index', () => {
 
 test('lines carry numbers and moods', () => {
   const rnd = () => 0;
-  assert.match(cashLine('high', 7400, 5000, rnd).text, /7\s400/);
-  assert.equal(cashLine('high', 7400, 5000, rnd).mood, 'happy');
-  assert.equal(cashLine('low', 2000, 5000, rnd).mood, 'sad');
+  assert.match(cashLine('great', 41400, rnd).text, /41\s400/);
+  assert.equal(cashLine('weak', 7000, rnd).mood, 'sad');
+  assert.equal(cashLine('meh', 15000, rnd).mood, 'neutral');
+  assert.equal(cashLine('okay', 30000, rnd).mood, 'neutral');
+  assert.equal(cashLine('great', 40000, rnd).mood, 'happy');
+  assert.equal(cashLine('epic', 60000, rnd).mood, 'happy');
   assert.match(shiftLine('lazy', 6, 24, rnd).text, /6/);
   assert.match(dishLine('Хачапурі по-аджарськи', null, rnd).text, /Хачапурі/);
   assert.ok(dishLine('Х', 'Перше речення. Друге речення.', rnd).text.length <= 220);
@@ -68,7 +75,7 @@ test('no template placeholder survives', () => {
   for (let i = 0; i < 60; i += 1) {
     const r = Math.random;
     const lines = [
-      cashLine('high', 9000, 6000, r), cashLine('normal', 6000, 6000, r), cashLine('low', 3000, 6000, r), cashLine('first', 5000, null, r),
+      cashLine('weak', 7000, r), cashLine('meh', 15000, r), cashLine('okay', 30000, r), cashLine('great', 40000, r), cashLine('epic', 60000, r),
       shiftLine('lazy', 7, 23, r), shiftLine('normal', 12, 18, r), shiftLine('hard', 20, 10, r),
       breakfastLine('СН/Б', r), dishLine('Хінкалі', 'Тісто, яловичина і бульйон. Їдять руками.', r),
     ];
@@ -95,7 +102,7 @@ function everyLine(): string[] {
   for (let i = 0; i < 600; i += 1) {
     const r = Math.random;
     [
-      cashLine('high', 9000, 6000, r), cashLine('normal', 6000, 6000, r), cashLine('low', 3000, 6000, r), cashLine('first', 5000, null, r),
+      cashLine('weak', 7000, r), cashLine('meh', 15000, r), cashLine('okay', 30000, r), cashLine('great', 40000, r), cashLine('epic', 60000, r),
       shiftLine('lazy', 6, 24, r), shiftLine('normal', 12, 18, r), shiftLine('hard', 30, 0, r),
       breakfastLine('СН', r), roastLine(r), tapLine(r), greetingLine(r),
     ].forEach((line) => seen.add(line.text));
@@ -104,7 +111,7 @@ function everyLine(): string[] {
 }
 
 test('lines address the viewer without assuming gender', () => {
-  const masculine = /(ти прийшов|продавав|продав усе|загіпнотизував|працював|Не підвів|не здивував|Середнячок|пропонував|обслуговував|Сам себе|обігнав|архітекторе|сертифікований|хто ти такий|Ні ледар, ні герой|— герой|героє|пробував|порахував|не зробив|допродав|сам бачиш|здатен)/;
+  const masculine = /(ти прийшов|продавав|продав |загіпнотизував|працював|Не підвів|не здивував|Середнячок|пропонував|обслуговував|Сам себе|обігнав|архітекторе|сертифікований|хто ти такий|Ні ледар, ні герой|— герой|героє|пробував|порахував|не зробив|допродав|сам бачиш|здатен)/;
   for (const text of everyLine()) assert.doesNotMatch(text, masculine, text);
 });
 

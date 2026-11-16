@@ -41,3 +41,49 @@ test('positions are kept fully on screen', () => {
   assert.deepEqual(clampPosition({ left: 999, top: 999 }, size, vp), { left: 390 - 56 - 8, top: 844 - 60 - 8 });
   assert.deepEqual(clampPosition({ left: 100, top: 300 }, size, vp), { left: 100, top: 300 });
 });
+
+import { releaseVelocity, stepGlide, type Glide } from '../src/components/mascot/physics.ts';
+
+const box = { width: 56, height: 60 };
+const screen = { width: 390, height: 844 };
+
+function glideFor(start: Glide, seconds: number): { state: Glide; bounces: number } {
+  let state = start;
+  let bounces = 0;
+  for (let i = 0; i < seconds * 60; i += 1) {
+    const next = stepGlide(state, 1 / 60, box, screen);
+    if (next.bounced) bounces += 1;
+    state = next.state;
+  }
+  return { state, bounces };
+}
+
+test('a flick glides, slows down by friction and stops within a few seconds', () => {
+  const { state } = glideFor({ left: 160, top: 400, vx: 900, vy: -600 }, 4);
+  assert.equal(state.vx, 0);
+  assert.equal(state.vy, 0);
+});
+
+test('it bounces off the screen edges like a billiard ball and stays on screen', () => {
+  const { state, bounces } = glideFor({ left: 300, top: 400, vx: 2500, vy: 0 }, 4);
+  assert.ok(bounces >= 1, 'bounced');
+  assert.ok(state.left >= 8 && state.left <= screen.width - box.width - 8, `left ${state.left}`);
+  assert.ok(state.top >= 8 && state.top <= screen.height - box.height - 8);
+});
+
+test('a bounce reverses the speed and loses some of it', () => {
+  const next = stepGlide({ left: screen.width - box.width - 9, top: 300, vx: 1200, vy: 0 }, 1 / 60, box, screen);
+  assert.ok(next.bounced);
+  assert.ok(next.state.vx < 0 && Math.abs(next.state.vx) < 1200);
+});
+
+test('release velocity comes from the last ~100 ms of the drag; a slow release does not glide', () => {
+  const fast = releaseVelocity([{ x: 100, y: 300, t: 1000 }, { x: 140, y: 290, t: 1050 }, { x: 190, y: 280, t: 1100 }]);
+  assert.ok(fast && Math.abs(fast.vx - 900) < 1 && Math.abs(fast.vy + 200) < 1);
+  assert.equal(releaseVelocity([{ x: 100, y: 300, t: 1000 }, { x: 103, y: 300, t: 1100 }]), null);
+  // Samples older than 120 ms before the last one are ignored (the finger paused, then let go).
+  assert.equal(releaseVelocity([{ x: 0, y: 0, t: 0 }, { x: 300, y: 0, t: 100 }, { x: 301, y: 0, t: 400 }]), null);
+  // Speed is capped.
+  const wild = releaseVelocity([{ x: 0, y: 0, t: 0 }, { x: 900, y: 0, t: 20 }]);
+  assert.ok(wild && Math.hypot(wild.vx, wild.vy) <= 3000 + 1e-6);
+});

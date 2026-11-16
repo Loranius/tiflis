@@ -3,7 +3,7 @@ import { m, useReducedMotion } from 'motion/react';
 import { Khinkali } from './Khinkali';
 import { ACT_MS, nextActDelay, pickAct, planStroll, reactionFor, type Act, type Beat } from './acting';
 import { dropLine, pickupLine, tapLine, type Line, type Mood } from './lines';
-import { clampPosition, isAtRest, stepPendulum, type Pendulum } from './physics';
+import { clampPosition, isAtRest, isGliding, releaseVelocity, stepGlide, stepPendulum, type Glide, type Pendulum } from './physics';
 import { useMascotReactions } from './reactions';
 import './mascot.css';
 
@@ -157,6 +157,9 @@ export function MascotLayer() {
   const swing = useRef<Pendulum>({ angle: 0, velocity: 0 });
   const hand = useRef({ x: 0, lastX: 0, velocity: 0, lastTime: 0 });
   const frame = useRef(0);
+  // Thrown: the slide in progress, and the last pointer samples of the drag.
+  const glide = useRef<Glide | null>(null);
+  const samples = useRef<Array<{ x: number; y: number; t: number }>>([]);
 
   useMascotReactions(say, !hidden, () => busyRef.current);
 
@@ -241,7 +244,7 @@ export function MascotLayer() {
   }, []);
 
   const canAct = useCallback(
-    () => !reduce && !hiddenRef.current && !document.hidden && !draggingRef.current,
+    () => !reduce && !hiddenRef.current && !document.hidden && !draggingRef.current && !glide.current,
     [reduce],
   );
 
@@ -366,11 +369,27 @@ export function MascotLayer() {
       const rawVelocity = (hand.current.x - hand.current.lastX) / dt;
       hand.current.lastX = hand.current.x;
       const velocity = hand.current.velocity + (rawVelocity - hand.current.velocity) * 0.35;
-      const accel = draggingRef.current ? Math.max(-40_000, Math.min(40_000, (velocity - hand.current.velocity) / dt)) : 0;
+      let accel = draggingRef.current ? Math.max(-40_000, Math.min(40_000, (velocity - hand.current.velocity) / dt)) : 0;
       hand.current.velocity = draggingRef.current ? velocity : 0;
+      // Thrown: slide, bounce off the edges; the knot's change of speed swings the body.
+      if (glide.current && !draggingRef.current) {
+        const before = glide.current;
+        const { state } = stepGlide(before, dt, SIZE, viewport());
+        accel = Math.max(-40_000, Math.min(40_000, (state.vx - before.vx) / dt));
+        const placed = { left: Math.round(state.left), top: Math.round(state.top) };
+        positionRef.current = placed;
+        setPosition(placed);
+        if (isGliding(state)) {
+          glide.current = state;
+        } else {
+          glide.current = null;
+          savePosition(placed);
+          if (Math.random() < 0.5) say(dropLine(Math.random));
+        }
+      }
       swing.current = stepPendulum(swing.current, accel, dt, draggingRef.current ? HELD_DAMPING : RELEASED_DAMPING);
       applySwing();
-      if (!draggingRef.current && isAtRest(swing.current)) {
+      if (!draggingRef.current && !glide.current && isAtRest(swing.current)) {
         swing.current = { angle: 0, velocity: 0 };
         applySwing();
         frame.current = 0;
@@ -394,6 +413,11 @@ export function MascotLayer() {
 
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (glide.current) {
+      // Caught mid-slide: he stops where the finger met him.
+      glide.current = null;
+      savePosition(positionRef.current);
+    }
     press.current = { x: event.clientX, y: event.clientY, id: event.pointerId };
     suppressClick.current = false;
     window.clearTimeout(pressTimer.current);
@@ -418,10 +442,13 @@ export function MascotLayer() {
       stopActing();
       try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* pointer already gone: keep dragging without capture */ }
       hand.current.x = event.clientX;
+      samples.current = [];
       if (Math.random() < 0.5) say(pickupLine(Math.random));
       runSwing();
     }
     moveTo(event.clientX, event.clientY);
+    samples.current.push({ x: event.clientX, y: event.clientY, t: performance.now() });
+    if (samples.current.length > 12) samples.current.shift();
   }, [moveTo, runSwing, stopActing]);
 
   const endPress = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -433,10 +460,19 @@ export function MascotLayer() {
     setDragging(false);
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* not captured */ }
     const placed = positionRef.current ? clampPosition(positionRef.current, SIZE, viewport()) : null;
+    positionRef.current = placed;
     setPosition(placed);
+    // Let go mid-flick: he slides on like a billiard ball (the swing loop moves him).
+    const throwSpeed = reduce || !placed ? null : releaseVelocity(samples.current);
+    samples.current = [];
+    if (throwSpeed && placed) {
+      glide.current = { left: placed.left, top: placed.top, vx: throwSpeed.vx, vy: throwSpeed.vy };
+      runSwing();
+      return;
+    }
     savePosition(placed);
     if (Math.random() < 0.5) say(dropLine(Math.random));
-  }, []);
+  }, [reduce, runSwing]);
 
   const onClick = useCallback(() => {
     if (suppressClick.current) {
@@ -462,7 +498,7 @@ export function MascotLayer() {
     hitRef.current?.focus();
   }, []);
 
-  busyRef.current = away || dragging || Boolean(bubble) || queue.current.length > 0;
+  busyRef.current = away || dragging || Boolean(glide.current) || Boolean(bubble) || queue.current.length > 0;
 
   // Bubble and menu open toward the roomy side of the screen.
   const [side, setSide] = useState({ left: false, below: false });
