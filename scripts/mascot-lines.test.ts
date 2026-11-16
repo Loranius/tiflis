@@ -75,3 +75,16 @@ test('no template placeholder survives', () => {
     for (const line of lines) assert.doesNotMatch(line.text, /\{[a-z]+\}/);
   }
 });
+
+test('shift numbers agree with their nouns', () => {
+  for (let i = 0; i < 80; i += 1) {
+    const r = Math.random;
+    const hard = shiftLine('hard', 22, 8, r).text;
+    assert.doesNotMatch(hard, /22 (робочих|змін\b)/);
+    const lazy = shiftLine('lazy', 1, 29, r).text;
+    assert.doesNotMatch(lazy, /\b1 (змін|робочих|зміни)\b/);
+    assert.doesNotMatch(lazy, /29 вихідні\b/);
+    const normal = shiftLine('normal', 12, 18, r).text;
+    assert.doesNotMatch(normal, /12 (зміни|робочі)\b/);
+  }
+});

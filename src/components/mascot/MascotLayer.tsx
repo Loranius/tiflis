@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 import { Khinkali } from './Khinkali';
 import { tapLine, type Line, type Mood } from './lines';
+import { useMascotReactions } from './reactions';
 import './mascot.css';
 
 /* ─── Speaking from anywhere ─── */
@@ -96,6 +97,8 @@ export function MascotLayer() {
   const pressTimer = useRef(0);
   const pressedLong = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  useMascotReactions(say, !hidden);
 
   // Lines from anywhere join the queue.
   useEffect(() => {
