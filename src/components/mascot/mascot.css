@@ -1,0 +1,42 @@
+/* ─── Хінкалик (the portal mascot) ───
+ * Drawing in Khinkali.tsx, behaviour in MascotLayer.tsx. Loops here are the
+ * character's idle life (breathing, blinking, stepping): they only run while
+ * motion is allowed and the mascot is not `is-still`.
+ */
+
+.mk { display: block; overflow: visible; }
+.mk-turn, .mk-body, .mk-leg, .mk-arm, .mk-eyes { transform-box: fill-box; }
+.mk-turn { transform-origin: center; }
+
+.mk-dough { fill: #F1E6CC; stroke: #CDB98F; stroke-width: 1.2; }
+.mk-pleats path { fill: none; stroke: #D3BF94; stroke-width: 1.3; stroke-linecap: round; }
+.mk-knot { fill: #EADBB8; stroke: #CDB98F; stroke-width: 1.1; stroke-linejoin: round; }
+.mk-cheek { fill: rgba(209, 180, 107, 0.45); }
+.mk-eyes circle { fill: #2B2A29; }
+.mk-brows path, .mk-mouth { fill: none; stroke: #2B2A29; stroke-width: 1.6; stroke-linecap: round; }
+.mk-arm path { fill: none; stroke: #E4D3AE; stroke-width: 3.4; stroke-linecap: round; }
+.mk-leg rect { fill: #E4D3AE; stroke: #CDB98F; stroke-width: 1; }
+
+.mk-body { transform-origin: 50% 100%; }
+.mk-eyes { transform-origin: center; }
+.mk-leg { transform-origin: 50% 0; }
+.mk-arm-l { transform-origin: 100% 0; }
+.mk-arm-r { transform-origin: 0 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .mk:not(.is-still) .mk-body { animation: mk-breathe 3.2s ease-in-out infinite; }
+  .mk:not(.is-still) .mk-eyes { animation: mk-blink 4.6s linear infinite; }
+  .mk.is-walking:not(.is-still) .mk-body { animation: mk-bob 0.36s ease-in-out infinite; }
+  .mk.is-walking:not(.is-still) .mk-leg-l { animation: mk-step 0.36s ease-in-out infinite; }
+  .mk.is-walking:not(.is-still) .mk-leg-r { animation: mk-step 0.36s ease-in-out infinite reverse; }
+  .mk.is-walking:not(.is-still) .mk-arm-l { animation: mk-swing 0.36s ease-in-out infinite; }
+  .mk.is-walking:not(.is-still) .mk-arm-r { animation: mk-swing 0.36s ease-in-out infinite reverse; }
+  .mk.is-happy:not(.is-still):not(.is-walking) .mk-arm-r { animation: mk-wave 0.9s ease-in-out 2; }
+}
+
+@keyframes mk-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.975) scaleX(1.012); } }
+@keyframes mk-blink { 0%, 93%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(0.12); } }
+@keyframes mk-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes mk-step { 0%, 100% { transform: rotate(16deg); } 50% { transform: rotate(-16deg); } }
+@keyframes mk-swing { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg); } }
+@keyframes mk-wave { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-38deg); } }
