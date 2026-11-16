@@ -27,7 +27,8 @@ import { useSearchParams } from 'react-router';
 import { useAuth } from '../auth/AuthProvider';
 import { CashTopList, rankMovement, type CashTopPeriod, type CashTopRow } from '../components/CashTopList';
 import { peekSecureApi, secureApi } from '../lib/secureApi';
-import { CountUp, SegThumb, TabLine } from '../lib/motion';
+import { CountUp, SegThumb, TabLine, playDialogExit } from '../lib/motion';
+import { Overlay } from '../components/Overlay';
 import { getKyivDateKey } from '../lib/time';
 import './cash-v3.css';
 
@@ -278,6 +279,8 @@ export function CashPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [editor, setEditor] = useState<DayEditorState | null>(null);
   const [dayView, setDayView] = useState<DayView>(() => readDayView());
+  // The day just saved: its row in «Записи» glows once so the eye finds it.
+  const [freshDate, setFreshDate] = useState<string | null>(null);
   const requestId = useRef(0);
 
   useEffect(() => {
@@ -399,6 +402,7 @@ export function CashPage() {
 
   function openDay(date: string) {
     setActionError(null);
+    setFreshDate(null);
     const entry = entryByDate.get(date);
     const extra = extraByDate.get(date);
     setEditor({
@@ -431,6 +435,7 @@ export function CashPage() {
         extra_note: next.note,
       });
       await load();
+      setFreshDate(next.date);
       return true;
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'Запис не збережено. Перевір зʼєднання і спробуй ще раз.');
@@ -616,7 +621,7 @@ export function CashPage() {
                       onClick={() => openDay(day.date)}
                       aria-label={`${formatDay(day.date)}: ${day.cash > 0 ? money(day.cash) : 'без каси'}`}
                     >
-                      <span className="cv3-bar-track"><span className="cv3-bar-fill" style={{ height: `${height}%` }} /></span>
+                      <span className="cv3-bar-track"><span className="cv3-bar-fill" style={{ clipPath: `inset(${100 - height}% 0 0 0 round 6px 6px 3px 3px)` }} /></span>
                       <span className="cv3-day-num">{showLabel ? day.day : ''}</span>
                     </button>
                   );
@@ -663,8 +668,9 @@ export function CashPage() {
                       record.tips > 0 ? `чайові ${money(record.tips)}` : '',
                       record.extra !== 0 ? `доплата ${money(record.extra)}${record.note ? `, ${record.note}` : ''}` : '',
                     ].filter(Boolean).join(' · ');
+                    const fresh = record.date === freshDate;
                     return (
-                      <li key={record.date}>
+                      <li key={`${record.date}${fresh ? '-fresh' : ''}`} className={fresh ? 'is-fresh' : undefined}>
                         <button type="button" onClick={() => openDay(record.date)} disabled={!canEdit}>
                           <span className="cv3-rec-main">
                             <strong>{formatListDay(record.date)}</strong>
@@ -700,6 +706,7 @@ export function CashPage() {
       ) : null}
 
       {editor ? (
+        <Overlay>
         <DayEditor
           key={editor.date}
           initial={editor}
@@ -710,10 +717,11 @@ export function CashPage() {
           saving={saving}
           error={actionError}
           onDateChange={(date) => openDay(date)}
-          onClose={() => { if (!saving) setEditor(null); }}
-          onSave={async (next) => { if (await saveDay(next)) setEditor(null); }}
-          onDelete={async (date) => { if (await deleteDay(date)) setEditor(null); }}
+          onClose={() => setEditor(null)}
+          onSave={saveDay}
+          onDelete={deleteDay}
         />
+        </Overlay>
       ) : null}
     </div>
   );
@@ -808,9 +816,11 @@ interface DayEditorProps {
   saving: boolean;
   error: string | null;
   onDateChange: (date: string) => void;
+  /** Unmounts the dialog; DayEditor calls it after its exit animation. */
   onClose: () => void;
-  onSave: (next: DayEditorState) => void;
-  onDelete: (date: string) => void;
+  /** Resolve true on success; the dialog then leaves. */
+  onSave: (next: DayEditorState) => Promise<boolean>;
+  onDelete: (date: string) => Promise<boolean>;
 }
 
 function DayEditor({
@@ -830,6 +840,8 @@ function DayEditor({
   const [extraOpen, setExtraOpen] = useState(Boolean(asNumber(initial.extra) || initial.note));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const closing = useRef(false);
   const cashRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const lastDay = dateForDay(month, daysInMonth);
@@ -861,8 +873,24 @@ function DayEditor({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  /** Leave with the exit animation, then unmount. Ignored while saving or already leaving. */
+  async function close() {
+    if (saving || closing.current) return;
+    closing.current = true;
+    await playDialogExit(backdropRef.current, sheetRef.current);
+    onClose();
+  }
+
+  async function finish(action: Promise<boolean>) {
+    if (await action) {
+      closing.current = true;
+      await playDialogExit(backdropRef.current, sheetRef.current);
+      onClose();
+    }
+  }
+
   return (
-    <div className="cv3-sheet-backdrop" onMouseDown={onClose}>
+    <div ref={backdropRef} className="cv3-sheet-backdrop" onMouseDown={close}>
       <div
         ref={sheetRef}
         className="cv3-sheet"
@@ -873,14 +901,14 @@ function DayEditor({
       >
         <div className="cv3-sheet-head">
           <h2 id={titleId}>{formatDay(form.date)}</h2>
-          <button type="button" className="cv3-icon-btn" onClick={onClose} aria-label="Закрити" disabled={saving}><X size={20} /></button>
+          <button type="button" className="cv3-icon-btn" onClick={() => void close()} aria-label="Закрити" disabled={saving}><X size={20} /></button>
         </div>
 
         <form
           className="cv3-form"
           onSubmit={(event) => {
             event.preventDefault();
-            onSave(form);
+            void finish(onSave(form));
           }}
         >
           <label className="cv3-field">
@@ -972,7 +1000,7 @@ function DayEditor({
           <div className="cv3-sheet-actions">
             {exists ? (
               confirmDelete ? (
-                <button type="button" className="cv3-danger is-confirm" disabled={saving} onClick={() => onDelete(form.date)}>
+                <button type="button" className="cv3-danger is-confirm" disabled={saving} onClick={() => void finish(onDelete(form.date))}>
                   <Trash2 size={17} /> Так, видалити
                 </button>
               ) : (

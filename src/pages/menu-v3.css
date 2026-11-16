@@ -214,8 +214,10 @@
   display: block;
   height: 100%;
   border-radius: 2px;
+  width: 100%;
   background: var(--t-gold);
-  transition: width 0.3s ease;
+  transform-origin: left center;
+  transition: transform 0.3s var(--t-ease-out);
 }
 
 .mv3-progress.is-big { height: 8px; border-radius: 4px; }
@@ -1012,14 +1014,14 @@
 .mv3-chips button,
 .mv3-topics button,
 .mv3-lessons button {
-  transition: background-color 0.15s ease, transform 0.15s ease;
+  transition: background-color 0.15s ease, transform 160ms var(--t-ease-out);
 }
 
 .mv3-primary:active:not(:disabled),
-.mv3-secondary:active:not(:disabled) { transform: scale(0.99); }
+.mv3-secondary:active:not(:disabled) { transform: scale(0.97); }
 
 /* Answer reveal: the text rises a few pixels under the card title. */
-.mv3-answer { animation: mv3-reveal 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+.mv3-answer { animation: mv3-reveal 0.28s var(--t-ease-out); }
 @keyframes mv3-reveal { from { opacity: 0; transform: translateY(8px); } }
 
 @media (prefers-reduced-motion: reduce) {

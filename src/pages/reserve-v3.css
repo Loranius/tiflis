@@ -54,12 +54,12 @@
   font-size: 16px;
   font-weight: 700;
   white-space: nowrap;
-  transition: background-color 0.15s ease, transform 0.15s ease;
+  transition: background-color 0.15s ease, transform 160ms var(--t-ease-out);
 }
 
 .rv3-primary { border: 0; background: var(--t-gold); color: var(--t-on-gold); }
 .rv3-primary.is-wide { width: 100%; }
-.rv3-primary:active:not(:disabled) { background: var(--t-gold-press); transform: scale(0.99); }
+.rv3-primary:active:not(:disabled) { background: var(--t-gold-press); transform: scale(0.97); }
 
 .rv3-secondary { border: 1px solid var(--t-line-strong); background: var(--t-surface-2); color: var(--t-text); font-weight: 600; }
 
