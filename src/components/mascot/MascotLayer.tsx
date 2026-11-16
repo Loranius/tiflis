@@ -59,7 +59,7 @@ export function useMascotHidden(): boolean {
 const POSITION_KEY = 'tiflis.mascot.position';
 const SIZE = { width: 56, height: 60 };
 /** The knot tip in the 56×60 drawing: this is where the finger holds him. */
-const KNOT = { x: 28, y: 5 };
+const KNOT = { x: 28, y: 4 };
 type Position = { left: number; top: number };
 
 function viewport() {

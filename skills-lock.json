@@ -8,6 +8,13 @@
       "skillPath": "skills/animate/SKILL.md",
       "computedHash": "c622e29fa956aea703dc4e2b8726d9a017d438beb284a60bc3fdb2540c602102"
     },
+    "create-svg-illustrations": {
+      "source": "narumiruna/skills",
+      "commit": "c1edf8dd2c1d5de034c177a42eaaaacc07c3d75c",
+      "sourceType": "github",
+      "skillPath": "visuals/skills/create-svg-illustrations/SKILL.md",
+      "computedHash": "86055b82d47bc0149dca7d9148235f40740d455ebed8658561b892fd5ca0ac33"
+    },
     "find-animation-opportunities": {
       "source": "emilkowalski/skills",
       "commit": "64eb3deb9a5fbfa041faf783e0bc3fd635872e9c",
@@ -34,6 +41,13 @@
       "sourceType": "github",
       "skillPath": "skills/review-animations/SKILL.md",
       "computedHash": "50f1de2394b88bb3433eca1e30da6866a4e310963d872a66af20ca77fd77f07d"
+    },
+    "svg-character-animation": {
+      "source": "openmontageinc/openmontage",
+      "commit": "2e003e65fa99a0f329478a2c1cdcf26bc481933a",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/svg-character-animation/SKILL.md",
+      "computedHash": "f97194f882d070bb45b0f75730944ed166a885c143883d595e433da81f1ccf69"
     }
   }
 }
