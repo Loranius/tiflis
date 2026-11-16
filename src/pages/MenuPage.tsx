@@ -537,7 +537,7 @@ function Trainer({ deck, lessons, progress, onStart, onReveal, onAnswer, onExit 
         <button type="button" className="mv3-link" onClick={onExit}><X size={16} aria-hidden="true" /> {deck.title}</button>
         <span>{deck.index + 1} з {deck.items.length}</span>
       </div>
-      <div className="mv3-progress" aria-hidden="true"><span style={{ width: `${(deck.index / deck.items.length) * 100}%` }} /></div>
+      <div className="mv3-progress" aria-hidden="true"><span style={{ transform: `scaleX(${deck.index / deck.items.length})` }} /></div>
 
       <article className="mv3-card">
         <Thumb item={item} size="card" />
@@ -579,7 +579,7 @@ function Plan({ lessons, progress, onStart }: { lessons: Lesson[]; progress: Map
     <section className="mv3-plan" aria-label="План вивчення">
       <div className="mv3-plan-hero">
         <p className="mv3-plan-figure"><b>{known}</b> з {total} {ofDishes(total)} кухні й сезонного меню</p>
-        <div className="mv3-progress is-big" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={known} aria-label="Вивчено страв"><span style={{ width: `${total ? (known / total) * 100 : 0}%` }} /></div>
+        <div className="mv3-progress is-big" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={known} aria-label="Вивчено страв"><span style={{ transform: `scaleX(${total ? known / total : 0})` }} /></div>
         {nextLesson ? (
           <button type="button" className="mv3-primary" onClick={() => onStart(nextLesson.title, nextLesson.items.filter((item) => progress.get(item.id) !== 'known'))}>Продовжити: {nextLesson.title}</button>
         ) : <p className="mv3-lead">Усе меню кухні вивчено. Повторюй у тренажері, коли зʼявляться нові страви.</p>}
@@ -596,7 +596,7 @@ function Plan({ lessons, progress, onStart }: { lessons: Lesson[]; progress: Map
                 <span className="mv3-lesson-copy">
                   <strong>{lesson.title}</strong>
                   <small>{done} з {lesson.items.length} знаю</small>
-                  <span className="mv3-progress" aria-hidden="true"><span style={{ width: `${(done / lesson.items.length) * 100}%` }} /></span>
+                  <span className="mv3-progress" aria-hidden="true"><span style={{ transform: `scaleX(${done / lesson.items.length})` }} /></span>
                 </span>
                 <ChevronRight size={16} aria-hidden="true" />
               </button>

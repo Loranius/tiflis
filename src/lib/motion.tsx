@@ -25,7 +25,6 @@ export const spring = {
 
 export const ease = {
   out: [0.23, 1, 0.32, 1] as const,
-  in: [0.55, 0, 1, 0.45] as const,
 };
 
 /** Wraps the app: loads the motion features once and honours «reduce motion». */
@@ -170,6 +169,23 @@ export function playDialogEnter(backdrop: Element | null, dialog: Element | null
     ],
     { duration: 420, easing: curve },
   );
+}
+
+/**
+ * The dialog's exit: the scrim fades and the sheet drops 12px while fading,
+ * in 160ms, faster than the entrance so the system's answer snaps. Resolves
+ * when it has finished (at once under «reduce motion»), so the caller can
+ * unmount the dialog afterwards.
+ */
+export function playDialogExit(backdrop: Element | null, dialog: Element | null): Promise<void> {
+  if (prefersReducedMotion()) return Promise.resolve();
+  const curve = `cubic-bezier(${ease.out.join(',')})`;
+  backdrop?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'linear', fill: 'forwards' });
+  const run = dialog?.animate?.(
+    [{ opacity: 1, translate: '0 0' }, { opacity: 0, translate: '0 12px' }],
+    { duration: 160, easing: curve, fill: 'forwards' },
+  );
+  return run ? run.finished.then(() => undefined, () => undefined) : Promise.resolve();
 }
 
 /**

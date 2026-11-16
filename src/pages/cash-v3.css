@@ -13,33 +13,34 @@
   font-variant-numeric: tabular-nums;
 }
 
-.cv3 h2,
-.cv3 h3,
-.cv3 p,
-.cv3 dl,
-.cv3 dd,
-.cv3 ol,
-.cv3 ul {
+/* The day dialog is portalled to <body> (Overlay), outside .cv3, so the base resets cover it too. */
+:is(.cv3, .cv3-sheet-backdrop) h2,
+:is(.cv3, .cv3-sheet-backdrop) h3,
+:is(.cv3, .cv3-sheet-backdrop) p,
+:is(.cv3, .cv3-sheet-backdrop) dl,
+:is(.cv3, .cv3-sheet-backdrop) dd,
+:is(.cv3, .cv3-sheet-backdrop) ol,
+:is(.cv3, .cv3-sheet-backdrop) ul {
   margin: 0;
   padding: 0;
 }
 
-.cv3 ::selection {
+:is(.cv3, .cv3-sheet-backdrop) ::selection {
   background: rgba(209, 180, 107, 0.35);
   color: var(--t-text);
 }
 
-.cv3 button {
+:is(.cv3, .cv3-sheet-backdrop) button {
   font: inherit;
   color: inherit;
   cursor: pointer;
 }
 
-.cv3 button:disabled {
+:is(.cv3, .cv3-sheet-backdrop) button:disabled {
   cursor: default;
 }
 
-.cv3 :focus-visible {
+:is(.cv3, .cv3-sheet-backdrop) :focus-visible {
   outline: 2px solid var(--t-gold);
   outline-offset: 2px;
 }
@@ -369,7 +370,7 @@
   color: var(--t-on-gold) !important;
   font-size: 16px !important;
   font-weight: 700 !important;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: background 0.15s ease, transform 160ms var(--t-ease-out);
 }
 
 .cv3-primary:hover:not(:disabled) {
@@ -378,7 +379,7 @@
 
 .cv3-primary:active:not(:disabled) {
   background: var(--t-gold-press);
-  transform: scale(0.99);
+  transform: scale(0.97);
 }
 
 .cv3-primary:disabled {
@@ -488,9 +489,11 @@
   position: relative;
   z-index: 1;
   width: 100%;
+  height: 100%;
   border-radius: 6px 6px 3px 3px;
   background: #5A5751;
-  transition: background 0.15s ease, height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  /* The fill is always full height; clip-path reveals the day's share, so no layout per frame. */
+  transition: background 0.15s ease, clip-path 0.35s var(--t-ease-out);
 }
 
 .cv3-day.is-best .cv3-bar-fill {
@@ -764,7 +767,6 @@
   align-items: flex-end;
   justify-content: center;
   background: rgba(8, 8, 7, 0.62);
-  animation: cv3-fade 0.18s ease-out;
 }
 
 .cv3-sheet {
@@ -780,7 +782,6 @@
   color: var(--t-text);
   font-family: var(--t-font);
   font-variant-numeric: tabular-nums;
-  animation: cv3-rise 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .cv3-sheet-head {
@@ -959,13 +960,6 @@
   background: var(--t-surface);
 }
 
-@keyframes cv3-fade {
-  from { opacity: 0; }
-}
-
-@keyframes cv3-rise {
-  from { transform: translateY(24px); opacity: 0.4; }
-}
 
 @media (min-width: 640px) {
   .cv3-sheet-backdrop {
@@ -1030,12 +1024,20 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* No movement, but colour and opacity feedback stays (The Still Rule). */
   .cv3 *,
   .cv3-sheet-backdrop,
   .cv3-sheet {
     animation: none !important;
-    transition: none !important;
   }
+  .cv3-bar-fill,
+  .cv3-carousel,
+  .cv3-primary,
+  .cv3-view-toggle {
+    transition-property: background, background-color, color, border-color, opacity !important;
+  }
+  .cv3-primary:active:not(:disabled),
+  .cv3-view-toggle:active { transform: none !important; }
 }
 
 /* ─── Каса по днях: chart ⇄ calendar carousel ─── */
@@ -1060,7 +1062,7 @@
   color: var(--t-text);
   font: 600 13px var(--t-font);
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.12s ease;
+  transition: background 0.15s ease, transform 160ms var(--t-ease-out);
 }
 .cv3-view-toggle svg { color: var(--t-gold); }
 .cv3-view-toggle:hover { background: var(--t-surface-3); }
@@ -1074,7 +1076,7 @@
   scroll-snap-type: x mandatory;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
-  transition: height 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: height 0.32s var(--t-ease-out);
   margin: 0 -2px;
 }
 .cv3-carousel::-webkit-scrollbar { display: none; }
@@ -1151,4 +1153,14 @@
 
 @media (prefers-reduced-motion: reduce) {
   .cv3-carousel { transition: none; scroll-behavior: auto; }
+}
+
+/* The day just saved glows once in «Записи», so the eye finds where it landed.
+   Colour only, so it also plays under «reduce motion» (it is state feedback). */
+.cv3-records li.is-fresh > button {
+  animation: cv3-fresh 1.2s var(--t-ease-out) both !important;
+}
+@keyframes cv3-fresh {
+  from { background: var(--t-gold-tint); }
+  to { background: transparent; }
 }

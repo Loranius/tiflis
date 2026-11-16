@@ -30,7 +30,7 @@
     color 160ms ease,
     border-color 160ms ease,
     background 160ms ease,
-    transform 160ms ease;
+    transform 160ms var(--t-ease-out);
 }
 
 .duties-page-tab-v1:hover {
@@ -39,7 +39,7 @@
 }
 
 .duties-page-tab-v1:active {
-  transform: scale(0.99);
+  transform: scale(0.98);
 }
 
 .duties-page-tab-v1 > span:first-child {

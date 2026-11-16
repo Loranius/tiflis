@@ -16,6 +16,8 @@
   --t-text-3: #A09A90;
   --t-gold: #D1B46B;           /* brand gold */
   --t-gold-press: #BFA25A;
+  /* The one ease-out curve for UI motion (same as `ease.out` in src/lib/motion.tsx). */
+  --t-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --t-gold-tint: rgba(209, 180, 107, 0.12);
   --t-gold-wash: rgba(209, 180, 107, 0.07);   /* today column, own row */
   --t-on-gold: #1A1918;

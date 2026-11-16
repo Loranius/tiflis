@@ -9,7 +9,7 @@
 /* The screen entrance itself is driven by Motion in AppShell (see motion.css). */
 
 .topbar-title-transition {
-  animation: topbar-title-enter 90ms cubic-bezier(.2, .8, .2, 1) both;
+  animation: topbar-title-enter 90ms var(--t-ease-out) both;
 }
 
 .nav-item,
@@ -19,13 +19,13 @@
     color 105ms ease,
     background-color 105ms ease,
     border-color 105ms ease,
-    transform 105ms cubic-bezier(.2, .8, .2, 1);
+    transform 105ms var(--t-ease-out);
 }
 
 .nav-item svg,
 .mobile-nav-item svg,
 .mobile-more-link svg {
-  transition: transform 105ms cubic-bezier(.2, .8, .2, 1), color 105ms ease;
+  transition: transform 105ms var(--t-ease-out), color 105ms ease;
 }
 
 .nav-item.is-active svg,
