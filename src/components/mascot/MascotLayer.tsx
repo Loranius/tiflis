@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 import { Khinkali } from './Khinkali';
+import { ACT_MS, nextActDelay, pickAct, planStroll, reactionFor, type Act, type Beat } from './acting';
 import { dropLine, pickupLine, tapLine, type Line, type Mood } from './lines';
 import { clampPosition, isAtRest, stepPendulum, type Pendulum } from './physics';
 import { useMascotReactions } from './reactions';
@@ -104,10 +105,6 @@ const HELD_DAMPING = 3;
 const RELEASED_DAMPING = 1.2;
 const FIELD = 'input, textarea, select, [contenteditable="true"]';
 
-function randomBetween(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
-
 /**
  * Step out of the way: a visible modal dialog is open (ModalRuntime marks
  * <body data-dialog-open>, visibility-checked), the schedule brush bar is up
@@ -147,8 +144,6 @@ export function MascotLayer() {
   const busyRef = useRef(false);
   const positionRef = useRef(position);
   positionRef.current = position;
-  const xRef = useRef(0);
-  xRef.current = x;
   const lineId = useRef(0);
   const pressTimer = useRef(0);
   const suppressClick = useRef(false);
@@ -222,37 +217,114 @@ export function MascotLayer() {
     }
   }, [away, bubble]);
 
-  /** How far left he may walk from where he stands: within the right half of the screen, never off it. */
-  const walkRoom = useCallback(() => {
-    const width = window.innerWidth;
-    const half = width >= 981 ? 260 : Math.max(0, width / 2 - 80);
-    const left = position ? position.left : width - (width >= 981 ? 24 : 12) - SIZE.width;
-    return Math.max(0, Math.min(half, left - 8));
-  }, [position]);
+  /* ─── Acting: every 7–16 s of quiet he does something, then holds still ─── */
 
-  // Walk a little every 20–40 s.
+  const [beat, setBeat] = useState<Beat | null>(null);
+  const [walkMs, setWalkMs] = useState(2400);
+  const actTimers = useRef<number[]>([]);
+  const acting = useRef(false);
+  const lastAct = useRef<Act | null>(null);
+
+  const later = useCallback((fn: () => void, ms: number) => {
+    actTimers.current.push(window.setTimeout(fn, ms));
+  }, []);
+
+  /** Stop whatever he is doing and stand at home. */
+  const stopActing = useCallback(() => {
+    actTimers.current.forEach((timer) => window.clearTimeout(timer));
+    actTimers.current = [];
+    acting.current = false;
+    setBeat(null);
+    setWalking(false);
+    setX(0);
+    setFacing('left');
+  }, []);
+
+  const canAct = useCallback(
+    () => !reduce && !hiddenRef.current && !document.hidden && !draggingRef.current,
+    [reduce],
+  );
+
+  const playBeat = useCallback((next: Beat, then?: () => void) => {
+    acting.current = true;
+    setBeat(next);
+    later(() => {
+      setBeat(null);
+      acting.current = false;
+      then?.();
+    }, ACT_MS[next]);
+  }, [later]);
+
+  const play = useCallback((act: Act) => {
+    lastAct.current = act;
+    if (act === 'look') {
+      acting.current = true;
+      setFacing('right');
+      later(() => setFacing('left'), 800);
+      later(() => setFacing('right'), 1500);
+      later(() => { setFacing('left'); acting.current = false; }, 2300);
+      return;
+    }
+    if (act === 'stroll') {
+      const vp = viewport();
+      const homeLeft = positionRef.current ? positionRef.current.left : vp.width - (vp.width >= 981 ? 24 : 12) - SIZE.width;
+      const plan = planStroll({ left: homeLeft, width: vp.width }, Math.random);
+      if (!plan) { playBeat('shuffle'); return; }
+      const target = plan.direction === 'left' ? -plan.distance : plan.distance;
+      acting.current = true;
+      // Out: face the way, legs cycle while the root travels.
+      setWalkMs(plan.ms);
+      setFacing(plan.direction);
+      setWalking(true);
+      setX(target);
+      later(() => {
+        // There: stop, hold, glance back over the shoulder.
+        setWalking(false);
+        later(() => setFacing(plan.direction === 'left' ? 'right' : 'left'), 700);
+        later(() => setFacing(plan.direction), 1300);
+        // Home again.
+        later(() => {
+          setFacing(plan.direction === 'left' ? 'right' : 'left');
+          setWalking(true);
+          setX(0);
+          later(() => {
+            setWalking(false);
+            setFacing('left');
+            acting.current = false;
+          }, plan.ms);
+        }, 1900);
+      }, plan.ms);
+      return;
+    }
+    playBeat(act);
+  }, [later, playBeat]);
+
+  // The director: wait, act, wait…
   useEffect(() => {
     if (reduce || hidden) return;
     let timer = 0;
     const plan = () => {
       timer = window.setTimeout(() => {
-        if (!away && !menuOpen && !draggingRef.current && !document.hidden) {
-          const room = walkRoom();
-          const current = xRef.current;
-          let next = -randomBetween(0, room);
-          if (Math.abs(next - current) < 40) next = current > -room / 2 ? -room * 0.8 : 0;
-          if (Math.abs(next - current) >= 1) {
-            setFacing(next < current ? 'left' : 'right');
-            setWalking(true);
-            setX(next);
-          }
-        }
+        if (!acting.current && !away && !menuOpen && canAct()) play(pickAct(lastAct.current, Math.random));
         plan();
-      }, randomBetween(20_000, 40_000));
+      }, nextActDelay(Math.random));
     };
     plan();
     return () => window.clearTimeout(timer);
-  }, [reduce, hidden, away, menuOpen, walkRoom]);
+  }, [reduce, hidden, away, menuOpen, canAct, play]);
+
+  // Stepping away, hiding or a menu stops the act; he waits at home.
+  useEffect(() => {
+    if (away || hidden || menuOpen) stopActing();
+  }, [away, hidden, menuOpen, stopActing]);
+  useEffect(() => () => actTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
+
+  // A happy line gets claps or a double hop; a smug one a sway.
+  useEffect(() => {
+    if (!bubble || acting.current || !canAct()) return;
+    const reaction = reactionFor(bubble.line.mood, Math.random);
+    if (reaction) playBeat(reaction);
+  }, [bubble, canAct, playBeat]);
 
   // Keep him on screen when the viewport changes.
   useEffect(() => {
@@ -343,15 +415,14 @@ export function MascotLayer() {
       suppressClick.current = true;
       setDragging(true);
       setMenuOpen(false);
-      setWalking(false);
-      setX(0);
+      stopActing();
       try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* pointer already gone: keep dragging without capture */ }
       hand.current.x = event.clientX;
       if (Math.random() < 0.5) say(pickupLine(Math.random));
       runSwing();
     }
     moveTo(event.clientX, event.clientY);
-  }, [moveTo, runSwing]);
+  }, [moveTo, runSwing, stopActing]);
 
   const endPress = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     window.clearTimeout(pressTimer.current);
@@ -421,8 +492,7 @@ export function MascotLayer() {
         className="mk-walker"
         initial={false}
         animate={{ transform: `translateX(${x}px)` }}
-        transition={{ duration: reduce || dragging ? 0 : 2.4, ease: 'easeInOut' }}
-        onAnimationComplete={() => setWalking(false)}
+        transition={{ duration: reduce || dragging ? 0 : walkMs / 1000, ease: [0.45, 0, 0.55, 1] }}
       >
         {bubble ? (
           <button
@@ -471,7 +541,7 @@ export function MascotLayer() {
           onClick={onClick}
         >
           <div ref={swingRef} className="mk-swing">
-            <Khinkali mood={mood} walking={walking && !dragging} facing={facing} still={reduce} />
+            <Khinkali mood={mood} walking={walking && !dragging} facing={facing} still={reduce} act={dragging ? null : beat} />
           </div>
         </button>
       </m.div>

@@ -179,3 +179,53 @@
   border-top: 1px solid var(--t-line-strong);
 }
 .mk-menu { display: grid; gap: 2px; }
+
+/* ─── Acting beats (`.act-*` on the svg, set by MascotLayer for their duration) ───
+ * Anticipation → action → settle, per the 2d-character-rig-animation skill:
+ * the hop squashes before it leaves the ground and again when it lands.
+ */
+.mk-actor { transform-box: fill-box; transform-origin: 50% 100%; }
+.mk-clap { opacity: 0; }
+.mk-mitt { transform-box: fill-box; transform-origin: center; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .mk.act-hop .mk-actor { animation: mk-hop 0.72s cubic-bezier(0.3, 0.7, 0.4, 1) both; }
+  .mk.act-hop2 .mk-actor { animation: mk-hop 0.72s cubic-bezier(0.3, 0.7, 0.4, 1) 2 both; }
+  .mk.act-hop .mk-leg, .mk.act-hop2 .mk-leg { animation: mk-tuck 0.72s ease-in-out infinite; }
+
+  .mk.act-sway .mk-actor { animation: mk-sway 1.6s ease-in-out both; }
+
+  .mk.act-shuffle .mk-actor { animation: mk-shuffle 1.4s ease-in-out both; }
+  .mk.act-shuffle .mk-leg-l { animation: mk-step 0.2s ease-in-out 7; }
+  .mk.act-shuffle .mk-leg-r { animation: mk-step 0.2s ease-in-out 7 reverse; }
+
+  .mk.act-clap .mk-arm { opacity: 0; }
+  .mk.act-clap .mk-clap { opacity: 1; }
+  .mk.act-clap .mk-mitt-l { animation: mk-clap-l 0.3s ease-in-out 5; }
+  .mk.act-clap .mk-mitt-r { animation: mk-clap-r 0.3s ease-in-out 5; }
+  .mk.act-clap .mk-actor { animation: mk-bounce 0.3s ease-in-out 5; }
+}
+
+@keyframes mk-hop {
+  0% { transform: none; }
+  18% { transform: translateY(0) scale(1.08, 0.88); }
+  45% { transform: translateY(-11px) scale(0.94, 1.08); }
+  60% { transform: translateY(-11px) scale(1, 1); }
+  84% { transform: translateY(0) scale(1.09, 0.88); }
+  100% { transform: none; }
+}
+@keyframes mk-tuck { 0%, 18%, 84%, 100% { transform: none; } 45%, 60% { transform: translateY(-1.5px) rotate(12deg); } }
+@keyframes mk-sway {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-8deg); }
+  60% { transform: rotate(7deg); }
+  85% { transform: rotate(-3deg); }
+}
+@keyframes mk-shuffle {
+  0%, 100% { transform: translate(0, 0); }
+  20%, 60% { transform: translate(-1.5px, -1px); }
+  40%, 80% { transform: translate(1.5px, -1px); }
+}
+@keyframes mk-clap-l { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4.5px); } }
+@keyframes mk-clap-r { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-4.5px); } }
+@keyframes mk-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }

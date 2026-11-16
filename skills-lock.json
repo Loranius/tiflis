@@ -1,12 +1,26 @@
 {
   "version": 2,
   "skills": {
+    "2d-character-rig-animation": {
+      "source": "calesthio/generative-media-skills",
+      "commit": "8c85352d5d75d4dcbe58480bd138e37b9742bab1",
+      "sourceType": "github",
+      "skillPath": "skills/production/creative-direction/2d-character-rig-animation/SKILL.md",
+      "computedHash": "e8b206483d1393d0eaad1cb8cb79fa3084545eb5cbb621b8087aea8c1002069a"
+    },
     "animate": {
       "source": "emilkowalski/skills",
       "commit": "64eb3deb9a5fbfa041faf783e0bc3fd635872e9c",
       "sourceType": "github",
       "skillPath": "skills/animate/SKILL.md",
       "computedHash": "c622e29fa956aea703dc4e2b8726d9a017d438beb284a60bc3fdb2540c602102"
+    },
+    "character-animation-qa": {
+      "source": "openmontageinc/openmontage",
+      "commit": "2e003e65fa99a0f329478a2c1cdcf26bc481933a",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/character-animation-qa/SKILL.md",
+      "computedHash": "ad8a6916adb55b21341e150a02373cfbd3007845b2e8b5026d70037dee493297"
     },
     "create-svg-illustrations": {
       "source": "narumiruna/skills",

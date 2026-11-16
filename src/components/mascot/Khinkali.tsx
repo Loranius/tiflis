@@ -55,17 +55,21 @@ function Mouth({ mood }: { mood: Mood }) {
  * Хінкалик: a pleated dumpling with a twisted top knot, sparkling dot eyes, a
  * mouth per mood and stubby mitts and feet.
  */
-export function Khinkali({ mood, walking, facing, still }: {
+export type MascotAct = 'hop' | 'hop2' | 'sway' | 'shuffle' | 'clap';
+
+export function Khinkali({ mood, walking, facing, still, act = null }: {
   mood: Mood;
   walking: boolean;
   facing: 'left' | 'right';
   still: boolean;
+  /** A one-off acting beat played by CSS (mascot.css, `.act-*`). */
+  act?: MascotAct | null;
 }) {
   const id = useId().replace(/:/g, '');
   const dough = `mk-dough-${id}`;
   const knot = `mk-knot-${id}`;
   const blush = `mk-blush-${id}`;
-  const classes = ['mk', walking ? 'is-walking' : '', still ? 'is-still' : '', `is-${mood}`].filter(Boolean).join(' ');
+  const classes = ['mk', walking ? 'is-walking' : '', still ? 'is-still' : '', `is-${mood}`, act && !still ? `act-${act}` : ''].filter(Boolean).join(' ');
 
   return (
     <svg className={classes} viewBox="0 0 56 60" width="56" height="60" aria-hidden="true" focusable="false">
@@ -86,6 +90,8 @@ export function Khinkali({ mood, walking, facing, still }: {
       </defs>
 
       <g className="mk-turn" style={{ transform: facing === 'left' ? 'scaleX(-1)' : undefined }}>
+        {/* The actor carries hops, sways and bounces; parts inside keep their own idle life. */}
+        <g className="mk-actor">
         <g className="mk-leg mk-leg-l">
           <rect x="18.2" y="52.4" width="6.6" height="7" rx="3.3" fill="#EADBB8" stroke={OUTLINE} strokeWidth="1.2" />
           <path d="M19 57.6 H24" stroke="#CDB283" strokeWidth="1.1" strokeLinecap="round" />
@@ -156,6 +162,17 @@ export function Khinkali({ mood, walking, facing, still }: {
             <g className="mk-brows"><path d="M19.2 38 L24.6 37.4" /><path d="M31.4 36.6 L36.8 37.9" /></g>
           ) : null}
           <Mouth mood={mood} />
+
+          {/* Mitts in front of the belly, shown only while clapping. */}
+          <g className="mk-clap">
+            <g className="mk-mitt mk-mitt-l">
+              <ellipse cx="20.8" cy="54" rx="2.9" ry="2.5" fill="#EEDFBE" stroke={OUTLINE} strokeWidth="1.2" />
+            </g>
+            <g className="mk-mitt mk-mitt-r">
+              <ellipse cx="35.2" cy="54" rx="2.9" ry="2.5" fill="#EEDFBE" stroke={OUTLINE} strokeWidth="1.2" />
+            </g>
+          </g>
+        </g>
         </g>
 
         {mood === 'happy' && !still ? (
