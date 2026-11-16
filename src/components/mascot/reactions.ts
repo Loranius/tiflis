@@ -108,7 +108,7 @@ export function useMascotReactions(say: (line: Line) => void, active: boolean, i
     const onSaved = (event: Event) => {
       const detail = (event as CustomEvent<CashSavedDetail>).detail;
       if (!activeRef.current || !detail || !(detail.amount > 0)) return;
-      sayRef.current(cashLine(judgeCash(detail.amount, detail.average), detail.amount, detail.average, Math.random));
+      sayRef.current(cashLine(judgeCash(detail.amount), detail.amount, Math.random));
     };
     window.addEventListener(CASH_SAVED_EVENT, onSaved);
     return () => window.removeEventListener(CASH_SAVED_EVENT, onSaved);
