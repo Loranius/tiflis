@@ -57,6 +57,7 @@ Built for this one restaurant and its real working rules, not a generic HR or PO
 - The wordmark's typeface is not identified, and no brand text font has been supplied.
 - The portal's current dark green, wine accent, Prata font and the Georgian letter თ in the app icon are the old portal's choices, not confirmed brand.
 - **Interface style (chosen by the owner, November 2026):** a classic, category-standard dashboard look, played straight, with no themed ornament (no wine, menu, Georgian folklore or other motifs). Craft reference: **monobank**. Dark ground only; a light theme was explicitly rejected for evening use in the hall.
+  - **Owner exception (November 2026): маскот Хінкалик.** One themed character is allowed: a drawn khinkali that lives above the bottom bar, walks, and talks in a speech bubble (praises or mocks the viewer's own cash, reminds about breakfast shifts, comments on shift count, quotes a random dish, roasts). The owner chose a harsh, teasing voice, limited to work (cash, laziness, shifts) — never appearance, health, family or origin. The exception covers the mascot only; the interface itself stays plain. Each person can hide it (long press, or «Ще» → «Сховати хінкалика»).
 - Voice toward staff: Ukrainian, direct and informal-polite (the current copy addresses staff with "ти": «Введи свій робочий логін і пароль»).
 
 ## Evidence on Hand

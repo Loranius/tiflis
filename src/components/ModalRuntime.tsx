@@ -74,6 +74,8 @@ export function ModalRuntime() {
       // get stuck on overflow:hidden after a stale or misdetected dialog state.
       const shouldLockBody = Boolean(nextDialog) && window.innerWidth > MOBILE_BREAKPOINT;
       document.body.classList.toggle('tiflis-modal-open', shouldLockBody);
+      // A plain «a visible modal dialog is open» signal on every viewport (the mascot steps away).
+      document.body.toggleAttribute('data-dialog-open', Boolean(nextDialog));
 
       if (nextDialog && nextDialog !== activeDialog) {
         previousFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -132,6 +134,7 @@ export function ModalRuntime() {
       window.visualViewport?.removeEventListener('scroll', scheduleSynchronize);
       document.removeEventListener('keydown', handleKeyDown);
       document.body.classList.remove('tiflis-modal-open');
+      document.body.removeAttribute('data-dialog-open');
       document.documentElement.style.removeProperty('--tiflis-modal-viewport-height');
       document.documentElement.style.removeProperty('--tiflis-modal-viewport-top');
     };

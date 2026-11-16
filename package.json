@@ -15,7 +15,8 @@
     "perf:budget": "node scripts/check-bundle-budget.mjs",
     "smoke:dist": "node scripts/smoke-dist.mjs",
     "stable:materialize": "node scripts/materialize-stable-runtime.mjs",
-    "audit:portal": "node scripts/final-portal-audit.mjs"
+    "audit:portal": "node scripts/final-portal-audit.mjs",
+    "test": "node --experimental-strip-types --test scripts/*.test.ts"
   },
   "dependencies": {
     "@fontsource/golos-text": "^5.3.0",
