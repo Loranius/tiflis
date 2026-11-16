@@ -766,15 +766,17 @@ Deno.serve(async (req: Request) => {
         : "first";
       const [yearText = ""] = range.month.split("-");
       const selectedYear = Number(yearText);
+      // Cash top halves follow the cash payout (owner, November 2026): 1–14 and
+      // 15–end, so the 15th's cash ranks in the second half. Records keep 1–15.
       const leaderboardStart = leaderboardPeriod === "year"
         ? `${selectedYear}-01-01`
         : leaderboardPeriod === "second"
-          ? `${range.month}-16`
+          ? `${range.month}-15`
           : range.start;
       const leaderboardEnd = leaderboardPeriod === "year"
         ? `${selectedYear + 1}-01-01`
         : leaderboardPeriod === "first"
-          ? `${range.month}-16`
+          ? `${range.month}-15`
           : range.end;
 
       const usersResult = await serviceClient

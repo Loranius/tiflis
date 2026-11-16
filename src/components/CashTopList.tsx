@@ -124,9 +124,9 @@ export function CashTopList({
   const focus = sorted.find((row) => row.userId === focusUserId) || sorted.find((row) => row.mine) || null;
   const focusIsMine = Boolean(focus?.mine);
   const periodText = period === 'first'
-    ? `1–15, ${monthLabel.toLowerCase()}`
+    ? `1–14, ${monthLabel.toLowerCase()}`
     : period === 'second'
-      ? `16–${daysInMonth}, ${monthLabel.toLowerCase()}`
+      ? `15–${daysInMonth}, ${monthLabel.toLowerCase()}`
       : period === 'year'
         ? `${year} рік`
         : monthLabel;
@@ -135,8 +135,8 @@ export function CashTopList({
     <div className={`cv3-top${refreshing ? ' is-refreshing' : ''}`}>
       <div className="cv3-seg is-four" role="radiogroup" aria-label="Період топу">
         {([
-          ['first', '1–15'],
-          ['second', `16–${daysInMonth}`],
+          ['first', '1–14'],
+          ['second', `15–${daysInMonth}`],
           ['month', 'Місяць'],
           ['year', 'Рік'],
         ] as const).map(([value, label]) => (
