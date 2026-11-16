@@ -223,6 +223,8 @@ export function MascotLayer() {
   /* ─── Acting: every 7–16 s of quiet he does something, then holds still ─── */
 
   const [beat, setBeat] = useState<Beat | null>(null);
+  // Profile view (the reference sheet's side drawing) for strolls and looking around.
+  const [profile, setProfile] = useState(false);
   const [walkMs, setWalkMs] = useState(2400);
   const actTimers = useRef<number[]>([]);
   const acting = useRef(false);
@@ -239,6 +241,7 @@ export function MascotLayer() {
     acting.current = false;
     setBeat(null);
     setWalking(false);
+    setProfile(false);
     setX(0);
     setFacing('left');
   }, []);
@@ -262,10 +265,11 @@ export function MascotLayer() {
     lastAct.current = act;
     if (act === 'look') {
       acting.current = true;
+      setProfile(true);
       setFacing('right');
       later(() => setFacing('left'), 800);
       later(() => setFacing('right'), 1500);
-      later(() => { setFacing('left'); acting.current = false; }, 2300);
+      later(() => { setFacing('left'); setProfile(false); acting.current = false; }, 2300);
       return;
     }
     if (act === 'stroll') {
@@ -277,6 +281,7 @@ export function MascotLayer() {
       acting.current = true;
       // Out: face the way, legs cycle while the root travels.
       setWalkMs(plan.ms);
+      setProfile(true);
       setFacing(plan.direction);
       setWalking(true);
       setX(target);
@@ -293,6 +298,7 @@ export function MascotLayer() {
           later(() => {
             setWalking(false);
             setFacing('left');
+            setProfile(false);
             acting.current = false;
           }, plan.ms);
         }, 1900);
@@ -577,7 +583,7 @@ export function MascotLayer() {
           onClick={onClick}
         >
           <div ref={swingRef} className="mk-swing">
-            <Khinkali mood={mood} walking={walking && !dragging} facing={facing} still={reduce} act={dragging ? null : beat} />
+            <Khinkali mood={mood} walking={walking && !dragging} facing={facing} still={reduce} act={dragging ? null : beat} view={profile && !dragging ? 'side' : 'front'} />
           </div>
         </button>
       </m.div>
