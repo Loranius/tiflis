@@ -118,3 +118,23 @@ test('grammar fixes', () => {
     assert.doesNotMatch(text, /Оце я розумію каса|Лише 0|Я їм не дамся/, text);
   }
 });
+
+test('pickup and drop lines exist and avoid the gender trap', async () => {
+  const { pickupLine, dropLine } = await import('../src/components/mascot/lines.ts');
+  for (let i = 0; i < 60; i += 1) {
+    for (const line of [pickupLine(Math.random), dropLine(Math.random)]) {
+      assert.ok(line.text.trim().length > 3);
+      assert.doesNotMatch(line.text, /(поставив|переніс|схопив|взяв мене)/, line.text);
+    }
+  }
+});
+
+test('shift summary ignores a half-published month', async () => {
+  const { summarizeShifts } = await import('../src/components/mascot/lines.ts');
+  // 30-day month, only 10 days published: not enough to judge.
+  assert.equal(summarizeShifts(Array(10).fill('Р'), 30), null);
+  // fully published: 20 work, 10 off.
+  assert.deepEqual(summarizeShifts([...Array(20).fill('Р'), ...Array(10).fill('Х')], 30), { work: 20, off: 10 });
+  // 25 of 30 published (≥ 80%): off counts only the published days off.
+  assert.deepEqual(summarizeShifts([...Array(20).fill('Р'), ...Array(5).fill('Х')], 30), { work: 20, off: 5 });
+});

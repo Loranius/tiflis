@@ -29,7 +29,7 @@ import { CashTopList, rankMovement, type CashTopPeriod, type CashTopRow } from '
 import { peekSecureApi, secureApi } from '../lib/secureApi';
 import { CountUp, SegThumb, TabLine, playDialogExit } from '../lib/motion';
 import { Overlay } from '../components/Overlay';
-import { CASH_SAVED_EVENT, type CashSavedDetail } from '../components/mascot/reactions';
+import { CASH_SAVED_EVENT, type CashSavedDetail } from '../components/mascot/events';
 import { getKyivDateKey } from '../lib/time';
 import './cash-v3.css';
 
@@ -437,7 +437,8 @@ export function CashPage() {
       });
       // Хінкалик judges the viewer's own cash against their month average (this day excluded).
       const amountSaved = Number(next.cash) || 0;
-      if (viewingSelf && amountSaved > 0) {
+      const previous = asNumber(entryByDate.get(next.date)?.cash);
+      if (viewingSelf && amountSaved > 0 && amountSaved !== previous) {
         const others = entries.filter((entry) => entry.date !== next.date && asNumber(entry.cash) > 0);
         const average = others.length ? others.reduce((sum, entry) => sum + asNumber(entry.cash), 0) / others.length : null;
         window.dispatchEvent(new CustomEvent<CashSavedDetail>(CASH_SAVED_EVENT, { detail: { amount: amountSaved, average } }));
