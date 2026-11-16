@@ -281,7 +281,7 @@ function deriveAutomaticRecords(cashRows: RecordCashRow[], scheduleRows: RecordS
     if (amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(row.date) || row.date > today) continue;
     const month = row.date.slice(0, 7);
     const day = Number(row.date.slice(8, 10));
-    const half = day <= 15 ? "first" : "second";
+    const half = day <= 14 ? "first" : "second"; // 1–14 / 15–end, like the cash top and payout
     addPeriodTotal(monthlyCash, month, amount);
     addPeriodTotal(halfCash, `${month}:${half}`, amount);
   }
@@ -294,7 +294,7 @@ function deriveAutomaticRecords(cashRows: RecordCashRow[], scheduleRows: RecordS
     if (NON_WORK_SHIFT_CODES.has(shift)) continue;
     const month = row.date.slice(0, 7);
     const day = Number(row.date.slice(8, 10));
-    const half = day <= 15 ? "first" : "second";
+    const half = day <= 14 ? "first" : "second"; // 1–14 / 15–end, like the cash top and payout
     addPeriodTotal(monthlyShifts, month, 1);
     addPeriodTotal(halfShifts, `${month}:${half}`, 1);
   }
@@ -767,7 +767,7 @@ Deno.serve(async (req: Request) => {
       const [yearText = ""] = range.month.split("-");
       const selectedYear = Number(yearText);
       // Cash top halves follow the cash payout (owner, November 2026): 1–14 and
-      // 15–end, so the 15th's cash ranks in the second half. Records keep 1–15.
+      // 15–end, so the 15th's cash ranks in the second half. Records use the same split.
       const leaderboardStart = leaderboardPeriod === "year"
         ? `${selectedYear}-01-01`
         : leaderboardPeriod === "second"
