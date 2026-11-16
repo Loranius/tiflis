@@ -177,10 +177,10 @@ function rememberDayView(view: DayView) {
   }
 }
 
-/* The two tabs split the month differently (DESIGN.md, The Server Halves
-   Rule): the payout overview counts cash for 1–14, so the 15th already opens
-   the second half there; the cash top ranks 1–15, so on the 15th it must
-   still open on «1–15», not on the empty «16–end». */
+/* Both tabs split cash at the 15th (DESIGN.md, The Server Halves Rule): the
+   payout counts cash for 1–14 and 15–end, and so does the cash top, so the
+   15th opens the second half on both. They keep separate period state because
+   the top also has «Рік». */
 function defaultOverviewPeriod(): OverviewPeriod {
   const day = Number(getKyivDateKey().slice(8, 10));
   return day <= 14 ? 'first' : 'second';
@@ -188,7 +188,7 @@ function defaultOverviewPeriod(): OverviewPeriod {
 
 function defaultTopPeriod(): CashTopPeriod {
   const day = Number(getKyivDateKey().slice(8, 10));
-  return day <= 15 ? 'first' : 'second';
+  return day <= 14 ? 'first' : 'second';
 }
 
 function shiftsLabel(count: number): string {

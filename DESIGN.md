@@ -1011,7 +1011,7 @@ Validation and save errors appear in a coral-wash note (10px radius, 14px coral 
 ### Records Content Rules
 **The Shared Place Rule.** Equal values share a place, in competition ranking: 1, 1, 3. The server numbers rows sequentially (1, 2, 3), so the client recomputes places from the top five: a row's place is one plus the number of rows with a strictly greater value. Everyone on the best value holds the record together (co-holders on the plaque, and the «Рекорд ресторану» badge in Мої рекорди), and nobody on the best value is ever called «2 місце». A value of zero holds nothing.
 
-**The Server Halves Rule.** Half-month records and the cash top follow one split, computed in `tiflis-secure-api`: 1–15 and 16–end, labelled «1–15 серпня 2026» and «16–31 серпня 2026», the same split as the schedule, so the dates shown always match the sum. Records count the immutable `first_cash`, like the cash top, and tied values share a place (1, 2, 2, 4), with whoever reached the value first listed first. The one exception is payroll: the cash overview pays out cash for 1–14 and the rate and extras for 1–15, and says so in its note.
+**The Server Halves Rule.** Cash is split at the 15th (owner, November 2026): the cash top (Каса · Топ) and the payout both count cash for 1–14 and 15–end, so the 15th's cash belongs to the second half; the top's switch reads «1–14» / «15–30». The rate (200 ₴ a shift) and extras are paid for 1–15 and 16–end, so the 15th's rate lands in the first payout and its cash and 4% in the second; the overview says so in its note. Half-month records keep the schedule's split, 1–15 and 16–end, labelled «1–15 серпня 2026» and «16–31 серпня 2026». Both are computed in `tiflis-secure-api`. Records and the top count the immutable `first_cash`, and tied values share a place (1, 2, 2, 4), with whoever reached the value first listed first.
 
 **The Open Records Rule.** On Рекорди every waiter's record value is visible to every waiter, money included (best month and half-month cash, largest tip), on the plaques and in their top five. This is the owner's exception to the privacy rule, recorded in PRODUCT.md («Owner exception (November 2026): Рекорди»), chosen for the competition. It is scoped to this screen: the live Каса · Топ, and every other ranking or shared view, still shows place and movement only, never other people's sums. The board covers waiters only.
 
@@ -1046,7 +1046,7 @@ Loading uses skeleton blocks shaped like the real layout (segment, hero, row, ch
 - **Do** compute free tables with the same overlap rule as the server (2 h default, seated until now + 15 min, Kyiv time) and change status through `reserve_status` only (The One Overlap Rule, The Status Only Rule).
 - **Do** build pill choices as `aria-pressed` buttons in a labelled group (The Pressed Pill Rule), and give floor state in words in the tile's `aria-label` as well as in colour.
 - **Do** give tied values a shared place (1, 1, 3) and let everyone on the best value hold the record (The Shared Place Rule).
-- **Do** label half-month records and the cash top with the 1–15 / 16–end split; only the payroll overview keeps its own cash 1–14 rule (The Server Halves Rule).
+- **Do** split cash (the cash top and the payout) at 1–14 / 15–end, and half-month records and the schedule at 1–15 / 16–end (The Server Halves Rule).
 - **Do** send the live race to Каса · Топ (`/cash?tab=top`) rather than building a second «топ» on Рекорди.
 
 ### Don't:
