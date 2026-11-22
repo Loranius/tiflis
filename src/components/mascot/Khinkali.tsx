@@ -26,14 +26,37 @@ const LIMB = '#F1E2C6';
 const BODY = 'M23.4 16 C20.4 20.6 7.6 23.2 5.4 36.4 C3.8 45.4 9.4 53.2 18.4 53.6 L37.6 53.6 C46.6 53.2 52.2 45.4 50.6 36.4 C48.4 23.2 35.6 20.6 32.6 16 Z';
 const KNOT = 'M23.4 16.4 C24.4 13.8 23.6 12 21 10.4 C18.6 8.8 19.8 5.4 22.8 6 C23.4 3.4 26.4 2.6 28 4.2 C29.6 2.6 32.6 3.4 33.2 6 C36.2 5.4 37.4 8.8 35 10.4 C32.4 12 31.6 13.8 32.6 16.4 Z';
 
+/** A small heart centred at (x, y), `size` ≈ half its width. */
+function heart(x: number, y: number, size: number): string {
+  const f = (value: number) => value.toFixed(2);
+  return `M${f(x)} ${f(y + size * 0.9)} C${f(x - size * 1.6)} ${f(y - size * 0.1)} ${f(x - size * 0.8)} ${f(y - size * 1.25)} ${f(x)} ${f(y - size * 0.3)} C${f(x + size * 0.8)} ${f(y - size * 1.25)} ${f(x + size * 1.6)} ${f(y - size * 0.1)} ${f(x)} ${f(y + size * 0.9)} Z`;
+}
+
+const HEART_RED = '#E2566B';
+
+/** One eye per mood: oval, wide (surprised), closed arc (sleepy) or a heart (love). */
+function Eye({ cx, cy, mood, rx = 2.7, ry = 3.5 }: { cx: number; cy: number; mood: Mood; rx?: number; ry?: number }) {
+  if (mood === 'sleepy') {
+    return <path d={`M${cx - 2.8} ${cy} Q${cx} ${cy + 2.4} ${cx + 2.8} ${cy}`} fill="none" stroke={INK} strokeWidth="1.5" strokeLinecap="round" />;
+  }
+  if (mood === 'love') {
+    return <path d={heart(cx, cy, 2.6)} fill={HEART_RED} stroke={INK} strokeWidth="0.9" strokeLinejoin="round" />;
+  }
+  const wide = mood === 'surprised';
+  return (
+    <>
+      <ellipse cx={cx} cy={cy} rx={wide ? rx + 0.5 : rx} ry={wide ? ry + 0.6 : ry} fill={INK} />
+      <circle cx={cx + 0.9} cy={cy - 1.3} r={wide ? 1.15 : 0.95} fill="#FFFFFF" />
+    </>
+  );
+}
+
 function FrontFace({ mood }: { mood: Mood }) {
   return (
     <>
       <g className="mk-eyes">
-        <ellipse cx="19.2" cy="38.6" rx="2.7" ry="3.5" fill={INK} />
-        <ellipse cx="36.8" cy="38.6" rx="2.7" ry="3.5" fill={INK} />
-        <circle cx="20.1" cy="37.3" r="0.95" fill="#FFFFFF" />
-        <circle cx="37.7" cy="37.3" r="0.95" fill="#FFFFFF" />
+        <Eye cx={19.2} cy={38.6} mood={mood} />
+        <Eye cx={36.8} cy={38.6} mood={mood} />
       </g>
       {mood === 'sad' ? (
         <g className="mk-brows"><path d="M15.6 34.6 Q18.4 33.8 20.8 32.4" /><path d="M40.4 34.6 Q37.6 33.8 35.2 32.4" /></g>
@@ -41,10 +64,17 @@ function FrontFace({ mood }: { mood: Mood }) {
       {mood === 'smug' ? (
         <g className="mk-brows"><path d="M16 33.6 L21.2 33.2" /><path d="M34.8 32.4 L40 33.8" /></g>
       ) : null}
-      {mood === 'happy' ? (
+      {mood === 'surprised' ? (
+        <g className="mk-brows"><path d="M15.8 32.6 Q19 30.4 22.2 32.2" /><path d="M33.8 32.2 Q37 30.4 40.2 32.6" /></g>
+      ) : null}
+      {mood === 'happy' || mood === 'love' ? (
         <g className="mk-mouth is-open">
           <path d="M24.6 40.4 Q26.3 41.6 28 40.6 Q29.7 41.6 31.4 40.4 Q30.8 45.6 28 45.6 Q25.2 45.6 24.6 40.4 Z" fill="#6A3428" stroke={INK} strokeWidth="1.1" strokeLinejoin="round" />
           <ellipse cx="28" cy="44.2" rx="1.7" ry="0.9" fill="#E58C78" />
+        </g>
+      ) : mood === 'surprised' ? (
+        <g className="mk-mouth is-open">
+          <ellipse cx="28" cy="43" rx="1.9" ry="2.3" fill="#6A3428" stroke={INK} strokeWidth="1.1" />
         </g>
       ) : (
         <path
@@ -53,7 +83,9 @@ function FrontFace({ mood }: { mood: Mood }) {
             ? 'M25 43.2 Q28 40.6 31 43.2'
             : mood === 'smug'
               ? 'M24.8 41.2 Q26.6 43.4 28.2 41.6 Q30.2 43 32.2 40.2'
-              : 'M24.9 40.6 Q26.4 43 28 41.2 Q29.6 43 31.1 40.6'}
+              : mood === 'sleepy'
+                ? 'M25.8 41.8 Q26.9 42.8 28 42 Q29.1 42.8 30.2 41.8'
+                : 'M24.9 40.6 Q26.4 43 28 41.2 Q29.6 43 31.1 40.6'}
         />
       )}
     </>
@@ -64,17 +96,21 @@ function SideFace({ mood }: { mood: Mood }) {
   return (
     <>
       <g className="mk-eyes">
-        <ellipse cx="41.4" cy="38.4" rx="2.4" ry="3.4" fill={INK} />
-        <circle cx="42.2" cy="37.1" r="0.85" fill="#FFFFFF" />
+        <Eye cx={41.4} cy={38.4} mood={mood} rx={2.4} ry={3.4} />
       </g>
       {mood === 'sad' ? <g className="mk-brows"><path d="M39.6 33.4 Q41.8 33 43.6 31.8" /></g> : null}
       {mood === 'smug' ? <g className="mk-brows"><path d="M39.4 32.6 L44.2 33.6" /></g> : null}
-      <path className="mk-mouth" d={mood === 'sad' ? 'M46.2 42.6 Q47.4 41.2 48.6 42.2' : 'M46 40.6 Q47.2 42.6 48.6 40.8'} />
+      {mood === 'surprised' ? <g className="mk-brows"><path d="M38.8 32.2 Q41.6 30.2 44.4 32" /></g> : null}
+      {mood === 'surprised' ? (
+        <ellipse className="mk-mouth is-open" cx="47.4" cy="42" rx="1.3" ry="1.7" fill="#6A3428" stroke={INK} strokeWidth="1" />
+      ) : (
+        <path className="mk-mouth" d={mood === 'sad' ? 'M46.2 42.6 Q47.4 41.2 48.6 42.2' : 'M46 40.6 Q47.2 42.6 48.6 40.8'} />
+      )}
     </>
   );
 }
 
-export type MascotAct = 'hop' | 'hop2' | 'sway' | 'shuffle' | 'clap';
+export type MascotAct = 'hop' | 'hop2' | 'sway' | 'shuffle' | 'clap' | 'spin' | 'startle' | 'doze';
 
 export function Khinkali({ mood, walking, facing, still, act = null, view = 'front' }: {
   mood: Mood;
@@ -208,6 +244,21 @@ export function Khinkali({ mood, walking, facing, still, act = null, view = 'fro
           </g>
         </g>
 
+        {/* Love: little hearts drift up; sleepy: Z's float off the knot. */}
+        {mood === 'love' && !still ? (
+          <g className="mk-hearts">
+            <path d={heart(10, 24, 2.2)} fill={HEART_RED} />
+            <path d={heart(46, 20, 1.8)} fill={HEART_RED} />
+            <path d={heart(40, 10, 1.5)} fill={HEART_RED} />
+          </g>
+        ) : null}
+        {mood === 'sleepy' && !still ? (
+          <g className="mk-zzz" fill="#F4EEE2" fontFamily="Golos Text, Arial, sans-serif" fontWeight="700">
+            <text x="38" y="8" fontSize="6">Z</text>
+            <text x="43" y="3" fontSize="4.6">z</text>
+            <text x="47" y="-1" fontSize="3.6">z</text>
+          </g>
+        ) : null}
         {mood === 'happy' && !still ? (
           <g className="mk-steam" fill="none" stroke="#F4EEE2" strokeWidth="1.2" strokeLinecap="round">
             <path d="M21.4 3.6 Q19.4 1.2 21.4 -1.2" />

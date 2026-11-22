@@ -8,7 +8,7 @@
  * or origin.
  */
 
-export type Mood = 'happy' | 'neutral' | 'sad' | 'smug';
+export type Mood = 'happy' | 'neutral' | 'sad' | 'smug' | 'surprised' | 'sleepy' | 'love';
 export interface Line { text: string; mood: Mood }
 export type Rnd = () => number;
 
@@ -293,7 +293,20 @@ const DROP = [
 ];
 
 export function pickupLine(rnd: Rnd): Line {
-  return say(PICKUP, 'sad', rnd);
+  return say(PICKUP, 'surprised', rnd);
+}
+
+const DOZE = [
+  'Хр-р-р… Я не сплю. Я медитую.',
+  'Zzz… Розбудиш, коли гості прийдуть.',
+  'Хр-р… Мені сниться каса на сто тисяч…',
+  'Тихо… хінкалі теж треба відпочивати.',
+  'Zzz… ще п\'ять хвилиночок…',
+  'Хр-р-р… бульйон… гарячий…',
+];
+
+export function dozeLine(rnd: Rnd): Line {
+  return say(DOZE, 'sleepy', rnd);
 }
 
 export function dropLine(rnd: Rnd): Line {
@@ -302,7 +315,7 @@ export function dropLine(rnd: Rnd): Line {
 
 export function cashLine(verdict: CashVerdict, amount: number, rnd: Rnd): Line {
   const values = { amount: formatHryvnia(amount) };
-  if (verdict === 'epic') return say(CASH_EPIC, 'happy', rnd, values);
+  if (verdict === 'epic') return say(CASH_EPIC, 'love', rnd, values);
   if (verdict === 'great') return say(CASH_GREAT, 'happy', rnd, values);
   if (verdict === 'okay') return say(CASH_OKAY, 'neutral', rnd, values);
   if (verdict === 'meh') return say(CASH_MEH, 'neutral', rnd, values);
