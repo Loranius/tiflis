@@ -57,7 +57,7 @@ test('lines carry numbers and moods', () => {
   assert.equal(cashLine('meh', 15000, rnd).mood, 'neutral');
   assert.equal(cashLine('okay', 30000, rnd).mood, 'neutral');
   assert.equal(cashLine('great', 40000, rnd).mood, 'happy');
-  assert.equal(cashLine('epic', 60000, rnd).mood, 'happy');
+  assert.equal(cashLine('epic', 60000, rnd).mood, 'love');
   assert.match(shiftLine('lazy', 6, 24, rnd).text, /6/);
   assert.match(dishLine('Хачапурі по-аджарськи', null, rnd).text, /Хачапурі/);
   assert.ok(dishLine('Х', 'Перше речення. Друге речення.', rnd).text.length <= 220);
@@ -144,4 +144,14 @@ test('shift summary ignores a half-published month', async () => {
   assert.deepEqual(summarizeShifts([...Array(20).fill('Р'), ...Array(10).fill('Х')], 30), { work: 20, off: 10 });
   // 25 of 30 published (≥ 80%): off counts only the published days off.
   assert.deepEqual(summarizeShifts([...Array(20).fill('Р'), ...Array(5).fill('Х')], 30), { work: 20, off: 5 });
+});
+
+test('new moods: pickup surprises him, dozing lines are sleepy', async () => {
+  const { pickupLine, dozeLine } = await import('../src/components/mascot/lines.ts');
+  assert.equal(pickupLine(Math.random).mood, 'surprised');
+  for (let i = 0; i < 20; i += 1) {
+    const line = dozeLine(Math.random);
+    assert.equal(line.mood, 'sleepy');
+    assert.ok(line.text.trim().length > 3);
+  }
 });

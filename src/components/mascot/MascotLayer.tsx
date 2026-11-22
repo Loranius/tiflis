@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 import { Khinkali } from './Khinkali';
-import { ACT_MS, nextActDelay, pickAct, planStroll, reactionFor, type Act, type Beat } from './acting';
-import { dropLine, pickupLine, tapLine, type Line, type Mood } from './lines';
+import { ACT_MS, moodForBeat, nextActDelay, pickAct, planStroll, reactionFor, STROLL_EVERY_MS, type Act, type Beat } from './acting';
+import { dozeLine, dropLine, pickupLine, tapLine, type Line, type Mood } from './lines';
 import { clampPosition, isAtRest, isGliding, releaseVelocity, stepGlide, stepPendulum, type Glide, type Pendulum } from './physics';
 import { useMascotReactions } from './reactions';
 import './mascot.css';
@@ -134,6 +134,8 @@ export function MascotLayer() {
   const [walking, setWalking] = useState(false);
   const [facing, setFacing] = useState<'left' | 'right'>('left');
   const [away, setAway] = useState(false);
+  const awayRef = useRef(false);
+  awayRef.current = away;
   const [dragging, setDragging] = useState(false);
   const [bubble, setBubble] = useState<{ line: Line; id: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -203,12 +205,18 @@ export function MascotLayer() {
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-dialog-open'] });
     document.addEventListener('focusin', check);
     document.addEventListener('focusout', check);
+    window.visualViewport?.addEventListener('resize', check);
+    // Phones do not always report a focused field that disappears (a saved
+    // form), so while he is away he also looks again every second.
+    const poll = window.setInterval(() => { if (awayRef.current) check(); }, 1000);
     check();
     return () => {
       window.cancelAnimationFrame(raf);
+      window.clearInterval(poll);
       observer.disconnect();
       document.removeEventListener('focusin', check);
       document.removeEventListener('focusout', check);
+      window.visualViewport?.removeEventListener('resize', check);
     };
   }, []);
 
@@ -226,6 +234,13 @@ export function MascotLayer() {
   // Profile view (the reference sheet's side drawing) for strolls and looking around.
   const [profile, setProfile] = useState(false);
   const [walkMs, setWalkMs] = useState(2400);
+  // One frame with no transition: re-anchoring after a walk must not slide.
+  const [instant, setInstant] = useState(false);
+  useEffect(() => {
+    if (!instant) return;
+    const frameId = window.requestAnimationFrame(() => setInstant(false));
+    return () => window.cancelAnimationFrame(frameId);
+  }, [instant]);
   const actTimers = useRef<number[]>([]);
   const acting = useRef(false);
   const lastAct = useRef<Act | null>(null);
@@ -242,6 +257,7 @@ export function MascotLayer() {
     setBeat(null);
     setWalking(false);
     setProfile(false);
+    setInstant(true);
     setX(0);
     setFacing('left');
   }, []);
@@ -262,7 +278,8 @@ export function MascotLayer() {
   }, [later]);
 
   const play = useCallback((act: Act) => {
-    lastAct.current = act;
+    // Walks run on their own timer, so they do not count as the last beat.
+    if (act !== 'stroll') lastAct.current = act;
     if (act === 'look') {
       acting.current = true;
       setProfile(true);
@@ -273,38 +290,43 @@ export function MascotLayer() {
       return;
     }
     if (act === 'stroll') {
+      // A walk to a new spot; he stays where he arrives (owner, November 2026).
       const vp = viewport();
-      const homeLeft = positionRef.current ? positionRef.current.left : vp.width - (vp.width >= 981 ? 24 : 12) - SIZE.width;
-      const plan = planStroll({ left: homeLeft, width: vp.width }, Math.random);
+      const box = rootRef.current?.getBoundingClientRect();
+      const start = positionRef.current ?? (box ? { left: box.left, top: box.top } : null);
+      if (!start) return;
+      const plan = planStroll({ left: start.left, width: vp.width }, Math.random);
       if (!plan) { playBeat('shuffle'); return; }
-      const target = plan.direction === 'left' ? -plan.distance : plan.distance;
       acting.current = true;
-      // Out: face the way, legs cycle while the root travels.
+      // Pin the start in absolute coordinates, then walk: legs cycle while the root travels.
+      setInstant(true);
+      positionRef.current = start;
+      setPosition(start);
       setWalkMs(plan.ms);
       setProfile(true);
       setFacing(plan.direction);
       setWalking(true);
-      setX(target);
+      setX(plan.target - start.left);
       later(() => {
-        // There: stop, hold, glance back over the shoulder.
+        // Arrived: this is his place now. Hold, glance back over the shoulder, face front.
+        const placed = clampPosition({ left: plan.target, top: start.top }, SIZE, viewport());
+        setInstant(true);
+        positionRef.current = placed;
+        setPosition(placed);
+        savePosition(placed);
+        setX(0);
         setWalking(false);
-        later(() => setFacing(plan.direction === 'left' ? 'right' : 'left'), 700);
-        later(() => setFacing(plan.direction), 1300);
-        // Home again.
+        later(() => setFacing(plan.direction === 'left' ? 'right' : 'left'), 600);
+        later(() => setFacing(plan.direction), 1200);
         later(() => {
-          setFacing(plan.direction === 'left' ? 'right' : 'left');
-          setWalking(true);
-          setX(0);
-          later(() => {
-            setWalking(false);
-            setFacing('left');
-            setProfile(false);
-            acting.current = false;
-          }, plan.ms);
-        }, 1900);
+          setProfile(false);
+          setFacing('left');
+          acting.current = false;
+        }, 1800);
       }, plan.ms);
       return;
     }
+    if (act === 'doze' && Math.random() < 0.4) say(dozeLine(Math.random));
     playBeat(act);
   }, [later, playBeat]);
 
@@ -320,6 +342,19 @@ export function MascotLayer() {
     };
     plan();
     return () => window.clearTimeout(timer);
+  }, [reduce, hidden, away, menuOpen, canAct, play]);
+
+  // Every 20 s he walks somewhere new and stays there. If a beat is still
+  // playing when the walk is due, he walks right after it ends.
+  const nextStrollAt = useRef(Date.now() + STROLL_EVERY_MS);
+  useEffect(() => {
+    if (reduce || hidden) return;
+    const timer = window.setInterval(() => {
+      if (Date.now() < nextStrollAt.current || acting.current || away || menuOpen || !canAct()) return;
+      nextStrollAt.current = Date.now() + STROLL_EVERY_MS;
+      play('stroll');
+    }, 500);
+    return () => window.clearInterval(timer);
   }, [reduce, hidden, away, menuOpen, canAct, play]);
 
   // Stepping away, hiding or a menu stops the act; he waits at home.
@@ -517,7 +552,7 @@ export function MascotLayer() {
 
   if (hidden) return null;
 
-  const mood: Mood = dragging && !bubble ? 'sad' : bubble?.line.mood ?? 'neutral';
+  const mood: Mood = dragging && !bubble ? 'surprised' : bubble?.line.mood ?? moodForBeat(beat) ?? 'neutral';
   const sideClass = `${side.left ? ' is-left' : ''}${side.below ? ' is-below' : ''}`;
 
   return (
@@ -534,7 +569,7 @@ export function MascotLayer() {
         className="mk-walker"
         initial={false}
         animate={{ transform: `translateX(${x}px)` }}
-        transition={{ duration: reduce || dragging ? 0 : walkMs / 1000, ease: [0.45, 0, 0.55, 1] }}
+        transition={{ duration: reduce || dragging || instant ? 0 : walkMs / 1000, ease: [0.45, 0, 0.55, 1] }}
       >
         {bubble ? (
           <button

@@ -14,6 +14,7 @@ import {
 import { peekSecureApi, secureApi } from '../lib/secureApi';
 import { addDaysToDateKey, isKyivWeekday } from '../lib/time';
 import { GoldBurst, spring, useFirstTime } from '../lib/motion';
+import { CASH_SAVED_EVENT, type CashSavedDetail } from '../components/mascot/events';
 import './home-v3.css';
 
 const MLink = m.create(Link);
@@ -694,6 +695,10 @@ function CloseShift({ todayKey, cash, onSaved }: { todayKey: string; cash: Today
     setError(null);
     try {
       const response = await secureApi<TodayCashResponse>({ action: 'today_cash_save', date: todayKey, cash: cashValue, tips }, 'tiflis-today-cash-api');
+      // Close the phone keyboard, then let Хінкалик judge the day's cash (own cash only).
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      const amountSaved = Number(cashValue) || 0;
+      if (amountSaved > 0) window.dispatchEvent(new CustomEvent<CashSavedDetail>(CASH_SAVED_EVENT, { detail: { amount: amountSaved } }));
       onSaved(response);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Касу не збережено. Спробуй ще раз.');
