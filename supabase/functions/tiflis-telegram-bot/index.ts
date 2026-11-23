@@ -214,10 +214,16 @@ async function chatMembers(db: Db, chatId: number): Promise<Member[]> {
     .map((row) => toMember(row, byTg.get(Number(row.tg_id))));
 }
 
+/** As on the portal (AuthProvider): the `sysadmin` account is an admin whatever its role field says. */
+function isAdminUser(user: PortalUser | undefined): boolean {
+  if (!user) return false;
+  return user.id === "sysadmin" || [user.role, user.role2].some((role) => normalizeRole(role) === "admin");
+}
+
 async function isChatAdmin(db: Db, chatId: number, userId: number): Promise<boolean> {
   const users = await portalUsers(db);
   const portal = users.find((user) => portalTgId(user) === userId);
-  if (portal && [portal.role, portal.role2].some((role) => normalizeRole(role) === "admin")) return true;
+  if (isAdminUser(portal)) return true;
   const result = await tg<{ status: string }>("getChatMember", { chat_id: chatId, user_id: userId });
   return Boolean(result.ok && result.result && ["creator", "administrator"].includes(result.result.status));
 }
@@ -225,7 +231,7 @@ async function isChatAdmin(db: Db, chatId: number, userId: number): Promise<bool
 async function isPortalAdmin(db: Db, userId: number): Promise<boolean> {
   const users = await portalUsers(db);
   const portal = users.find((user) => portalTgId(user) === userId);
-  return Boolean(portal && [portal.role, portal.role2].some((role) => normalizeRole(role) === "admin"));
+  return isAdminUser(portal);
 }
 
 /* ─── Commands ─── */
