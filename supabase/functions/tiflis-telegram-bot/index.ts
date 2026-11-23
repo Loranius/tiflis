@@ -362,15 +362,34 @@ async function who(db: Db, chatId: number, question: string): Promise<string> {
   return formatWho(question, dailyPick(names, seed), seed + ":line");
 }
 
+/**
+ * Whom a reply answers: an ordinary reply, or a reply to a message from
+ * another chat (Telegram sends that as `external_reply` with the author in
+ * `origin.sender_user`; seen in the staff chats, November 2026).
+ */
+function repliedAuthor(message: Update): { id: number; username?: string; first_name?: string; last_name?: string; is_bot?: boolean } | null {
+  if (message.reply_to_message?.from) return message.reply_to_message.from;
+  const origin = message.external_reply?.origin;
+  return origin?.type === "user" && origin.sender_user ? origin.sender_user : null;
+}
+
 /** A «+» or «дякую» reply: counted once per message, never to oneself or a bot. */
 async function recordThanks(db: Db, chatId: number, message: Update) {
-  const target = message.reply_to_message?.from;
+  const target = repliedAuthor(message);
   if (!target || target.is_bot || target.id === message.from.id) return;
   await upsertMember(db, chatId, target);
   const { error } = await db.from("telegram_thanks").insert({ chat_id: chatId, from_tg_id: message.from.id, to_tg_id: target.id, message_id: message.message_id });
-  if (error) return; // the same message twice
-  // A quiet heart on the thank-you instead of a reply, so the chat is not spammed.
-  await tg("setMessageReaction", { chat_id: chatId, message_id: message.message_id, reaction: [{ type: "emoji", emoji: "❤" }] });
+  if (error) {
+    if (error.code !== "23505") console.error("thanks insert failed", error);
+    return; // 23505: the same message twice
+  }
+  // A quiet heart on the thank-you instead of a reply, so the chat is not spammed;
+  // a short line only where reactions are switched off.
+  const reacted = await tg("setMessageReaction", { chat_id: chatId, message_id: message.message_id, reaction: [{ type: "emoji", emoji: "❤" }] });
+  if (!reacted.ok) {
+    const name = escapeHtml([target.first_name, target.last_name].filter(Boolean).join(" ") || "колега");
+    await send(chatId, `🙏 Подяку для ${name} зараховано. /thanks — топ місяця.`, message.message_id);
+  }
 }
 
 async function thanksTop(db: Db, chatId: number): Promise<string> {
@@ -527,7 +546,7 @@ async function onMessage(db: Db, message: Update) {
   if (!parsed && state.enabled && message.from && !message.from.is_bot) {
     const note = parseHashtagNote(text);
     if (note) return await showNote(db, chat.id, note, message.message_id);
-    if (message.reply_to_message && isThanks(text)) return await recordThanks(db, chat.id, message);
+    if ((message.reply_to_message || message.external_reply) && isThanks(text)) return await recordThanks(db, chat.id, message);
     return;
   }
   if (!parsed || !message.from) return;
