@@ -1,6 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+/*
+ * Source of the deployed tiflis-admin-api (synced from production v2 in
+ * November 2026, when the repository copy had drifted), plus the Telegram
+ * chat roles actions.
+ */
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -18,9 +24,16 @@ const ACTIONS = new Set([
   "admin_publish_notification",
   "admin_cleanup_notifications",
   "admin_scrub_linked_credentials",
+  "admin_chat_roles",
+  "admin_set_chat_role",
+  "admin_remove_chat_member",
 ]);
 const ADMIN_ROLES = new Set(["admin", "sysadmin"]);
 const PRIORITIES = new Set(["low", "medium", "high", "critical"]);
+/* Roles the Telegram group bot understands (telegram_chat_members.manual_role). */
+const CHAT_ROLES = new Set(["waiter", "bar", "cook", "chef", "runner", "hostess", "admin"]);
+/** A line break, kept out of string literals. */
+const NL = String.fromCharCode(10);
 
 const ROLE_MATRIX = [
   { role: "sysadmin", label: "Сисадмін", pages: ["today", "schedule", "cash", "menu", "reserve", "staff", "admin"], actions: ["all"] },
@@ -63,14 +76,8 @@ type PortalConfig = {
   updated_at: string;
 };
 
-type AdminActorRow = {
-  login: string | null;
-  display_name: string | null;
-};
-
 // Edge Functions use the service client without a generated Database schema.
-// Keep this small boundary untyped instead of allowing Supabase's inferred
-// `never` table types to leak into otherwise checked business logic.
+// deno-lint-ignore no-explicit-any
 type UntypedSupabaseClient = any;
 
 function corsHeaders(req: Request): HeadersInit {
@@ -135,7 +142,7 @@ async function actorName(client: UntypedSupabaseClient, legacyId: string): Promi
     .from("users")
     .select("login,display_name")
     .eq("id", legacyId)
-    .maybeSingle() as { data: AdminActorRow | null };
+    .maybeSingle();
   return String(data?.display_name || data?.login || "Адміністратор");
 }
 
@@ -176,13 +183,77 @@ async function sendTelegram(chatId: number | string, text: string): Promise<bool
   const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: numericChatId,
-      text,
-      disable_web_page_preview: true,
-    }),
+    body: JSON.stringify({ chat_id: numericChatId, text, disable_web_page_preview: true }),
   });
   return response.ok;
+}
+
+/* ─── Telegram group chat roles (spec 2026-11-23-telegram-group-bot) ─── */
+
+type ChatMemberRow = {
+  chat_id: number;
+  tg_id: number;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  manual_role: string | null;
+  last_seen: string | null;
+  left_at: string | null;
+};
+type ChatPortalUser = {
+  id: string;
+  login: string;
+  display_name: string | null;
+  role: string | null;
+  role2: string | null;
+  tg_id: number | string | null;
+  chat_id: number | string | null;
+};
+
+function portalTelegramId(user: ChatPortalUser): string {
+  const value = Number(user.tg_id || user.chat_id);
+  return Number.isSafeInteger(value) && value > 0 ? String(value) : "";
+}
+
+function parseTelegramId(value: unknown): number | null {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim()) : Number.NaN;
+  return Number.isSafeInteger(number) && number !== 0 ? number : null;
+}
+
+/** Every chat the bot is in, with the people it knows there and their portal accounts. */
+async function chatRoles(client: UntypedSupabaseClient) {
+  const [chatsResult, membersResult, usersResult] = await Promise.all([
+    client.from("telegram_chats").select("chat_id,title,enabled,created_at").order("created_at", { ascending: true }),
+    client.from("telegram_chat_members").select("chat_id,tg_id,username,first_name,last_name,manual_role,last_seen,left_at"),
+    client.from("users").select("id,login,display_name,role,role2,tg_id,chat_id").or("fired.is.null,fired.eq.false"),
+  ]);
+  if (chatsResult.error) throw chatsResult.error;
+  if (membersResult.error) throw membersResult.error;
+  if (usersResult.error) throw usersResult.error;
+  const byTelegram = new Map<string, ChatPortalUser>();
+  for (const user of (usersResult.data || []) as ChatPortalUser[]) {
+    const id = portalTelegramId(user);
+    if (id) byTelegram.set(id, user);
+  }
+  const members = (membersResult.data || []) as ChatMemberRow[];
+  return (chatsResult.data || []).map((chat: { chat_id: number; title: string | null; enabled: boolean }) => ({
+    chat_id: String(chat.chat_id),
+    title: chat.title || "Чат без назви",
+    enabled: chat.enabled,
+    members: members
+      .filter((member) => String(member.chat_id) === String(chat.chat_id) && !member.left_at)
+      .map((member) => {
+        const portal = byTelegram.get(String(member.tg_id));
+        return {
+          tg_id: String(member.tg_id),
+          username: member.username,
+          name: [member.first_name, member.last_name].filter(Boolean).join(" ") || "Учасник",
+          manual_role: member.manual_role,
+          last_seen: member.last_seen,
+          portal: portal ? { id: portal.id, name: portal.display_name || portal.login, role: portal.role, role2: portal.role2 } : null,
+        };
+      }),
+  }));
 }
 
 Deno.serve(async (req: Request) => {
@@ -193,9 +264,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const authorization = req.headers.get("authorization") ?? "";
-  if (!authorization.toLowerCase().startsWith("bearer ")) {
-    return json(req, { ok: false, error: "Authentication required" }, 401);
-  }
+  if (!authorization.toLowerCase().startsWith("bearer ")) return json(req, { ok: false, error: "Authentication required" }, 401);
 
   const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: authorization } },
@@ -220,181 +289,166 @@ Deno.serve(async (req: Request) => {
   } catch {
     return json(req, { ok: false, error: "Invalid JSON" }, 400);
   }
-
   const action = typeof body.action === "string" ? body.action : "";
   if (!ACTIONS.has(action)) return json(req, { ok: false, error: "Unsupported action" }, 400);
 
-  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  const admin: UntypedSupabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const actor = await actorName(admin, profile.legacy_user_id);
 
   try {
     if (action === "admin_bootstrap") {
+      const today = new Date().toISOString().slice(0, 10);
+      const inThirtyDays = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
       const [
-        configResult,
-        activeUsers,
-        linkedProfiles,
-        pendingRegistrations,
-        activeReservations,
-        openNotifications,
-        auditResult,
+        activeStaff, archivedStaff, authOnlyStaff, legacyStaff, linkedProfiles,
+        menuItems, stoppedItems, todayReservations, upcomingReservations, scheduleRows,
+        configResult, notificationsResult, auditResult,
       ] = await Promise.all([
-        admin.from("portal_config").select("*").eq("id", true).maybeSingle(),
         countQuery(admin.from("users").select("id", { count: "exact", head: true }).or("fired.is.null,fired.eq.false")),
-        countQuery(admin.from("staff_profiles").select("user_id", { count: "exact", head: true }).eq("active", true)),
-        countQuery(admin.from("registration_requests").select("id", { count: "exact", head: true }).eq("status", "pending")),
-        countQuery(admin.from("reserve_bookings").select("id", { count: "exact", head: true }).gte("booking_date", new Date().toISOString().slice(0, 10)).neq("status", "cancelled")),
-        countQuery(admin.from("portal_notifications").select("id", { count: "exact", head: true }).eq("status", "published")),
-        admin.from("audit_log").select("id,actor_name,action,entity_type,entity_id,summary,metadata,created_at").order("created_at", { ascending: false }).limit(30),
+        countQuery(admin.from("users").select("id", { count: "exact", head: true }).eq("fired", true)),
+        countQuery(admin.from("users").select("id", { count: "exact", head: true }).eq("credential_source", "auth")),
+        countQuery(admin.from("users").select("id", { count: "exact", head: true }).eq("credential_source", "legacy")),
+        countQuery(admin.from("staff_profiles").select("user_id", { count: "exact", head: true })),
+        countQuery(admin.from("menu_items").select("id", { count: "exact", head: true })),
+        countQuery(admin.from("menu_items").select("id", { count: "exact", head: true }).eq("stopped", true)),
+        countQuery(admin.from("reservations").select("id", { count: "exact", head: true }).eq("reserved_date", today).in("status", ["booked", "occupied"])),
+        countQuery(admin.from("reservations").select("id", { count: "exact", head: true }).gte("reserved_date", today).lte("reserved_date", inThirtyDays).in("status", ["booked", "occupied"])),
+        countQuery(admin.from("schedule").select("id", { count: "exact", head: true }).gte("date", today)),
+        admin.from("portal_config").select("*").eq("id", true).single(),
+        admin.from("notifications").select("id,title,body,priority,author,roles,expires_at,created_at").order("created_at", { ascending: false }).limit(12),
+        admin.from("audit_log").select("id,actor_id,actor_name,action,entity_type,entity_id,summary,metadata,created_at").order("created_at", { ascending: false }).limit(30),
       ]);
       if (configResult.error) throw configResult.error;
+      if (notificationsResult.error) throw notificationsResult.error;
       if (auditResult.error) throw auditResult.error;
-
-      const config = configResult.data as PortalConfig | null;
       return json(req, {
         ok: true,
-        config: config || {
-          id: true,
-          portal_name: "Тифліс · портал персоналу",
-          maintenance_mode: false,
-          announcement_enabled: false,
-          announcement_title: null,
-          announcement_body: null,
-          announcement_priority: "medium",
-          updated_by: null,
-          updated_at: new Date().toISOString(),
-        },
-        metrics: {
-          activeUsers,
-          linkedProfiles,
-          pendingRegistrations,
-          activeReservations,
-          openNotifications,
-        },
+        metrics: { activeStaff, archivedStaff, authOnlyStaff, legacyStaff, linkedProfiles, menuItems, stoppedItems, todayReservations, upcomingReservations, scheduleRows },
+        config: configResult.data as PortalConfig,
+        notifications: notificationsResult.data ?? [],
+        audit: auditResult.data ?? [],
         roleMatrix: ROLE_MATRIX,
         modules: MODULES,
-        audit: auditResult.data || [],
       });
     }
 
     if (action === "admin_save_config") {
-      const portalName = cleanText(body.portal_name, 120) || "Тифліс · портал персоналу";
-      const maintenanceMode = body.maintenance_mode === true;
-      const announcementEnabled = body.announcement_enabled === true;
-      const announcementTitle = cleanText(body.announcement_title, 160);
-      const announcementBody = cleanText(body.announcement_body, 2000);
-      const announcementPriority = parsePriority(body.announcement_priority);
-      if (!announcementPriority) return json(req, { ok: false, error: "Invalid priority" }, 400);
-      if (announcementEnabled && (!announcementTitle || !announcementBody)) {
-        return json(req, { ok: false, error: "Announcement title and body are required" }, 400);
-      }
-
-      const { data, error } = await admin.from("portal_config").upsert({
-        id: true,
+      const portalName = cleanText(body.portal_name, 80) || "Тифліс";
+      const title = cleanText(body.announcement_title, 180) || null;
+      const announcementBody = cleanText(body.announcement_body, 3500) || null;
+      const priority = parsePriority(body.announcement_priority);
+      if (!priority) return json(req, { ok: false, error: "Invalid priority" }, 400);
+      const payload = {
         portal_name: portalName,
-        maintenance_mode: maintenanceMode,
-        announcement_enabled: announcementEnabled,
-        announcement_title: announcementTitle || null,
-        announcement_body: announcementBody || null,
-        announcement_priority: announcementPriority,
-        updated_by: profile.legacy_user_id,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "id" }).select("*").single();
+        maintenance_mode: body.maintenance_mode === true,
+        announcement_enabled: body.announcement_enabled === true,
+        announcement_title: title,
+        announcement_body: announcementBody,
+        announcement_priority: priority,
+        updated_by: actor,
+      };
+      const { data, error } = await admin.from("portal_config").update(payload).eq("id", true).select("*").single();
       if (error) throw error;
-      await audit(admin, profile.legacy_user_id, actor, "config.update", "portal_config", "Оновлено налаштування порталу", "portal", {
-        maintenanceMode,
-        announcementEnabled,
-        announcementPriority,
+      await audit(admin, profile.legacy_user_id, actor, "portal_config_updated", "portal_config", "Оновлено конфігурацію порталу", "main", {
+        maintenanceMode: payload.maintenance_mode,
+        announcementEnabled: payload.announcement_enabled,
       });
       return json(req, { ok: true, config: data });
     }
 
-    if (action === "admin_publish_notification") {
-      const title = cleanText(body.title, 160);
-      const message = cleanText(body.message, 3000);
-      const priority = parsePriority(body.priority);
-      const roles = parseRoles(body.roles);
-      const sendTelegramCopy = body.send_telegram === true;
-      if (!title || !message || !priority) return json(req, { ok: false, error: "Invalid notification" }, 400);
-
-      const { data: notification, error: notificationError } = await admin.from("portal_notifications").insert({
-        title,
-        message,
-        priority,
-        roles,
-        status: "published",
-        send_telegram: sendTelegramCopy,
-        created_by: profile.legacy_user_id,
-        published_at: new Date().toISOString(),
-      }).select("*").single();
-      if (notificationError) throw notificationError;
-
-      let telegramSent = 0;
-      let telegramSkipped = 0;
-      if (sendTelegramCopy) {
-        const usersResult = await admin
-          .from("users")
-          .select("chat_id,tg_id,role,role2,fired")
-          .or("fired.is.null,fired.eq.false");
-        if (usersResult.error) throw usersResult.error;
-        for (const user of usersResult.data || []) {
-          const userRoles = [normalizeRole(user.role), normalizeRole(user.role2)];
-          if (roles.length > 0 && !userRoles.some((role) => roles.includes(role))) continue;
-          const destination = user.chat_id || user.tg_id;
-          if (!destination) {
-            telegramSkipped += 1;
-            continue;
-          }
-          const sent = await sendTelegram(destination, `${title}\n\n${message}`);
-          if (sent) telegramSent += 1;
-          else telegramSkipped += 1;
-        }
-      }
-
-      await audit(admin, profile.legacy_user_id, actor, "notification.publish", "portal_notification", `Опубліковано повідомлення «${title}»`, String(notification.id), {
-        priority,
-        roles,
-        sendTelegramCopy,
-        telegramSent,
-        telegramSkipped,
-      });
-      return json(req, { ok: true, notification, telegramSent, telegramSkipped });
-    }
-
     if (action === "admin_cleanup_notifications") {
-      const before = typeof body.before === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.before)
-        ? body.before
-        : new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
-      const { data: rows, error: selectError } = await admin
-        .from("portal_notifications")
-        .select("id")
-        .lt("created_at", `${before}T00:00:00.000Z`)
-        .neq("status", "published");
-      if (selectError) throw selectError;
-      const ids = (rows || []).map((row) => row.id);
-      if (ids.length > 0) {
-        const { error } = await admin.from("portal_notifications").delete().in("id", ids);
-        if (error) throw error;
-      }
-      await audit(admin, profile.legacy_user_id, actor, "notification.cleanup", "portal_notification", `Очищено ${ids.length} застарілих повідомлень`, null, { before, count: ids.length });
-      return json(req, { ok: true, deleted: ids.length, before });
+      const now = new Date().toISOString();
+      const { data, error } = await admin.from("notifications").delete().not("expires_at", "is", null).lt("expires_at", now).select("id");
+      if (error) throw error;
+      const removed = data?.length || 0;
+      await audit(admin, profile.legacy_user_id, actor, "expired_notifications_removed", "notifications", `Видалено прострочених повідомлень: ${removed}`, null, { removed });
+      return json(req, { ok: true, removed });
     }
 
-    const linkedProfilesResult = await admin.from("staff_profiles").select("legacy_user_id").not("legacy_user_id", "is", null).eq("active", true);
-    if (linkedProfilesResult.error) throw linkedProfilesResult.error;
-    const ids = [...new Set((linkedProfilesResult.data || []).map((profileRow) => String(profileRow.legacy_user_id || "")).filter(Boolean))];
-    let scrubbed = 0;
-    for (const id of ids) {
-      const { error } = await admin.from("users").update({
-        password: authMarker(),
-        session_token: authMarker(),
-      }).eq("id", id);
-      if (error) throw error;
-      scrubbed += 1;
+    if (action === "admin_scrub_linked_credentials") {
+      const { data: profiles, error: profilesError } = await admin.from("staff_profiles").select("legacy_user_id").not("legacy_user_id", "is", null);
+      if (profilesError) throw profilesError;
+      const ids = ((profiles ?? []) as Array<{ legacy_user_id: string | null }>).map((item) => String(item.legacy_user_id)).filter(Boolean);
+      let scrubbed = 0;
+      for (const id of ids) {
+        const { data, error } = await admin.from("users").update({ credential_source: "auth", password: authMarker() }).eq("id", id).neq("credential_source", "auth").select("id");
+        if (error) throw error;
+        scrubbed += data?.length || 0;
+      }
+      await audit(admin, profile.legacy_user_id, actor, "linked_credentials_scrubbed", "users", `Знищено legacy-паролів пов’язаних акаунтів: ${scrubbed}`, null, { scrubbed });
+      return json(req, { ok: true, scrubbed });
     }
-    await audit(admin, profile.legacy_user_id, actor, "credentials.scrub", "users", `Очищено legacy-облікові дані для ${scrubbed} Auth-профілів`, null, { scrubbed });
-    return json(req, { ok: true, scrubbed });
+
+    if (action === "admin_chat_roles") {
+      return json(req, { ok: true, chats: await chatRoles(admin) });
+    }
+
+    if (action === "admin_set_chat_role" || action === "admin_remove_chat_member") {
+      const chatId = parseTelegramId(body.chat_id);
+      const tgId = parseTelegramId(body.tg_id);
+      if (chatId === null || tgId === null) return json(req, { ok: false, error: "Invalid member" }, 400);
+      const { data: member, error: memberError } = await admin
+        .from("telegram_chat_members")
+        .select("first_name,last_name,username,manual_role")
+        .eq("chat_id", chatId)
+        .eq("tg_id", tgId)
+        .maybeSingle();
+      if (memberError) throw memberError;
+      if (!member) return json(req, { ok: false, error: "Member not found" }, 404);
+      const name = [member.first_name, member.last_name].filter(Boolean).join(" ") || member.username || String(tgId);
+      if (action === "admin_remove_chat_member") {
+        const { error } = await admin.from("telegram_chat_members").update({ left_at: new Date().toISOString() }).eq("chat_id", chatId).eq("tg_id", tgId);
+        if (error) throw error;
+        await audit(admin, profile.legacy_user_id, actor, "chat_member_removed", "telegram_chat_members", `Прибрано зі списку чату: ${name}`, String(tgId), { chat_id: String(chatId) });
+        return json(req, { ok: true, chats: await chatRoles(admin) });
+      }
+      const role = body.role === null || body.role === "" || body.role === undefined ? null : cleanText(body.role, 20);
+      if (role !== null && !CHAT_ROLES.has(role)) return json(req, { ok: false, error: "Unknown role" }, 400);
+      const { error } = await admin.from("telegram_chat_members").update({ manual_role: role }).eq("chat_id", chatId).eq("tg_id", tgId);
+      if (error) throw error;
+      await audit(admin, profile.legacy_user_id, actor, "chat_role_set", "telegram_chat_members", role ? `Роль у чаті для ${name}: ${role}` : `Роль у чаті для ${name} — з порталу`, String(tgId), { chat_id: String(chatId), before: member.manual_role, after: role });
+      return json(req, { ok: true, chats: await chatRoles(admin) });
+    }
+
+    const title = cleanText(body.title, 180);
+    const notificationBody = cleanText(body.body, 3500);
+    const priority = parsePriority(body.priority);
+    const roles = parseRoles(body.roles);
+    const expiresAtRaw = cleanText(body.expires_at, 40);
+    const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
+    if (!title || !notificationBody || !priority || (expiresAt && Number.isNaN(expiresAt.getTime()))) {
+      return json(req, { ok: false, error: "Invalid notification" }, 400);
+    }
+    const { data: inserted, error: insertError } = await admin.from("notifications").insert({
+      title,
+      body: notificationBody,
+      priority,
+      author: actor,
+      roles: roles.length ? roles.join(",") : null,
+      expires_at: expiresAt?.toISOString() || null,
+    }).select("id,title,body,priority,author,roles,expires_at,created_at").single();
+    if (insertError) throw insertError;
+
+    let telegramSent = 0;
+    let telegramSkipped = 0;
+    if (body.telegram === true && BOT_TOKEN) {
+      const { data: recipients, error: recipientsError } = await admin.from("users").select("chat_id,tg_id,role,role2,fired").or("fired.is.null,fired.eq.false");
+      if (recipientsError) throw recipientsError;
+      const message = `${title}${NL}${NL}${notificationBody}`;
+      for (const recipient of (recipients ?? []) as Array<{ chat_id: string | null; tg_id: string | null; role: string | null; role2: string | null }>) {
+        if (roles.length && !roles.includes(normalizeRole(recipient.role)) && !roles.includes(normalizeRole(recipient.role2))) continue;
+        const destination = recipient.chat_id || recipient.tg_id;
+        if (!destination) { telegramSkipped += 1; continue; }
+        if (await sendTelegram(destination, message)) telegramSent += 1;
+        else telegramSkipped += 1;
+      }
+    }
+    await audit(admin, profile.legacy_user_id, actor, "notification_published", "notifications", `Опубліковано повідомлення «${title}»`, String(inserted.id), {
+      priority, roles, telegram: body.telegram === true, telegramSent, telegramSkipped,
+    });
+    return json(req, { ok: true, notification: inserted, telegramSent, telegramSkipped });
   } catch (error) {
     console.error("tiflis-admin-api failed", error);
     return json(req, { ok: false, error: "Operation failed" }, 502);
