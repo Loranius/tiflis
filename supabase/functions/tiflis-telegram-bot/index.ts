@@ -10,12 +10,14 @@ import {
   formatBirthdays,
   formatRoles,
   formatStop,
+  formatStopChange,
   formatToday,
   HELP_TEXT,
   NL,
   horoscope,
   inDepartment,
   isWorkingShift,
+  matchMenuItems,
   type Member,
   mentionHtml,
   normalizeRole,
@@ -301,6 +303,42 @@ async function stopList(db: Db): Promise<string> {
   return formatStop(((data ?? []) as Array<{ name: string }>).map((row) => row.name));
 }
 
+/**
+ * Anyone in the staff chat may put a dish on the stop list or take it off
+ * (owner, November 2026). The request may be part of the name; several matches
+ * are listed back instead of guessed.
+ */
+async function changeStop(db: Db, chatId: number, change: "on" | "off", query: string, who: string, replyTo: number) {
+  const command = change === "on" ? "/stopadd" : "/stopdel";
+  if (!query.trim()) {
+    await send(chatId, `Напиши назву страви: <code>${command} хачапурі</code>. Можна частину назви.`, replyTo);
+    return;
+  }
+  const { data, error } = await db.from("menu_items").select("id,name,stopped,sort_order").order("sort_order", { ascending: true });
+  if (error) throw error;
+  const items = (data ?? []) as Array<{ id: number; name: string; stopped: boolean }>;
+  const candidates = items.filter((item) => change === "on" ? !item.stopped : item.stopped);
+  const matches = matchMenuItems(candidates, query);
+  if (!matches.length) {
+    const already = matchMenuItems(items, query);
+    const text = already.length
+      ? (change === "on" ? "Це вже на стопі: " : "Цього немає в стопі: ") + already.map((item) => escapeHtml(item.name)).join(", ") + "."
+      : "Не знайшов такої страви в меню. Спробуй іншу частину назви.";
+    await send(chatId, text, replyTo);
+    return;
+  }
+  if (matches.length > 1) {
+    const list = matches.slice(0, 10).map((item) => `• ${escapeHtml(item.name)}`).join(NL);
+    const more = matches.length > 10 ? `${NL}…і ще ${matches.length - 10}` : "";
+    await send(chatId, `Знайшов кілька страв, уточни назву:${NL}${list}${more}`, replyTo);
+    return;
+  }
+  const item = matches[0] as { id: number; name: string };
+  const update = await db.from("menu_items").update({ stopped: change === "on", updated_at: new Date().toISOString() }).eq("id", item.id);
+  if (update.error) throw update.error;
+  await send(chatId, formatStopChange(change, who, [item.name]), replyTo);
+}
+
 async function horoscopeFor(db: Db, from: { id: number; first_name?: string; username?: string }): Promise<string> {
   const users = await portalUsers(db);
   const portal = users.find((user) => portalTgId(user) === from.id);
@@ -351,6 +389,7 @@ async function onBotMembership(db: Db, update: Update) {
   const enabled = await isPortalAdmin(db, change.from.id);
   await db.from("telegram_chats").upsert({ chat_id: chat.id, title: chat.title ?? null, enabled, added_by: change.from.id }, { onConflict: "chat_id" });
   await upsertMember(db, chat.id, change.from);
+  if (enabled) await registerChatCommands(chat.id);
   await send(chat.id, enabled
     ? "🥟 Привіт, Тифліс! Я тут. Дайте мені права адміністратора, щоб я бачив усіх, і напишіть /help."
     : "🥟 Привіт! Я працюю лише в робочому чаті Тифлісу. Адмін порталу може ввімкнути мене тут командою /enable.");
@@ -376,6 +415,7 @@ async function onMessage(db: Db, message: Update) {
   if (!state.enabled) {
     if (parsed.command === "enable" && await isPortalAdmin(db, message.from.id)) {
       await db.from("telegram_chats").update({ enabled: true }).eq("chat_id", chat.id);
+      await registerChatCommands(chat.id);
       await send(chat.id, "✅ Увімкнено. Тепер я працюю в цьому чаті. /help — що я вмію.", replyTo);
     } else if (COMMANDS.some((command) => command.command === parsed.command) || parsed.command === "enable") {
       await send(chat.id, "Я працюю лише в робочому чаті Тифлісу. Адмін порталу може ввімкнути мене тут командою /enable.", replyTo);
@@ -402,6 +442,11 @@ async function onMessage(db: Db, message: Update) {
       return void await send(chat.id, await birthdays(db), replyTo);
     case "stop":
       return void await send(chat.id, await stopList(db), replyTo);
+    case "stopadd":
+      return await changeStop(db, chat.id, "on", parsed.args, caller, replyTo);
+    case "stopdel":
+    case "unstop":
+      return await changeStop(db, chat.id, "off", parsed.args, caller, replyTo);
     case "roles":
       return void await send(chat.id, formatRoles(await chatMembers(db, chat.id)), replyTo);
     case "role":
@@ -446,6 +491,15 @@ async function restoreLegacy() {
   return { ok: Boolean(hook.ok), hook, webhook: after.result };
 }
 
+/**
+ * The command menu (the «/» button in the message field) for one chat. The
+ * all-group-chats list covers every group; the chat's own list is set too, so
+ * the menu shows even where a client prefers the more specific scope.
+ */
+async function registerChatCommands(chatId: number) {
+  return await tg("setMyCommands", { commands: COMMANDS, scope: { type: "chat", chat_id: chatId } });
+}
+
 /* ─── Setup (called once from the database with the cron secret) ─── */
 
 async function setup(url: string) {
@@ -458,8 +512,12 @@ async function setup(url: string) {
   const secret = await webhookSecret();
   const hook = await tg("setWebhook", { url, secret_token: secret, allowed_updates: ["message", "my_chat_member", "callback_query"], drop_pending_updates: false });
   const commands = await tg("setMyCommands", { commands: COMMANDS, scope: { type: "all_group_chats" }, language_code: "" });
+  await tg("setChatMenuButton", { menu_button: { type: "commands" } });
+  const db: Db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data: chats } = await db.from("telegram_chats").select("chat_id").eq("enabled", true);
+  const perChat = await Promise.all(((chats ?? []) as Array<{ chat_id: number }>).map((chat) => registerChatCommands(Number(chat.chat_id))));
   const after = await tg("getWebhookInfo");
-  return { ok: Boolean(hook.ok && commands.ok), bot: botUsername, hook, commands, webhook: after.result };
+  return { ok: Boolean(hook.ok && commands.ok), bot: botUsername, hook, commands, perChat, webhook: after.result };
 }
 
 Deno.serve(async (req: Request) => {
