@@ -367,16 +367,23 @@ async function who(db: Db, chatId: number, question: string): Promise<string> {
  * another chat (Telegram sends that as `external_reply` with the author in
  * `origin.sender_user`; seen in the staff chats, November 2026).
  */
-function repliedAuthor(message: Update): { id: number; username?: string; first_name?: string; last_name?: string; is_bot?: boolean } | null {
-  if (message.reply_to_message?.from) return message.reply_to_message.from;
+function repliedAuthor(message: Update): { user: { id: number; username?: string; first_name?: string; last_name?: string; is_bot?: boolean }; external: boolean } | null {
+  if (message.reply_to_message?.from) return { user: message.reply_to_message.from, external: false };
   const origin = message.external_reply?.origin;
-  return origin?.type === "user" && origin.sender_user ? origin.sender_user : null;
+  return origin?.type === "user" && origin.sender_user ? { user: origin.sender_user, external: true } : null;
 }
 
 /** A «+» or «дякую» reply: counted once per message, never to oneself or a bot. */
 async function recordThanks(db: Db, chatId: number, message: Update) {
-  const target = repliedAuthor(message);
-  if (!target || target.is_bot || target.id === message.from.id) return;
+  const replied = repliedAuthor(message);
+  const target = replied?.user;
+  if (!replied || !target || target.is_bot || target.id === message.from.id) return;
+  // A quote from another chat may be anyone's: only a confirmed member of this
+  // chat can be thanked here, so the roster (and /all) never gains strangers.
+  if (replied.external) {
+    const member = await tg<{ status: string }>("getChatMember", { chat_id: chatId, user_id: target.id });
+    if (!member.ok || !member.result || !MEMBER_STATUSES.has(member.result.status)) return;
+  }
   await upsertMember(db, chatId, target);
   const { error } = await db.from("telegram_thanks").insert({ chat_id: chatId, from_tg_id: message.from.id, to_tg_id: target.id, message_id: message.message_id });
   if (error) {
