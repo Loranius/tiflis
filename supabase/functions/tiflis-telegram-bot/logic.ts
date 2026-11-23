@@ -19,6 +19,9 @@ export interface Member {
   portal: { name: string; role: string | null; role2: string | null } | null;
 }
 
+/** A line break, kept out of string literals (no escapes in this file). */
+export const NL = String.fromCharCode(10);
+
 export const ROLE_LABELS: Record<RoleKey, string> = {
   waiter: 'офіціант',
   bar: 'бармен',
@@ -68,15 +71,22 @@ export const HELP_TEXT = [
   '/role кухар — призначити роль (адмін, відповіддю на повідомлення людини; /role - прибрати)',
   '',
   'Ролі я беру з порталу Тифлісу. Кого там немає — адмін призначає вручну.',
-].join('\n');
+].join(NL);
 
 /** «/all», «/all@TiflisBot args»; null for text, or a command addressed to another bot. */
 export function parseCommand(text: string, botUsername: string): { command: string; args: string } | null {
-  const match = /^\/([A-Za-z_]+)(?:@([A-Za-z0-9_]+))?(?:\s+([\s\S]*))?$/.exec((text || '').trim());
-  if (!match) return null;
-  const [, command = '', target, args = ''] = match;
-  if (target && target.toLowerCase() !== botUsername.toLowerCase()) return null;
-  return { command: command.toLowerCase(), args: args.trim() };
+  const trimmed = (text || '').trim();
+  if (!trimmed.startsWith('/')) return null;
+  let space = -1;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    if (trimmed.charCodeAt(index) <= 32) { space = index; break; }
+  }
+  const head = space === -1 ? trimmed.slice(1) : trimmed.slice(1, space);
+  const args = space === -1 ? '' : trimmed.slice(space + 1).trim();
+  const [command = '', target] = head.split('@');
+  if (!command || !/^[A-Za-z_]+$/.test(command)) return null;
+  if (target !== undefined && target.toLowerCase() !== botUsername.toLowerCase()) return null;
+  return { command: command.toLowerCase(), args };
 }
 
 export function normalizeRole(value: string | null | undefined): RoleKey | null {
@@ -164,10 +174,12 @@ const SIGN_STARTS: Array<[number, number, string]> = [
 export function zodiacSign(zodiac: string | null, birthday: string | null): string | null {
   const named = SIGNS.find((sign) => (zodiac || '').includes(sign));
   if (named) return named;
-  const match = /(?:^|\D)(\d{2})-(\d{2})$/.exec((birthday || '').trim());
-  if (!match) return null;
-  const month = Number(match[1]);
-  const day = Number(match[2]);
+  const value = (birthday || '').trim();
+  const [monthText = '', dayText = ''] = value.slice(-5).split('-');
+  const before = value.length > 5 ? value.charAt(value.length - 6) : '-';
+  if (!/^[0-9]{2}$/.test(monthText) || !/^[0-9]{2}$/.test(dayText) || before !== '-') return null;
+  const month = Number(monthText);
+  const day = Number(dayText);
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   let sign = 'Козеріг';
   for (const [startMonth, startDay, name] of SIGN_STARTS) {
@@ -181,7 +193,7 @@ export function zodiacSign(zodiac: string | null, birthday: string | null): stri
 const BY_SIGN: Record<string, string[]> = {
   'Овен': ['Зірки кажуть: сьогодні ти першим біжиш до нового столу. Головне — не збити ранера.', 'Енергії в тебе на три зміни. Витрать її на допродаж, а не на суперечки на кухні.', 'Марс радить: менше «е-е-е», більше «рекомендую».', 'Сьогодні ти таран. Пробивай стоп-лист і настрій гостей.'],
   'Телець': ['Сьогодні тобі пощастить з тими, хто замовляє десерт. Не проґав їх.', 'Зірки радять: не сперечайся з гостем про прожарку. Просто кивай.', 'Твій день для неквапливої, але дорогої подачі.', 'Венера обіцяє добрі чайові. Але тільки якщо посміхнешся.'],
-  'Близнюки': ['Сьогодні ти зможеш тримати в голові п\'ять замовлень одразу. Запиши все одно.', 'Зірки радять балакати з гостями, а не з колегами на роздачі.', 'Твоя чарівність сьогодні продає вино. Користуйся.', 'Двоє в одному: офіціант і стендап. Публіка твоя.'],
+  'Близнюки': ['Сьогодні ти зможеш тримати в голові пʼять замовлень одразу. Запиши все одно.', 'Зірки радять балакати з гостями, а не з колегами на роздачі.', 'Твоя чарівність сьогодні продає вино. Користуйся.', 'Двоє в одному: офіціант і стендап. Публіка твоя.'],
   'Рак': ['Сьогодні ти відчуваєш гостя з першого погляду. Відчуй і його бажання взяти хінкалі.', 'Зірки радять не ховатися в підсобці. Зал чекає.', 'Тебе захистить панцир спокою навіть від найвибагливішого столу.', 'Місяць каже: обійми свій поднос — він твій найкращий друг сьогодні.'],
   'Лев': ['Сьогодні ти зірка залу. Сяй, але не забувай про рахунки.', 'Сонце радить: ходи так, ніби ти власник ресторану. Тільки працюй як офіціант.', 'Гості аплодуватимуть твоїй подачі. Ну, майже.', 'Твій рик сьогодні — «чи бажаєте ще щось?». Повторюй частіше.'],
   'Діва': ['Сьогодні ти помітиш крихту на скатертині за три столи. Прибери.', 'Зірки радять: перевір замовлення двічі, ти ж Діва.', 'Твій порядок сьогодні врятує зміну. І серветки.', 'Ідеальна сервіровка — твоя суперсила. Не витрачай її на сварки.'],
@@ -189,8 +201,8 @@ const BY_SIGN: Record<string, string[]> = {
   'Скорпіон': ['Сьогодні твій погляд продає краще за меню. Дивись уважно.', 'Зірки радять жалити лише цінами на вино.', 'Таємничість — твоя фішка. Але назву страви все-таки скажи.', 'Сьогодні ти розкусиш будь-якого гостя. Головне — не вголос.'],
   'Стрілець': ['Сьогодні ти влучаєш у ціль: кожна рекомендація — в яблучко.', 'Зірки радять не стріляти очима в колег, а замовленнями — на кухню.', 'Пригода дня: стіл на 12 без попередження. Ти впораєшся.', 'Твій оптимізм сьогодні заразний. Заражай гостей десертами.'],
   'Козеріг': ['Сьогодні ти будуєш касу цеглинка за цеглинкою. Наполегливо.', 'Зірки радять: план — це добре, але гостю теж треба посміхнутися.', 'Твоя дисципліна сьогодні тримає всю зміну. Не розслабляйся.', 'Сатурн каже: робота сама себе не зробить. Але ти зробиш.'],
-  'Водолій': ['Сьогодні в тебе з\'явиться геніальна ідея подачі. Спершу спитай шефа.', 'Зірки радять бути оригінальним, але меню не переписувати.', 'Твоя дивакуватість сьогодні подобається гостям. Користуйся.', 'Свіжий погляд на старий стіл — і чайові вже інші.'],
-  'Риби': ['Сьогодні ти пливеш залом, як риба у воді. Не забудь про воду для гостей.', 'Зірки радять менше мріяти біля бару, більше носити.', 'Інтуїція підкаже, хто з гостей хоче хінкалі. Усі.', 'Твоя м\'якість сьогодні рятує зміну. І нерви колег.'],
+  'Водолій': ['Сьогодні в тебе зʼявиться геніальна ідея подачі. Спершу спитай шефа.', 'Зірки радять бути оригінальним, але меню не переписувати.', 'Твоя дивакуватість сьогодні подобається гостям. Користуйся.', 'Свіжий погляд на старий стіл — і чайові вже інші.'],
+  'Риби': ['Сьогодні ти пливеш залом, як риба у воді. Не забудь про воду для гостей.', 'Зірки радять менше мріяти біля бару, більше носити.', 'Інтуїція підкаже, хто з гостей хоче хінкалі. Усі.', 'Твоя мʼякість сьогодні рятує зміну. І нерви колег.'],
 };
 
 const GENERAL = [
@@ -221,7 +233,7 @@ export function formatToday(rows: Array<{ name: string; shift: string; departmen
     list.push(`${escapeHtml(row.name)} <i>(${escapeHtml(row.shift)})</i>`);
     groups.set(row.department, list);
   }
-  return ['📅 <b>Сьогодні на зміні</b>', ...[...groups].map(([department, names]) => `\n<b>${escapeHtml(department)}:</b> ${names.join(', ')}`)].join('\n');
+  return ['📅 <b>Сьогодні на зміні</b>', ...[...groups].map(([department, names]) => `${NL}<b>${escapeHtml(department)}:</b> ${names.join(', ')}`)].join(NL);
 }
 
 const BEST_LINES = [
@@ -246,16 +258,16 @@ export function formatBirthdays(rows: Array<{ name: string; month: number; day: 
     const isToday = row.month * 100 + row.day === today;
     return `${isToday ? '🎉 <b>сьогодні</b>' : `${row.day} ${MONTHS[row.month - 1] ?? ''}`} — ${escapeHtml(row.name)}`;
   });
-  return ['🎂 <b>Найближчі дні народження</b>', ...lines].join('\n');
+  return ['🎂 <b>Найближчі дні народження</b>', ...lines].join(NL);
 }
 
 export function formatStop(names: string[]): string {
   if (!names.length) return '✅ Стоп-лист порожній. Продаємо все!';
-  return ['⛔ <b>Стоп-лист</b>', ...names.map((name) => `• ${escapeHtml(name)}`)].join('\n');
+  return ['⛔ <b>Стоп-лист</b>', ...names.map((name) => `• ${escapeHtml(name)}`)].join(NL);
 }
 
 export function formatRoles(members: Member[]): string {
-  if (!members.length) return '👥 Я ще нікого тут не знаю. Напишіть щось у чат — і я запам\'ятаю.';
+  if (!members.length) return '👥 Я ще нікого тут не знаю. Напишіть щось у чат — і я запамʼятаю.';
   const lines = members
     .map((member) => {
       const roles = rolesOf(member).map((role) => ROLE_LABELS[role]);
@@ -263,5 +275,5 @@ export function formatRoles(members: Member[]): string {
       return `${escapeHtml(displayName(member))} — ${roles.length ? roles.join(', ') : 'без ролі'}${source}`;
     })
     .sort((left, right) => left.localeCompare(right, 'uk'));
-  return ['👥 <b>Хто є хто</b>', ...lines, '', '✍️ — роль призначена вручну'].join('\n');
+  return ['👥 <b>Хто є хто</b>', ...lines, '', '✍️ — роль призначена вручну'].join(NL);
 }
