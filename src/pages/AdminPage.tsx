@@ -1,5 +1,6 @@
 import {
   BellRing,
+  Bot,
   Check,
   Database,
   Eraser,
@@ -20,11 +21,12 @@ import {
 import {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
+import { ChatRolesPanel } from '../components/ChatRolesPanel';
 import { RegistrationAdminPanel } from '../components/RegistrationAdminPanel';
 import { secureApi } from '../lib/secureApi';
 import './admin.css';
 
-type AdminTab = 'overview' | 'notice' | 'system' | 'permissions' | 'audit';
+type AdminTab = 'overview' | 'notice' | 'chat' | 'system' | 'permissions' | 'audit';
 type Priority = 'low' | 'medium' | 'high' | 'critical';
 
 interface AdminMetrics {
@@ -293,6 +295,7 @@ export function AdminPage() {
   const tabs: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Огляд', icon: <Sparkles size={16} /> },
     { key: 'notice', label: 'Оголошення', icon: <Megaphone size={16} /> },
+    { key: 'chat', label: 'Ролі в чаті', icon: <Bot size={16} /> },
     { key: 'system', label: 'Система', icon: <ServerCog size={16} /> },
     { key: 'permissions', label: 'Права', icon: <ShieldCheck size={16} /> },
     { key: 'audit', label: 'Аудит', icon: <FileClock size={16} /> },
@@ -365,6 +368,8 @@ export function AdminPage() {
           </section>
         </div>
       ) : null}
+
+      {!loading && data && tab === 'chat' ? <ChatRolesPanel /> : null}
 
       {!loading && data && config && tab === 'system' ? (
         <div className="admin-two-column-v2">
