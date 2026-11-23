@@ -52,6 +52,8 @@ export const COMMANDS: Array<{ command: string; description: string }> = [
   { command: 'horoscope', description: 'Гороскоп на сьогодні' },
   { command: 'birthdays', description: 'Найближчі дні народження' },
   { command: 'stop', description: 'Стоп-лист' },
+  { command: 'stopadd', description: 'Поставити страву на стоп: /stopadd назва' },
+  { command: 'stopdel', description: 'Зняти страву зі стопу: /stopdel назва' },
   { command: 'roles', description: 'Хто є хто' },
   { command: 'role', description: 'Призначити роль (адмін, відповіддю)' },
   { command: 'help', description: 'Що я вмію' },
@@ -67,6 +69,8 @@ export const HELP_TEXT = [
   '/horoscope — твій гороскоп на сьогодні',
   '/birthdays — найближчі дні народження',
   '/stop — стоп-лист',
+  '/stopadd хачапурі — поставити страву на стоп (можна частину назви)',
+  '/stopdel хачапурі — зняти страву зі стопу',
   '/roles — хто є хто',
   '/role кухар — призначити роль (адмін, відповіддю на повідомлення людини; /role - прибрати)',
   '',
@@ -276,4 +280,36 @@ export function formatRoles(members: Member[]): string {
     })
     .sort((left, right) => left.localeCompare(right, 'uk'));
   return ['👥 <b>Хто є хто</b>', ...lines, '', '✍️ — роль призначена вручну'].join(NL);
+}
+
+/* ─── Stop list from the chat ─── */
+
+/** Lower case, one kind of apostrophe, single spaces. */
+function normalizeName(text: string): string {
+  return (text || '').toLowerCase().replaceAll("'", 'ʼ').replaceAll('’', 'ʼ').split(' ').filter(Boolean).join(' ');
+}
+
+/**
+ * Menu items a chat request means: the exact name if there is one, else every
+ * name containing the request, else every name containing each of its words.
+ */
+export function matchMenuItems<T extends { name: string }>(items: T[], query: string): T[] {
+  const wanted = normalizeName(query);
+  if (!wanted) return [];
+  const exact = items.filter((item) => normalizeName(item.name) === wanted);
+  if (exact.length) return exact;
+  const partial = items.filter((item) => normalizeName(item.name).includes(wanted));
+  if (partial.length) return partial;
+  const words = wanted.split(' ');
+  return items.filter((item) => {
+    const name = normalizeName(item.name);
+    return words.every((word) => name.includes(word));
+  });
+}
+
+export function formatStopChange(change: 'on' | 'off', who: string, names: string[]): string {
+  const list = names.map((name) => `<b>${escapeHtml(name)}</b>`).join(', ');
+  return change === 'on'
+    ? `⛔ ${escapeHtml(who)} ставить на стоп: ${list}. /stop — весь стоп-лист.`
+    : `✅ ${escapeHtml(who)}: знято зі стопу ${list}.`;
 }

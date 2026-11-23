@@ -7,6 +7,8 @@ import {
   formatBirthdays,
   formatRoles,
   formatStop,
+  formatStopChange,
+  matchMenuItems,
   formatToday,
   HELP_TEXT,
   COMMANDS,
@@ -97,4 +99,41 @@ test('friendly empty answers, escaping and no money', () => {
   assert.equal(isWorkingShift('О'), false);
   assert.equal(isWorkingShift(''), false);
   assert.equal(isWorkingShift('СН/Б'), true);
+});
+
+test('matchMenuItems: exact name wins, then partial, then all words; apostrophes and case ignored', () => {
+  const items = [
+    { id: 1, name: 'Хачапурі по-аджарськи' },
+    { id: 2, name: 'Хачапурі по-імеретинськи' },
+    { id: 3, name: 'Хінкалі з бараниною' },
+    { id: 4, name: 'Пхалі' },
+    { id: 5, name: "Сир м'який" },
+  ];
+  assert.deepEqual(matchMenuItems(items, 'пхалі').map((item) => item.id), [4]);
+  assert.deepEqual(matchMenuItems(items, 'хачапурі').map((item) => item.id), [1, 2]);
+  assert.deepEqual(matchMenuItems(items, 'аджар').map((item) => item.id), [1]);
+  assert.deepEqual(matchMenuItems(items, 'баранина хінкалі').map((item) => item.id), []);
+  assert.deepEqual(matchMenuItems(items, 'хінкалі баранин').map((item) => item.id), [3]);
+  assert.deepEqual(matchMenuItems(items, 'сир мʼякий').map((item) => item.id), [5]);
+  assert.deepEqual(matchMenuItems(items, '   ').map((item) => item.id), []);
+  // An exact name is chosen even when it is also part of a longer name.
+  const nested = [{ id: 1, name: 'Лобіо' }, { id: 2, name: 'Лобіо з горіхами' }];
+  assert.deepEqual(matchMenuItems(nested, 'лобіо').map((item) => item.id), [1]);
+});
+
+test('formatStopChange names who did it and what, without money', () => {
+  const on = formatStopChange('on', 'Оксана', ['Пхалі']);
+  assert.match(on, /Оксана/);
+  assert.match(on, /Пхалі/);
+  assert.match(on, /стоп/);
+  const off = formatStopChange('off', 'Оксана', ['Пхалі']);
+  assert.match(off, /знято/i);
+  assert.doesNotMatch(on + off, /грн|₴/);
+});
+
+test('stop-list commands are in the menu', () => {
+  const names = COMMANDS.map((command) => command.command);
+  assert.ok(names.includes('stopadd'));
+  assert.ok(names.includes('stopdel'));
+  assert.match(HELP_TEXT, /stopadd/);
 });
