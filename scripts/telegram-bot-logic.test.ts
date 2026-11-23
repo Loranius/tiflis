@@ -8,6 +8,14 @@ import {
   formatRoles,
   formatStop,
   formatStopChange,
+  formatNotes,
+  formatThanksTop,
+  formatWelcome,
+  formatWho,
+  isThanks,
+  parseHashtagNote,
+  parseNoteArgs,
+  parseNoteName,
   matchMenuItems,
   formatToday,
   HELP_TEXT,
@@ -136,4 +144,77 @@ test('stop-list commands are in the menu', () => {
   assert.ok(names.includes('stopadd'));
   assert.ok(names.includes('stopdel'));
   assert.match(HELP_TEXT, /stopadd/);
+});
+
+test('isThanks: a plus or a thank-you reply counts, ordinary text does not', () => {
+  for (const text of ['+', '+1', '👍', 'дякую', 'Дякую!', 'дякую дуже', 'Спасибі', 'спасибо)', 'дяка', 'thanks', 'мерсі']) {
+    assert.equal(isThanks(text), true, text);
+  }
+  for (const text of ['', '++ нормально', 'дякуючи тобі ми запізнились', 'плюс мінус', 'не дякую', '+380671234567', 'дякую'.repeat(20)]) {
+    assert.equal(isThanks(text), false, text);
+  }
+});
+
+test('note names: one word, letters, digits or underscore, lower case, up to 32', () => {
+  assert.equal(parseNoteName('WiFi'), 'wifi');
+  assert.equal(parseNoteName('#Правила'), 'правила');
+  assert.equal(parseNoteName('код_дверей'), 'код_дверей');
+  assert.equal(parseNoteName('два слова'), null);
+  assert.equal(parseNoteName(''), null);
+  assert.equal(parseNoteName('a'.repeat(33)), null);
+  assert.equal(parseNoteName('wi-fi'), null);
+});
+
+test('parseNoteArgs splits the name from the text, keeping line breaks', () => {
+  const nl = String.fromCharCode(10);
+  assert.deepEqual(parseNoteArgs('wifi Tiflis_Guest / пароль 1234'), { name: 'wifi', body: 'Tiflis_Guest / пароль 1234' });
+  assert.deepEqual(parseNoteArgs('правила' + nl + '1. Не спізнюватись'), { name: 'правила', body: '1. Не спізнюватись' });
+  assert.deepEqual(parseNoteArgs('wifi'), { name: 'wifi', body: '' });
+  assert.equal(parseNoteArgs(''), null);
+  assert.equal(parseNoteArgs('погана-назва текст'), null);
+});
+
+test('parseHashtagNote: a message that is just #name asks for that note', () => {
+  assert.equal(parseHashtagNote('#wifi'), 'wifi');
+  assert.equal(parseHashtagNote('  #Правила  '), 'правила');
+  assert.equal(parseHashtagNote('#wifi будь ласка'), null);
+  assert.equal(parseHashtagNote('дивись #wifi'), null);
+  assert.equal(parseHashtagNote('#'), null);
+});
+
+test('formatWho names the pick and repeats the question without a trailing ?', () => {
+  const text = formatWho('миє посуд?', 'Оксана', 'seed');
+  assert.match(text, /Оксана/);
+  assert.match(text, /миє посуд/);
+  assert.doesNotMatch(text, /посуд\?/);
+  assert.match(formatWho('', 'Оксана', 'seed'), /Оксана/);
+  assert.match(formatWho('миє посуд', null, 'seed'), /нікого/i);
+});
+
+test('formatThanksTop ranks people and says when nobody was thanked', () => {
+  const text = formatThanksTop([{ name: 'Оксана', count: 5 }, { name: 'Іра', count: 2 }], 'листопад');
+  assert.match(text, /листопад/);
+  assert.match(text, /1\. .*Оксана.*5/);
+  assert.match(text, /2\. .*Іра.*2/);
+  assert.match(formatThanksTop([], 'листопад'), /ще ніхто/i);
+});
+
+test('formatWelcome greets by name and asks for a role only when it is unknown', () => {
+  assert.match(formatWelcome('Вікторія', null), /Вікторія/);
+  assert.match(formatWelcome('Вікторія', null), /роль/);
+  const known = formatWelcome('Оксана', 'офіціант');
+  assert.match(known, /офіціант/);
+  assert.doesNotMatch(known, /признач/);
+});
+
+test('formatNotes lists saved notes as hashtags', () => {
+  assert.match(formatNotes(['wifi', 'правила']), /#wifi/);
+  assert.match(formatNotes([]), /немає/i);
+});
+
+test('new commands are in the menu and help', () => {
+  const names = COMMANDS.map((command) => command.command);
+  for (const name of ['who', 'thanks', 'note', 'notes', 'delnote']) assert.ok(names.includes(name), name);
+  assert.match(HELP_TEXT, /who/);
+  assert.match(HELP_TEXT, /#назва/);
 });

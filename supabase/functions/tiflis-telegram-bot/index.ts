@@ -11,6 +11,15 @@ import {
   formatRoles,
   formatStop,
   formatStopChange,
+  formatNotes,
+  formatThanksTop,
+  formatWelcome,
+  formatWho,
+  isThanks,
+  MONTHS_NOMINATIVE,
+  parseHashtagNote,
+  parseNoteArgs,
+  parseNoteName,
   formatToday,
   HELP_TEXT,
   NL,
@@ -339,6 +348,109 @@ async function changeStop(db: Db, chatId: number, change: "on" | "off", query: s
   await send(chatId, formatStopChange(change, who, [item.name]), replyTo);
 }
 
+/* ─── Who today, thanks, notes, welcome (round 2) ─── */
+
+function normalizeQuestion(text: string): string {
+  return (text || "").trim().toLowerCase().split(" ").filter(Boolean).join(" ");
+}
+
+/** «/who миє посуд» — one person from today's shift, the same answer all day for the same question. */
+async function who(db: Db, chatId: number, question: string): Promise<string> {
+  const date = kyivDateKey();
+  const names = (await today(db)).map((row) => row.name);
+  const seed = `${chatId}:${date}:${normalizeQuestion(question)}`;
+  return formatWho(question, dailyPick(names, seed), seed + ":line");
+}
+
+/** A «+» or «дякую» reply: counted once per message, never to oneself or a bot. */
+async function recordThanks(db: Db, chatId: number, message: Update) {
+  const target = message.reply_to_message?.from;
+  if (!target || target.is_bot || target.id === message.from.id) return;
+  await upsertMember(db, chatId, target);
+  const { error } = await db.from("telegram_thanks").insert({ chat_id: chatId, from_tg_id: message.from.id, to_tg_id: target.id, message_id: message.message_id });
+  if (error) return; // the same message twice
+  // A quiet heart on the thank-you instead of a reply, so the chat is not spammed.
+  await tg("setMessageReaction", { chat_id: chatId, message_id: message.message_id, reaction: [{ type: "emoji", emoji: "❤" }] });
+}
+
+async function thanksTop(db: Db, chatId: number): Promise<string> {
+  const month = kyivDateKey().slice(0, 7);
+  const since = new Date(Date.now() - 33 * 86_400_000).toISOString();
+  const { data, error } = await db.from("telegram_thanks").select("to_tg_id,created_at").eq("chat_id", chatId).gte("created_at", since);
+  if (error) throw error;
+  const counts = new Map<number, number>();
+  for (const row of (data ?? []) as Array<{ to_tg_id: number; created_at: string }>) {
+    if (kyivDateKey(new Date(row.created_at)).slice(0, 7) !== month) continue;
+    counts.set(Number(row.to_tg_id), (counts.get(Number(row.to_tg_id)) ?? 0) + 1);
+  }
+  const members = new Map((await chatMembers(db, chatId)).map((member) => [member.tgId, member]));
+  const rows = [...counts.entries()]
+    .map(([tgId, count]) => {
+      const member = members.get(tgId);
+      return { name: member ? (member.portal?.name || [member.firstName, member.lastName].filter(Boolean).join(" ") || "Учасник") : "Учасник", count };
+    })
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, "uk"))
+    .slice(0, 10);
+  return formatThanksTop(rows, MONTHS_NOMINATIVE[Number(month.slice(5, 7)) - 1] ?? "");
+}
+
+async function saveNote(db: Db, chatId: number, message: Update, args: string) {
+  const replyTo = message.message_id;
+  if (!(await isChatAdmin(db, chatId, message.from.id))) {
+    await send(chatId, "Нотатки зберігають лише адміни чату або порталу. Подивитися: /notes", replyTo);
+    return;
+  }
+  const parsed = parseNoteArgs(args);
+  if (!parsed) {
+    await send(chatId, "Так: <code>/note wifi Tiflis_Guest / 12345678</code> або відповіддю на повідомлення: <code>/note правила</code>. Назва — одне слово.", replyTo);
+    return;
+  }
+  const quoted = message.reply_to_message ? String(message.reply_to_message.text || message.reply_to_message.caption || "").trim() : "";
+  const body = (parsed.body || quoted).slice(0, 3500);
+  if (!body) {
+    await send(chatId, "Нотатка порожня: допиши текст після назви або відповідай командою на повідомлення з текстом.", replyTo);
+    return;
+  }
+  const { error } = await db.from("telegram_notes").upsert({ chat_id: chatId, name: parsed.name, body, created_by: message.from.id, updated_at: new Date().toISOString() }, { onConflict: "chat_id,name" });
+  if (error) throw error;
+  await send(chatId, `🗒 Збережено: #${escapeHtml(parsed.name)}. Напиши #${escapeHtml(parsed.name)} — і я покажу.`, replyTo);
+}
+
+async function deleteNote(db: Db, chatId: number, message: Update, args: string) {
+  const replyTo = message.message_id;
+  if (!(await isChatAdmin(db, chatId, message.from.id))) {
+    await send(chatId, "Видаляти нотатки можуть лише адміни.", replyTo);
+    return;
+  }
+  const name = parseNoteName(args);
+  if (!name) return void await send(chatId, "Так: <code>/delnote wifi</code>", replyTo);
+  const { data, error } = await db.from("telegram_notes").delete().eq("chat_id", chatId).eq("name", name).select("name");
+  if (error) throw error;
+  await send(chatId, (data ?? []).length ? `🗑 Нотатку #${escapeHtml(name)} видалено.` : `Нотатки #${escapeHtml(name)} немає. /notes — усі.`, replyTo);
+}
+
+async function listNotes(db: Db, chatId: number): Promise<string> {
+  const { data, error } = await db.from("telegram_notes").select("name").eq("chat_id", chatId).order("name", { ascending: true });
+  if (error) throw error;
+  return formatNotes(((data ?? []) as Array<{ name: string }>).map((row) => row.name));
+}
+
+async function showNote(db: Db, chatId: number, name: string, replyTo: number) {
+  const { data } = await db.from("telegram_notes").select("body").eq("chat_id", chatId).eq("name", name).maybeSingle();
+  if (!data?.body) return; // an ordinary hashtag, not a note: stay quiet
+  // Plain text: notes are typed by people and may contain anything.
+  await tg("sendMessage", { chat_id: chatId, text: data.body, disable_web_page_preview: true, reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } });
+}
+
+async function welcome(db: Db, chatId: number, user: { id: number; first_name?: string; last_name?: string; is_bot?: boolean }) {
+  if (!user || user.is_bot) return;
+  const users = await portalUsers(db);
+  const portal = users.find((candidate) => portalTgId(candidate) === user.id);
+  const roles = portal ? [normalizeRole(portal.role), normalizeRole(portal.role2)].filter((role, index, all): role is RoleKey => Boolean(role) && all.indexOf(role) === index) : [];
+  const name = portal ? portal.display_name || portal.login : [user.first_name, user.last_name].filter(Boolean).join(" ") || "новенький";
+  await send(chatId, formatWelcome(name, roles.length ? roles.map((role) => ROLE_LABELS[role]).join(" + ") : null));
+}
+
 async function horoscopeFor(db: Db, from: { id: number; first_name?: string; username?: string }): Promise<string> {
   const users = await portalUsers(db);
   const portal = users.find((user) => portalTgId(user) === from.id);
@@ -409,6 +521,15 @@ async function onMessage(db: Db, message: Update) {
 
   await me();
   const parsed = parseCommand(text, botUsername);
+  if (state.enabled) {
+    for (const user of message.new_chat_members ?? []) await welcome(db, chat.id, user);
+  }
+  if (!parsed && state.enabled && message.from && !message.from.is_bot) {
+    const note = parseHashtagNote(text);
+    if (note) return await showNote(db, chat.id, note, message.message_id);
+    if (message.reply_to_message && isThanks(text)) return await recordThanks(db, chat.id, message);
+    return;
+  }
   if (!parsed || !message.from) return;
   const replyTo = message.message_id;
 
@@ -447,6 +568,16 @@ async function onMessage(db: Db, message: Update) {
     case "stopdel":
     case "unstop":
       return await changeStop(db, chat.id, "off", parsed.args, caller, replyTo);
+    case "who":
+      return void await send(chat.id, await who(db, chat.id, parsed.args), replyTo);
+    case "thanks":
+      return void await send(chat.id, await thanksTop(db, chat.id), replyTo);
+    case "notes":
+      return void await send(chat.id, await listNotes(db, chat.id), replyTo);
+    case "note":
+      return await saveNote(db, chat.id, message, parsed.args);
+    case "delnote":
+      return await deleteNote(db, chat.id, message, parsed.args);
     case "roles":
       return void await send(chat.id, formatRoles(await chatMembers(db, chat.id)), replyTo);
     case "role":

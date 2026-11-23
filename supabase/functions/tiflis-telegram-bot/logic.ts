@@ -54,6 +54,11 @@ export const COMMANDS: Array<{ command: string; description: string }> = [
   { command: 'stop', description: 'Стоп-лист' },
   { command: 'stopadd', description: 'Поставити страву на стоп: /stopadd назва' },
   { command: 'stopdel', description: 'Зняти страву зі стопу: /stopdel назва' },
+  { command: 'who', description: 'Хто сьогодні…? /who миє посуд' },
+  { command: 'thanks', description: 'Топ подяк місяця' },
+  { command: 'notes', description: 'Збережені нотатки' },
+  { command: 'note', description: 'Зберегти нотатку (адмін): /note wifi текст' },
+  { command: 'delnote', description: 'Видалити нотатку (адмін)' },
   { command: 'roles', description: 'Хто є хто' },
   { command: 'role', description: 'Призначити роль (адмін, відповіддю)' },
   { command: 'help', description: 'Що я вмію' },
@@ -71,6 +76,10 @@ export const HELP_TEXT = [
   '/stop — стоп-лист',
   '/stopadd хачапурі — поставити страву на стоп (можна частину назви)',
   '/stopdel хачапурі — зняти страву зі стопу',
+  '/who миє посуд — хто сьогодні це робить (обираю зі зміни)',
+  '«+» або «дякую» у відповідь на повідомлення — подякувати; /thanks — топ подяк місяця',
+  '#назва — показати нотатку; /notes — усі нотатки',
+  '/note wifi текст — зберегти нотатку (адмін; можна відповіддю на повідомлення), /delnote wifi — видалити',
   '/roles — хто є хто',
   '/role кухар — призначити роль (адмін, відповіддю на повідомлення людини; /role - прибрати)',
   '',
@@ -252,6 +261,8 @@ export function formatBest(name: string | null, seed = ''): string {
   return (dailyPick(BEST_LINES, seed) ?? BEST_LINES[0] as string).replace('{name}', `<b>${escapeHtml(name)}</b>`);
 }
 
+export const MONTHS_NOMINATIVE = ['січень', 'лютий', 'березень', 'квітень', 'травень', 'червень', 'липень', 'серпень', 'вересень', 'жовтень', 'листопад', 'грудень'];
+
 const MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
 
 export function formatBirthdays(rows: Array<{ name: string; month: number; day: number }>, todayKey: string): string {
@@ -312,4 +323,87 @@ export function formatStopChange(change: 'on' | 'off', who: string, names: strin
   return change === 'on'
     ? `⛔ ${escapeHtml(who)} ставить на стоп: ${list}. /stop — весь стоп-лист.`
     : `✅ ${escapeHtml(who)}: знято зі стопу ${list}.`;
+}
+
+/* ─── Who today, thanks, notes, welcome (round 2, owner, November 2026) ─── */
+
+const WHO_LINES = [
+  '🔮 Зірки, графік і хінкалі сходяться: сьогодні {q} — {name}!',
+  '🎲 Кістки кинуто. Сьогодні {q} — {name}.',
+  '👀 Я все бачу. Сьогодні {q} — {name}.',
+  '📜 Рада старійшин вирішила: сьогодні {q} — {name}. Оскарженню не підлягає.',
+];
+const WHO_LINES_NO_QUESTION = [
+  '🔮 Сьогоднішній обранець — {name}!',
+  '🎲 Випало на {name}. Тепер живи з цим.',
+];
+
+/** «/who миє посуд?» → the day's pick for that question. */
+export function formatWho(question: string, name: string | null, seed: string): string {
+  let q = (question || '').trim();
+  while (q.endsWith('?')) q = q.slice(0, -1).trim();
+  if (!name) return '🤷 Сьогодні на зміні нікого немає — нікого й обирати.';
+  const pool = q ? WHO_LINES : WHO_LINES_NO_QUESTION;
+  const line = dailyPick(pool, seed) ?? pool[0] as string;
+  return line.replace('{q}', escapeHtml(q)).replace('{name}', `<b>${escapeHtml(name)}</b>`);
+}
+
+const THANKS_WORDS = ['дякую', 'дяка', 'дякс', 'спасибі', 'спасибо', 'мерсі', 'thanks', 'thx', 'thank you'];
+const THANKS_MARKS = ['+', '+1', '👍', '🙏', '❤', '❤️'];
+
+/** A reply that thanks the person: «+», «дякую», «спасибі!», «дякую дуже». */
+export function isThanks(text: string): boolean {
+  let value = (text || '').trim().toLowerCase();
+  if (!value || value.length > 40) return false;
+  while (value && '!.)'.includes(value.charAt(value.length - 1))) value = value.slice(0, -1).trim();
+  if (THANKS_MARKS.includes(value)) return true;
+  return THANKS_WORDS.some((word) => value === word || value.startsWith(word + ' ') || value.startsWith(word + ','));
+}
+
+/** Thanks this month, best first; `month` in the nominative («листопад»). */
+export function formatThanksTop(rows: Array<{ name: string; count: number }>, month: string): string {
+  if (!rows.length) return '🙏 Цього місяця ще ніхто нікому не дякував. Відповідай «+» або «дякую» на повідомлення колеги.';
+  const medals = ['🥇', '🥈', '🥉'];
+  const lines = rows.map((row, index) => `${index + 1}. ${medals[index] ?? '▫️'} ${escapeHtml(row.name)} — ${row.count}`);
+  return [`🙏 <b>Подяки · ${escapeHtml(month)}</b>`, ...lines].join(NL);
+}
+
+const NOTE_NAME = /^[a-z0-9_а-яіїєґʼ]+$/;
+
+export function parseNoteName(raw: string): string | null {
+  let name = (raw || '').trim().toLowerCase();
+  if (name.startsWith('#')) name = name.slice(1);
+  if (!name || name.length > 32 || !NOTE_NAME.test(name)) return null;
+  return name;
+}
+
+/** «/note wifi текст» → name and text (text may be empty when replying to a message). */
+export function parseNoteArgs(args: string): { name: string; body: string } | null {
+  const trimmed = (args || '').trim();
+  if (!trimmed) return null;
+  let space = -1;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    if (trimmed.charCodeAt(index) <= 32) { space = index; break; }
+  }
+  const name = parseNoteName(space === -1 ? trimmed : trimmed.slice(0, space));
+  if (!name) return null;
+  return { name, body: space === -1 ? '' : trimmed.slice(space + 1).trim() };
+}
+
+/** A message that is only «#wifi» asks for the note. */
+export function parseHashtagNote(text: string): string | null {
+  const trimmed = (text || '').trim();
+  if (!trimmed.startsWith('#')) return null;
+  return parseNoteName(trimmed);
+}
+
+export function formatNotes(names: string[]): string {
+  if (!names.length) return '🗒 Нотаток ще немає. Адмін може зберегти: <code>/note wifi пароль від гостьової мережі</code>';
+  return ['🗒 <b>Нотатки</b>', names.map((name) => `#${escapeHtml(name)}`).join(' '), '', 'Напиши #назва — і я покажу нотатку.'].join(NL);
+}
+
+export function formatWelcome(name: string, roleLabel: string | null): string {
+  const hello = `👋 Вітаю, <b>${escapeHtml(name)}</b>! Я бот Тифлісу.`;
+  if (roleLabel) return `${hello} Бачу тебе на порталі — ${escapeHtml(roleLabel)}. /help — що я вмію.`;
+  return `${hello} /help — що я вмію. Адміни, признач роль: відповідай на повідомлення людини <code>/role кухар</code> або в порталі «Управління → Ролі в чаті».`;
 }
