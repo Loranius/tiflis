@@ -657,6 +657,27 @@ async function registerChatCommands(chatId: number) {
   return await tg("setMyCommands", { commands: COMMANDS, scope: { type: "chat", chat_id: chatId } });
 }
 
+/* ─── The owner's channel (posts approved by the owner in the session) ─── */
+
+/** Only these channels; the bot must be their admin with «post messages». */
+const CHANNELS = new Set(["@loranius_page"]);
+
+async function channelCheck(chat: string) {
+  await me();
+  const info = await tg<{ id: number; title?: string; type: string }>("getChat", { chat_id: chat });
+  const member = await tg<{ status: string; can_post_messages?: boolean }>("getChatMember", { chat_id: chat, user_id: botId });
+  return { ok: Boolean(info.ok && member.ok), bot: botUsername, title: info.result?.title ?? null, status: member.result?.status ?? null, can_post: member.result?.can_post_messages ?? false, error: info.description ?? member.description ?? null };
+}
+
+/** Text (HTML) or a photo by public URL with the text as its caption (Telegram allows 1024 characters there). */
+async function channelPost(chat: string, text: string, photoUrl: string) {
+  if (photoUrl) {
+    if (text.length > 1024) return { ok: false, error: "Caption over 1024 characters" };
+    return await tg<{ message_id: number }>("sendPhoto", { chat_id: chat, photo: photoUrl, caption: text, parse_mode: "HTML" });
+  }
+  return await tg<{ message_id: number }>("sendMessage", { chat_id: chat, text, parse_mode: "HTML", disable_web_page_preview: true });
+}
+
 /* ─── Setup (called once from the database with the cron secret) ─── */
 
 async function setup(url: string) {
@@ -692,6 +713,15 @@ Deno.serve(async (req: Request) => {
     }
     if (body.action === "setup" && typeof body.url === "string" && body.url.startsWith("https://")) return json(await setup(body.url));
     if (body.action === "restore") return json(await restoreLegacy());
+    if (typeof body.chat === "string" && body.action?.startsWith?.("channel_")) {
+      if (!CHANNELS.has(body.chat)) return json({ ok: false, error: "Channel not allowed" }, 403);
+      if (body.action === "channel_check") return json(await channelCheck(body.chat));
+      if (body.action === "channel_post" && typeof body.text === "string" && body.text.trim()) {
+        const photo = typeof body.photo_url === "string" && body.photo_url.startsWith("https://") ? body.photo_url : "";
+        return json(await channelPost(body.chat, body.text, photo));
+      }
+      if (body.action === "channel_delete" && Number.isSafeInteger(body.message_id)) return json(await tg("deleteMessage", { chat_id: body.chat, message_id: body.message_id }));
+    }
     return json({ ok: false, error: "Unknown action" }, 400);
   }
 
